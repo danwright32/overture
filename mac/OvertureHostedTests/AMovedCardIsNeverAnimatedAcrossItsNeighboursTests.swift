@@ -142,7 +142,7 @@ struct AMovedCardIsNeverAnimatedAcrossItsNeighboursTests {
         let c = try TestModelContainer.inMemory(AppSchema.models)
         let log = TransactionLog()
         let h = host(c, log: log)
-        defer { h.window.close() }
+        defer { HostedPassCounting.unmountAndClose(h.hosting, replacingWith: AnyView(EmptyView()), in: h.window) }
         seed(h.context)
         let appeared = await settle(h.hosting)
         #expect(appeared > 0, "the queue never derived while appearing, so nothing below was measured (L98)")

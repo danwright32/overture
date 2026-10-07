@@ -110,7 +110,7 @@ struct ScopedReplyDraftTests {
         let prospects = try ctx.fetch(FetchDescriptor<Prospect>())
         let spy = ReplyDrafterLaunchSpy()
 
-        ProspectMutations.draftReply("B", "b@x.org", prospects: prospects, context: ctx,
+        ProspectMutations.draftReply("B", "b@x.org", shows: prospects, context: ctx,
                                      feedback: ActionFeedback(), start: spy.record)
 
         #expect(spy.targets.count == 1,
@@ -135,7 +135,7 @@ struct ScopedReplyDraftTests {
         let b = repliedShow(ctx, key: "B", address: "b@x.org")
         let prospects = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        ProspectMutations.draftReply("B", "b@x.org", prospects: prospects, context: ctx,
+        ProspectMutations.draftReply("B", "b@x.org", shows: prospects, context: ctx,
                                      feedback: ActionFeedback(), start: { _, _ in })
 
         #expect(b.replyDraftRequestedAt != nil)

@@ -297,10 +297,14 @@ enum Phase0cViewRig {
         @State private var feedback = ActionFeedback()
         @State private var dayOff = DayOffOfferRequest()
         @State private var undo = QueueUndoStack()
+        // #4534: frozen, pinned once when the harness is built. Every pass here is SERVED, so the queue's
+        // memo is never asked and the window cannot decide anything today; the clock is frozen anyway so a
+        // feed that one day serves nil cannot bring the runner's speed into a count over this rig.
+        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
             QueueView(deepLinkedKey: $link.key, deepLinkedKeys: $deepLinkedKeys,
-                      allProspects: rows, renderDataProvider: feed)
+                      allProspects: rows, renderDataProvider: feed, clock: clock)
                 .environment(feedback)
                 .environment(dayOff)
                 .environment(undo)
@@ -449,7 +453,7 @@ struct QueueViewBodyCostProbeTests {
         var derivedWhileDrawing = 0
         var derivations0 = QueueRenderCounter.derivations
         let window = Phase0cViewRig.host(c, rows: rows, feed: feed, size: NSSize(width: 1000, height: 800))
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(window) }
         let first = Phase0cView.settle(window, bodyMustRun: true) {}
         let drawnFirst = registry.takeKeys()
         derivedWhileDrawing += QueueRenderCounter.derivations - derivations0
@@ -578,7 +582,7 @@ struct QueueViewBodyCostProbeTests {
             var realized: [Int] = []
             let floorWindow = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
             _ = Phase0cView.settle(floorWindow, bodyMustRun: true) {}   // warm the host once, untimed
-            floorWindow.close()
+            HostedPassCounting.unmountAndClose(floorWindow)
             _ = registry.takeKeys()
             var cpus: [Double] = [], walls: [Double] = []
             for _ in 0..<5 {
@@ -591,7 +595,7 @@ struct QueueViewBodyCostProbeTests {
                 firstPre.take(s, cpu: &cpus, wall: &walls)
                 let keys = registry.takeKeys()
                 realized.append(keys.count)
-                w?.close()
+                HostedPassCounting.unmountAndClose(w)
             }
             firstPre.close(cpu: cpus, wall: walls)
             firstPre.loadRefusal = Phase0cView.loadRefusal(before: firstQuiet.load, after: Phase0.oneMinuteLoad())
@@ -616,7 +620,7 @@ struct QueueViewBodyCostProbeTests {
                 let s = Phase0cView.settle(w, bodyMustRun: true) {}
                 firstCold.take(s, cpu: &cpus, wall: &walls)
                 _ = registry.takeKeys()
-                w.close()
+                HostedPassCounting.unmountAndClose(w)
             }
             firstCold.close(cpu: cpus, wall: walls)
             firstCold.loadRefusal = Phase0cView.loadRefusal(before: coldStart, after: Phase0.oneMinuteLoad())
@@ -625,7 +629,7 @@ struct QueueViewBodyCostProbeTests {
             // One window for every per-change kind, drawn once and settled before anything is timed.
             let feed = Phase0cServedFeed(a)
             let window = Phase0cViewRig.host(container, rows: t.rows, feed: feed, size: size)
-            defer { window.close() }
+            defer { HostedPassCounting.unmountAndClose(window) }
             _ = Phase0cView.settle(window, bodyMustRun: true) {}
             let drawnOnA = registry.takeKeys()
 

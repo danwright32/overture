@@ -46,7 +46,7 @@ struct RunNightDropWiringTests {
         let p = run(ctx)
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissForReason(item(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(item(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: feedback, offer: DayOffOfferRequest(), now: now)
 
         #expect(p.performanceDate == "2026-09-30")
@@ -60,7 +60,7 @@ struct RunNightDropWiringTests {
         let p = run(ctx)
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissForReason(item(p), .notAFit, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(item(p), .notAFit, shows: [p], context: ctx,
                                            feedback: feedback, offer: DayOffOfferRequest(), now: now)
 
         #expect(p.status == .dismissed)
@@ -74,7 +74,7 @@ struct RunNightDropWiringTests {
         let p = run(ctx, nights: ["2026-08-19"])
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissForReason(item(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(item(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: feedback, offer: DayOffOfferRequest(), now: now)
 
         #expect(p.status == .dismissed)
@@ -89,7 +89,7 @@ struct RunNightDropWiringTests {
         let p = run(ctx)
         let offer = DayOffOfferRequest()
 
-        ProspectMutations.dismissForReason(item(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(item(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: ActionFeedback(), offer: offer, now: now)
 
         #expect(offer.pending?.start == "2026-08-19", "the night he dropped, not the one it moved to")
@@ -107,7 +107,7 @@ struct RunNightDropWiringTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.dismissAll([multi.naturalKey, single.naturalKey], reason: .pitchingOtherShows,
-                                     dateLabel: "Aug 19", prospects: [multi, single], context: ctx,
+                                     dateLabel: "Aug 19", shows: [multi, single], context: ctx,
                                      feedback: feedback, now: now)
 
         #expect(multi.performanceDate == "2026-09-30", "the run moved on")
@@ -122,7 +122,7 @@ struct RunNightDropWiringTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.dismissAll([multi.naturalKey], reason: .notAFit, dateLabel: "Aug 19",
-                                     prospects: [multi], context: ctx, feedback: feedback, now: now)
+                                     shows: [multi], context: ctx, feedback: feedback, now: now)
 
         #expect(multi.status == .dismissed)
         #expect(multi.runNights.count == 3)
@@ -143,7 +143,7 @@ struct RunNightDropWiringTests {
         ConflictSweep.reapply(p, export: export, in: ctx)
         #expect(p.conflictOpen, "the live card really does carry the badge")
 
-        ProspectMutations.dismissForReason(item(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(item(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: ActionFeedback(), offer: DayOffOfferRequest(),
                                            now: now, export: export)
 
@@ -162,7 +162,7 @@ struct RunNightDropWiringTests {
         #expect(p.conflictOpen)
 
         ProspectMutations.dismissAll([p.naturalKey], reason: .pitchingOtherShows, dateLabel: "Aug 19",
-                                     prospects: [p], context: ctx, feedback: ActionFeedback(),
+                                     shows: [p], context: ctx, feedback: ActionFeedback(),
                                      now: now, export: export)
 
         #expect(p.conflictKey == nil)
@@ -179,7 +179,7 @@ struct RunNightDropWiringTests {
         try ctx.save()
         let undo = QueueUndoStack()
         let key = p.naturalKey
-        ProspectMutations.dismissForReason(item(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(item(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: ActionFeedback(), offer: DayOffOfferRequest(),
                                            undo: undo, now: now)
         #expect(p.performanceDate == "2026-09-30")
@@ -201,7 +201,7 @@ struct RunNightDropWiringTests {
         let ctx = ModelContext(try container())
         let p = run(ctx)
         let undo = QueueUndoStack()
-        ProspectMutations.dismissForReason(item(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(item(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: ActionFeedback(), offer: DayOffOfferRequest(),
                                            undo: undo, now: now)
 

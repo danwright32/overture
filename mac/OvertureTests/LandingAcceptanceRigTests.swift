@@ -653,8 +653,7 @@ final class LandingAcceptanceRigTests {
             return {
                 let result = await LeadPasteLanding.landPastedLead(
                     events, today: EasternDate.today(Date()), now: Date(), landings: world.flight,
-                    loadExport: { DownbeatBridge.loadWithHealth(from: exportURL, now: Date()) },
-                    importedHistory: world.historyURL, into: world.ctx)
+                    exportURL: exportURL, importedHistory: world.historyURL, into: world.ctx)
                 switch result {
                 case .landed(let outcome): return "\(events.count) events pasted, " + Self.said(outcome)
                 case .refused: return "REFUSED"

@@ -76,6 +76,9 @@ struct BringingTheQueueUpTests {
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOffOffer = DayOffOfferRequest()
+        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
+        // memo's two second window cannot be counted as the queue deriving again (#4516's mechanism).
+        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
             // #3846: QueueView takes its rows rather than querying the table itself, because RootView
@@ -83,7 +86,7 @@ struct BringingTheQueueUpTests {
             // RootView's part, so what is measured below is still the store-to-screen path.
             RowsFromStore { (rows: [Prospect]) in
                 QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows)
+                          allProspects: rows, clock: clock)
             }
             .modelContainer(container)
             .environment(feedback)
@@ -144,7 +147,11 @@ struct BringingTheQueueUpTests {
 
         let before = QueueRenderCounter.derivations
         let (window, hosting) = host(RootHarness(container: c))
-        defer { window.close() }
+        // #4534: RootView is left in the graph on purpose, for the reason `closeLeavingMounted` names.
+        defer {
+            HostedPassCounting.closeLeavingMounted(window, because: "tearing a hosted RootView down crashed "
+                + "the shared host on the next save (ScoutLandingHostedProbeTests, the #3874 shape)")
+        }
 
         // EVERY reason, not just the last. #1930 has never had this: its evidence is a log read by hand
         // after the fact, and the whole of its diagnosis turns on WHICH inputs had moved before each
@@ -196,7 +203,7 @@ struct BringingTheQueueUpTests {
 
         let before = QueueRenderCounter.derivations
         let (window, hosting) = host(Harness(container: c))
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(hosting, replacingWith: AnyView(EmptyView()), in: window) }
 
         // Settle for a fixed number of the run loop's own turns rather than a wall-clock wait: what is
         // being counted is derivations, and the question is whether any MORE arrive once the first has

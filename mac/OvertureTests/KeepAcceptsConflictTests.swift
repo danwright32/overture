@@ -42,7 +42,7 @@ struct KeepAcceptsConflictTests {
 
     private func keep(_ p: Prospect, in ctx: ModelContext,
                       undo: QueueUndoStack? = nil) {
-        ProspectMutations.setStatus(QueueItem(p), .queued, nil, prospects: [p], context: ctx,
+        ProspectMutations.setStatus(QueueItem(p), .queued, nil, shows: [p], context: ctx,
                                     feedback: ActionFeedback(), undo: undo, undoLabel: "Keep")
     }
 

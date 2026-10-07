@@ -80,12 +80,13 @@ struct OneDueNumberTests {
 
     // A reply draft Dan asked for that died before arriving.
     @discardableResult
-    private func stalledReplyDraft(_ context: ModelContext, key: String = "stalled") -> Prospect {
+    private func stalledReplyDraft(_ context: ModelContext, key: String = "stalled",
+                                   email: String? = nil) -> Prospect {
         let p = show(key, "Aurora Strings", on: day(30))
         p.sentAt = now.addingTimeInterval(-2 * 86_400)
         context.insert(p)
-        let r = Recipient(id: "\(key)@example.com", email: "\(key)@example.com", name: "Emma",
-                          provenance: .act)
+        let address = email ?? "\(key)@example.com"
+        let r = Recipient(id: address, email: address, name: "Emma", provenance: .act)
         r.sendState = .sent
         r.sentAt = now.addingTimeInterval(-2 * 86_400)
         r.replied = true
@@ -101,19 +102,23 @@ struct OneDueNumberTests {
     // it is theirs. `daysAhead` is a parameter because the DOUBLE COUNT below needs this same show with
     // its date behind it rather than ahead.
     @discardableResult
+    // `form` and `propose` are parameters for #4531's sibling below: a venue's one contact form pitched for
+    // two shows is one id on both, and only one of them has a conversation proposed.
     private func conversationToConfirm(_ context: ModelContext, key: String = "confirm",
-                                       daysAhead: Int = 45) -> Prospect {
+                                       daysAhead: Int = 45, form: String? = nil,
+                                       propose: Bool = true) -> Prospect {
         let p = show(key, "54 Sings Shuffle Along", on: day(daysAhead))
         context.insert(p)
-        let r = Recipient(id: "form:https://\(key).example/contact", email: nil, name: "Corin",
-                          provenance: .act)
-        r.contactFormURL = "https://\(key).example/contact"
-        r.formOutreachURL = "https://\(key).example/contact"
+        let url = form ?? "https://\(key).example/contact"
+        let r = Recipient(id: "form:\(url)", email: nil, name: "Corin", provenance: .act)
+        r.contactFormURL = url
+        r.formOutreachURL = url
         r.outreachChannel = .contactForm
         r.formOutreachRecordedAt = now.addingTimeInterval(-3 * 86_400)
         r.sentAt = now.addingTimeInterval(-3 * 86_400)
         r.sendState = .sent
         p.setRecipients([r])
+        guard propose else { return p }
         ProposedConversation.propose(
             ProposedConversation.Candidate(messageId: "m-\(key)", threadId: "t-\(key)",
                                            fromAddress: "corin@example.com", fromName: "Corin",
@@ -125,12 +130,12 @@ struct OneDueNumberTests {
 
     // #3890: somebody wrote back and nobody has answered, on a show still ahead.
     @discardableResult
-    private func replyToAnswer(_ context: ModelContext, key: String = "wrote") -> Prospect {
+    private func replyToAnswer(_ context: ModelContext, key: String = "wrote", email: String? = nil) -> Prospect {
         let p = show(key, "Every Voice Choirs", on: day(20))
         p.sentAt = now.addingTimeInterval(-4 * 86_400)
         context.insert(p)
-        let r = Recipient(id: "\(key)@example.com", email: "\(key)@example.com", name: "Nicole",
-                          provenance: .presenter)
+        let address = email ?? "\(key)@example.com"
+        let r = Recipient(id: address, email: address, name: "Nicole", provenance: .presenter)
         r.sendState = .sent
         r.sentAt = now.addingTimeInterval(-4 * 86_400)
         r.gmailMessageId = "m-\(key)"
@@ -317,6 +322,44 @@ struct OneDueNumberTests {
         #expect(listed.counts.total == 1, "the header double counts one contact as \(listed.counts.total)")
         #expect(listed.afterTheShow.isEmpty,
                 "the same contact is asked how the show ended while it is still unsettled whether they replied")
+    }
+
+    // #4531's siblings: a contact's `id` is its address, or its form's URL, and one address is pitched for
+    // more than one show (a venue's contact form, a company's booking inbox). So a rule settling which of
+    // two questions one conversation is asked must say WHICH show's conversation it means, or a question
+    // on one show silences a different question on another. Both rules below are keyed by the show and
+    // the conversation, which is how the reply rule beside them was always keyed.
+    @Test func aConversationToConfirmOnOneShowLeavesAnotherShowsAfterTheShowPrompt() throws {
+        let context = try makeContext()
+        let shared = "https://quarry.example/contact"
+        conversationToConfirm(context, key: "passed", daysAhead: -5, form: shared, propose: false)
+        // The positive control, in the same store: alone, the passed show is owed its prompt (L159).
+        #expect(rows(try allProspects(context)).afterTheShow.map(\.prospect.naturalKey) == ["passed"],
+                "the fixture owes no after the show prompt, so the assertion below asserts nothing")
+
+        conversationToConfirm(context, key: "ahead", form: shared)
+        let listed = rows(try allProspects(context))
+        #expect(listed.conversationsToConfirm.map(\.prospect.naturalKey) == ["ahead"])
+        #expect(listed.afterTheShow.map(\.prospect.naturalKey) == ["passed"],
+                "a conversation to confirm on another show hid how this one ended")
+    }
+
+    @Test func aStalledReplyDraftOnOneShowLeavesAnotherShowsReplyFromTheSameAddress() throws {
+        let context = try makeContext()
+        let shared = "booking@example.com"
+        replyToAnswer(context, key: "wrote", email: shared)
+        // The positive control, in the same store: alone, the reply is waiting on an answer (L159).
+        #expect(rows(try allProspects(context)).repliesToAnswer.count == 1,
+                "the fixture holds no reply to answer, so the assertion below asserts nothing")
+
+        stalledReplyDraft(context, key: "stalled", email: shared)
+        let listed = rows(try allProspects(context))
+        #expect(listed.stalledReplyDrafts.map(\.prospect.naturalKey) == ["stalled"])
+        let waiting = listed.repliesToAnswer.compactMap { conversation -> String? in
+            guard case .show(let p, _) = conversation else { return nil }
+            return p.naturalKey
+        }
+        #expect(waiting == ["wrote"], "a stalled draft on another show hid a reply waiting on this one")
     }
 
     // MARK: - Built is not wired (L3)

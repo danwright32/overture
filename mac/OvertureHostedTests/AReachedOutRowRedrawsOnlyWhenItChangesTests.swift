@@ -67,7 +67,7 @@ final class AReachedOutRowRedrawsOnlyWhenItChangesTests {
     // For the reason `AStageListDerivesNothingPerBodyTests.release` gives: the deep link arms a 2.5 s
     // highlight timer, and the host dies in the NEXT test's save if anything here still observes (#3874).
     private func release(_ window: NSWindow?) {
-        window?.close()
+        HostedPassCounting.unmountAndClose(window)
         turnTheRunLoop(seconds: 3)
     }
 

@@ -86,7 +86,7 @@ final class AStageListDerivesNothingPerBodyTests {
     // first version only closed the window, and the host died in the NEXT test's save, in a
     // `_SwiftData_SwiftUI` notification observer (#3874's signature, L86).
     private func release(_ window: NSWindow?) {
-        window?.close()
+        HostedPassCounting.unmountAndClose(window)
         let until = Date().addingTimeInterval(3)
         while Date() < until {
             autoreleasepool { _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }

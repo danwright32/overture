@@ -34,7 +34,7 @@ struct AddContactAddressRuleTests {
         let p = show(ctx)
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "olga@bargemusic.org", name: "Olga",
-                                               prospects: [p], context: ctx, feedback: ActionFeedback())
+                                               shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.recipients.count == 1)
         #expect(p.recipients.first?.id == "olga@bargemusic.org")
@@ -47,7 +47,7 @@ struct AddContactAddressRuleTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "a@x.org, b@y.org", name: nil,
-                                               prospects: [p], context: ctx, feedback: feedback)
+                                               shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.isEmpty)
         #expect(feedback.message == ActionAck.contactOneAtATime)
@@ -59,7 +59,7 @@ struct AddContactAddressRuleTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "ring them", name: nil,
-                                               prospects: [p], context: ctx, feedback: feedback)
+                                               shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.isEmpty)
         // #2629: the refusal names what the control ACCEPTS, which is a route now, not only an address.
@@ -72,7 +72,7 @@ struct AddContactAddressRuleTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "   ", name: nil,
-                                               prospects: [p], context: ctx, feedback: feedback)
+                                               shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.isEmpty)
         #expect(feedback.message == ActionAck.contactNeedsRoute)
@@ -86,7 +86,7 @@ struct AddContactAddressRuleTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: ",,olga@bargemusic.org", name: nil,
-                                               prospects: [p], context: ctx, feedback: feedback)
+                                               shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.isEmpty)
         #expect(feedback.message == ActionAck.contactBlankAddress)

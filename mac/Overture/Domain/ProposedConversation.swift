@@ -428,5 +428,12 @@ enum ProposedConversation {
                 return (prospect: p, recipient: r, candidate: c)
             }
         }
+        // #4531: this list had no order at all, so it came out in whatever order the store and each show's
+        // contacts arrived in. The oldest candidate message first, like every other list on the sheet putting
+        // whoever has waited longest at the top, then `DueWork.showThenContact`.
+        .sorted {
+            if $0.candidate.sentAt != $1.candidate.sentAt { return $0.candidate.sentAt < $1.candidate.sentAt }
+            return DueWork.showThenContact($0.prospect, $0.recipient, $1.prospect, $1.recipient)
+        }
     }
 }

@@ -75,12 +75,15 @@ struct ABannerDerivesNothingOnAnySheetTests {
         return rows
     }
 
-    private func host<V: View>(_ view: V) -> (window: NSWindow, hosting: NSHostingView<V>) {
+    // #4534: wrapped in `HostedPassCounting.Mounted`, a static conditional rather than an erasure, so the
+    // real type is still what SwiftUI diffs while it is up, and `tearDown` can take it out of the graph.
+    private func host<V: View>(_ view: V)
+        -> (window: NSWindow, hosting: NSHostingView<HostedPassCounting.Mounted<V>>) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 800),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         // Required by `TestWindowsAreNotReleasedOnCloseGuardTests` (#3480).
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: view)
+        let hosting = NSHostingView(rootView: HostedPassCounting.Mounted(content: view))
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(hosting)
@@ -190,7 +193,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
                 .modelContainer(c)
                 .environment(feedback))
         return HostedSheet(surface: .followUps, window: window, hosting: hosting, feedback: feedback,
-                           tearDown: { window.close() })
+                           tearDown: { HostedPassCounting.unmountAndClose(hosting, in: window) })
     }
 
     private func hostStruckAddresses() throws -> HostedSheet {
@@ -208,7 +211,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
                 .modelContainer(c)
                 .environment(feedback))
         return HostedSheet(surface: .struckAddresses, window: window, hosting: hosting, feedback: feedback,
-                           tearDown: { window.close() })
+                           tearDown: { HostedPassCounting.unmountAndClose(hosting, in: window) })
     }
 
     private func hostExcludedTowns() throws -> HostedSheet {
@@ -224,7 +227,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
                 .modelContainer(c)
                 .environment(feedback))
         return HostedSheet(surface: .excludedTowns, window: window, hosting: hosting, feedback: feedback,
-                           tearDown: { window.close() })
+                           tearDown: { HostedPassCounting.unmountAndClose(hosting, in: window) })
     }
 
     private func hostDaysOff() throws -> HostedSheet {
@@ -245,7 +248,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
                 .environment(feedback)
                 .environment(snapshot))
         return HostedSheet(surface: .daysOff, window: window, hosting: hosting, feedback: feedback,
-                           tearDown: { window.close(); snapshot.detach() })
+                           tearDown: { HostedPassCounting.unmountAndClose(hosting, in: window); snapshot.detach() })
     }
 
     private func readBanner(_ sheet: HostedSheet) async {
@@ -276,7 +279,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
         let derivationsBefore = QueueRenderCounter.derivationCount(for: surface)
         let evaluationsBefore = QueueRenderCounter.renderCount(for: surface)
         let (window, hosting) = host(ExcludedTownsView().modelContainer(c).environment(ActionFeedback()))
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
         await waitUntilQuiet(.excludedTowns, in: hosting)
         let evaluations = QueueRenderCounter.renderCount(for: surface) - evaluationsBefore
@@ -330,7 +333,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
         let control = host(DismissReadControl())
         let controlReading = await keyTransition(control.window, counter: DismissReadControl.counter,
                                                  in: control.hosting)
-        control.window.close()
+        HostedPassCounting.unmountAndClose(control.hosting, in: control.window)
         #expect(controlReading.evaluations > 0, Comment(rawValue:
             "a view holding only the dismiss read did not re-evaluate on a key change, so the trigger "
             + "never reached SwiftUI and the zeros below prove nothing (L159)"))

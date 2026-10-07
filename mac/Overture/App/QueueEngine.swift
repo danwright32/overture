@@ -1,14 +1,17 @@
+import AppKit
 import Foundation
 import Observation
 import SwiftData
 
-// #4358 (plan v7 Phase 4, slice E1a): the queue engine's core. It keeps every queue input as a value and takes
-// each store change in by identity, reading again only the rows a change names.
+// #4358 (plan v7 Phase 4, slices E1a and E1b): the queue engine's core. It keeps every queue input as a value,
+// takes each store change in by identity, reading again only the rows a change names, decides whether a pass
+// is due, and publishes one output per pass.
 //
 // WHAT IT REPLACES, once the cutover wires it (#4358, slice E4). Today every store change re-derives the whole
 // queue on the main thread from the live models, inside the view's body, and nothing can tell a change that
 // mattered from one that did not. This keeps a value per stored row (`FactStore`), reads a row again only when
-// something says it changed, and drops a re-read that changed nothing (the equality gate).
+// something says it changed, drops a re-read that changed nothing (the equality gate), and derives only when a
+// stored value, the clock, a context source or the surface's own view actually moved.
 //
 // HOW A CHANGE ARRIVES (D2, decision 3: trackers plus didSave with the equality gate).
 //   * A TRACKER per row (a show, a contact, an inquiry), armed through `ScopeField.arm` on that row's own
@@ -24,19 +27,76 @@ import SwiftData
 // tracker sees an unsaved edit, and a save sees a write no tracker was armed for.
 //
 // THE RESOLVE STEP, one place, at the start of the turn (L38). Every structure this engine keys by identity
-// is listed in `identityKeyedState`, and the step applies one `QueueEngineResolution` to each entry: deleted
-// rows purged, a temporary identifier a first save replaced re-keyed. The list is checked rather than trusted:
-// `EngineIdentityKeyedStateTests` walks this class's stored properties by Mirror and fails on any
-// identity-keyed structure the list does not name (L96).
+// or by natural key is listed in `identityKeyedState`, and the step applies one `QueueEngineResolution` to
+// each entry: deleted rows purged, a temporary identifier a first save replaced re-keyed, a renamed show's
+// natural key renamed. The list is checked rather than trusted: `EngineIdentityKeyedStateTests` walks this
+// class's stored properties by Mirror and fails on any identity-keyed structure the list does not name (L96).
 //
-// ONE FLAG, so every change made in one main actor turn is taken in by one turn of the engine.
+// THE GENERATION GATE AND COALESCING (plan v2 Phase 4 steps 2 and 3). ONE flag, so every change made in one
+// main actor turn is taken in by one turn of the engine, and a whole night dismissed at once is one pass. A
+// turn reads the intake, re-reads what it names, and derives only when a reason holds
+// (`QueueEnginePassReason`). Each output carries the store's save count and a generation, and an output no
+// newer than the one published is refused (`QueueEngineGenerations`).
 //
-// WHAT IS NOT HERE YET. The value pass, the generation gate, the clock and the change-kind matrix are the
-// slice after this one (#4358 E1b): the pass needs `QueueRenderPass.make` over these facts, which needs every
-// term generic over the facts protocols and a RenderData that holds no model (#4357). The verifier and
-// recovery (D7) and the launch fill (D6) follow.
+// THE CLOCK (L51, L524). Injected. ONE deadline after each pass, at the earlier of the output's own next change
+// and a 60 second floor (`QueueEngineDeadline`). A wake, a clock change, a time zone change and a new calendar
+// day each force a pass. When a pass the floor alone forced changes the output, the change is kept as a
+// `QueueEngineFloorChange` naming the fields, which is the floor's named cost (L93).
+//
+// THE VALUE PASS IS INJECTED (`QueueEngineDerivation`). The queue's own, `QueueRenderPass.make` over these
+// facts, cannot run yet: `QueueModel.scope`, `AgentInputs.from` (#4357 G3), `RenderData` (#4357 slice I) and the
+// pass's inquiry and small table inputs still take or hold models. The cutover (#4358, slice E4) hands it in.
+// The verifier and recovery (D7, slice E2) and the launch fill (D6, slice E3) follow.
 //
 // NOTHING IN THE APP STARTS THIS YET. The cutover (#4358, slice E4) does.
+
+/// What one pass derives from the facts, and the three things the engine needs to know about its answer.
+struct QueueEngineDerivation<Value> {
+    /// The value pass. Runs on the main actor from a scheduled turn, never from a view body (L471).
+    let derive: @MainActor (QueueEnginePassInput) -> Value
+    /// The members of two answers that differ, by name only (C7, L222), for the floor's record.
+    let differingFields: (Value, Value) -> [String]
+    /// The earliest instant at which a rule in the answer comes due, or nil when none is in play.
+    let nextChange: (Value) -> Date?
+    /// The cards the answer built, so a frame asking only for those is no reason to derive again.
+    let builtCardKeys: (Value) -> Set<String>
+}
+
+/// One published pass, and which store state and which pass it describes.
+struct QueueEngineOutput<Value> {
+    let value: Value
+    let saveCount: Int
+    let generation: Int
+    let now: Date
+    let reasons: Set<QueueEnginePassReason>
+}
+
+/// The clock the engine reads and sleeps on, injected so a test sets it rather than waiting (L524).
+struct QueueEngineClock: Sendable {
+    let now: @Sendable () -> Date
+    let sleep: @Sendable (TimeInterval) async throws -> Void
+
+    static let system = QueueEngineClock(now: { Date() }, sleep: { try await Task.sleep(for: .seconds($0)) })
+}
+
+/// The two notification centres the clock's own events arrive on. Wake is posted ONLY to the workspace's,
+/// which a default-centre observer never hears (`SleepObserver`).
+struct QueueEngineSystemEvents {
+    let workspace: NotificationCenter
+    let system: NotificationCenter
+
+    @MainActor static var live: QueueEngineSystemEvents {
+        QueueEngineSystemEvents(workspace: NSWorkspace.shared.notificationCenter, system: .default)
+    }
+
+    /// Each event, whether it is the workspace's, and the reason a pass it forces carries.
+    static let events: [(name: Notification.Name, workspace: Bool, reason: QueueEnginePassReason)] = [
+        (NSWorkspace.didWakeNotification, true, .wake),
+        (.NSSystemClockDidChange, false, .systemClock),
+        (.NSSystemTimeZoneDidChange, false, .timeZone),
+        (.NSCalendarDayChanged, false, .calendarDay),
+    ]
+}
 
 typealias QueueEngineSchedule = @MainActor (@escaping @MainActor () -> Void) -> Void
 
@@ -54,6 +114,17 @@ enum QueueEngineTurns {
         } else {
             Task { @MainActor in work() }
         }
+    }
+
+    /// What a refused generation does: stops a Debug build, and logs one line in Release.
+    @MainActor static func refuse(published: Int, incoming: Int) {
+        // copy-inventory:ignore-start  developer diagnostic log and a Debug stop, never shown to Dan (#4358)
+        #if DEBUG
+        preconditionFailure("queue engine output \(incoming) would replace \(published)")
+        #else
+        AgentLog.note("Queue engine refused output \(incoming), older than the published \(published).")
+        #endif
+        // copy-inventory:ignore-end
     }
 }
 
@@ -118,17 +189,27 @@ final class QueueEngineIntake: @unchecked Sendable {
     }
 }
 
-/// The save observer the engine registered, removed when it goes.
+/// What the engine registered with notification centres and the deadline's timer, released when it goes.
 private final class QueueEngineObservers: @unchecked Sendable {
     private let lock = NSLock()
     private var tokens: [(NotificationCenter, NSObjectProtocol)] = []
+    private var timer: Task<Void, Never>?
 
     func add(_ token: NSObjectProtocol, on center: NotificationCenter) {
         lock.withLock { tokens.append((center, token)) }
     }
 
+    func replaceTimer(_ task: Task<Void, Never>?) {
+        let old: Task<Void, Never>? = lock.withLock {
+            defer { timer = task }
+            return timer
+        }
+        old?.cancel()
+    }
+
     deinit {
         for (center, token) in tokens { center.removeObserver(token) }
+        timer?.cancel()
     }
 }
 
@@ -143,16 +224,19 @@ private final class QueueEngineReference<Target: AnyObject>: @unchecked Sendable
 
 @MainActor
 @Observable
-final class QueueEngine {
+final class QueueEngine<Value> {
 
     // MARK: - What it is built from
 
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private let container: ModelContainer
+    @ObservationIgnored private let derivation: QueueEngineDerivation<Value>
     @ObservationIgnored private let saves: StoreSaveCount
-    @ObservationIgnored private let now: @MainActor () -> Date
+    @ObservationIgnored private let clock: QueueEngineClock
+    @ObservationIgnored private let events: QueueEngineSystemEvents
     @ObservationIgnored private let saveCenter: NotificationCenter
     @ObservationIgnored private let schedule: QueueEngineSchedule
+    @ObservationIgnored private let refused: @MainActor (Int, Int) -> Void
     @ObservationIgnored private let intake = QueueEngineIntake()
     @ObservationIgnored private let observers = QueueEngineObservers()
 
@@ -173,33 +257,58 @@ final class QueueEngine {
     /// A re-keyed row is armed again under its permanent identifier in the same turn, so the tracker armed
     /// before the save, which still reports the temporary one, is only ever a stale fire, dropped unread.
     @ObservationIgnored private var temporaries: [PersistentIdentifier: any PersistentModel] = [:]
+    /// The surface's own state (focused stage and leads, the cards the last frame drew).
+    @ObservationIgnored private(set) var viewInputs = QueueEngineViewInputs()
+    /// The context sources' signals by input name, once started.
+    @ObservationIgnored private var signals: [String: ContextSignal] = [:]
+    /// The context sources that fired since the last turn, by input name.
+    @ObservationIgnored private var sourcesFired: Set<String> = []
 
-    // MARK: - The turn
+    // MARK: - The turn and the gate
 
     @ObservationIgnored private var started = false
     @ObservationIgnored private var turnScheduled = false
     @ObservationIgnored private var observedForeignSaves = 0
+    @ObservationIgnored private var clockDue: Set<QueueEnginePassReason> = []
+    @ObservationIgnored private var viewInputsMoved = false
+    @ObservationIgnored private(set) var deadline: QueueEngineDeadline?
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private(set) var counters = QueueEngineCounters()
 
+    // MARK: - What it publishes
+
+    /// The latest pass. The one property a surface observes.
+    private(set) var output: QueueEngineOutput<Value>?
+    /// Every floor-only pass that changed the output, newest last, at most `floorChangesKept`.
+    @ObservationIgnored private(set) var floorChanges: [QueueEngineFloorChange] = []
+    static var floorChangesKept: Int { 50 }
+
     init(context: ModelContext,
+         derivation: QueueEngineDerivation<Value>,
          saves: StoreSaveCount = .shared,
-         now: @escaping @MainActor () -> Date = Date.init,
+         clock: QueueEngineClock = .system,
+         events: QueueEngineSystemEvents,
          saveCenter: NotificationCenter = .default,
-         schedule: @escaping QueueEngineSchedule = QueueEngineTurns.nextTurn) {
+         schedule: @escaping QueueEngineSchedule = QueueEngineTurns.nextTurn,
+         refused: @escaping @MainActor (Int, Int) -> Void = QueueEngineTurns.refuse) {
         self.context = context
         container = context.container
+        self.derivation = derivation
         self.saves = saves
-        self.now = now
+        self.clock = clock
+        self.events = events
         self.saveCenter = saveCenter
         self.schedule = schedule
+        self.refused = refused
         let engine = QueueEngineReference(self)
         intake.setWake {
             QueueEngineTurns.onMain { engine.target?.scheduleTurn() }
         }
     }
 
-    /// Starts watching the store and reads every row. Saves are watched BEFORE the read, so no save can land
-    /// between the two unseen. Once: a second call would register a second observer and double every intake.
+    /// Starts watching the store and the clock, reads every row, and asks for the first pass. Saves are watched
+    /// BEFORE the read, so no save can land between the two unseen. Once: a second call would register a
+    /// second observer and double every intake.
     func start() {
         guard !started else { return }
         started = true
@@ -210,11 +319,34 @@ final class QueueEngine {
             guard let saved = note.object as? ModelContext, ObjectIdentifier(saved.container) == store else { return }
             intake.saved(note.userInfo)
         }, on: saveCenter)
+        let engine = QueueEngineReference(self)
+        for event in QueueEngineSystemEvents.events {
+            let center = event.workspace ? events.workspace : events.system
+            let reason = event.reason
+            observers.add(center.addObserver(forName: event.name, object: nil, queue: nil) { _ in
+                QueueEngineTurns.onMain { engine.target?.clockEvent(reason) }
+            }, on: center)
+        }
         observedForeignSaves = saves.foreignSaveCount(for: container)
         var resolution = QueueEngineResolution()
         readEverything(into: &resolution)
         resolveIdentities(resolution)
+        scheduleTurn()
     }
+
+    /// Starts the context sources' signals (`QueueContextSignals`); each one that fires forces a pass.
+    func startSignals(_ sources: QueueContextSignals.Sources) {
+        stopSignals()
+        signals = QueueContextSignals.start(sources) { [weak self] input in self?.sourceFired(input) }
+    }
+
+    /// Stops them, so a polled one does not outlive the surface that started it.
+    func stopSignals() {
+        for signal in signals.values { signal.cancel() }
+        signals = [:]
+    }
+
+    // MARK: - What callers tell it
 
     /// A change the store has not been told about, from a caller that holds the model: the show resolver
     /// (#4357, slice I2) marks every row an action touches, so an unsaved edit on a row with no tracker yet
@@ -222,6 +354,42 @@ final class QueueEngine {
     func noteChanged(_ model: any PersistentModel) {
         holdIfTemporary(model)
         intake.noted(model.persistentModelID)
+    }
+
+    /// A context source moved (`QueueContextSignals` names it).
+    func sourceFired(_ input: String) {
+        sourcesFired.insert(input)
+        scheduleTurn()
+    }
+
+    /// The surface's view. Handing in the same view, or asking only for cards the last pass built, is no
+    /// reason for a pass (plan v2 Phase 4 step 2).
+    func setViewInputs(_ inputs: QueueEngineViewInputs) {
+        let built = output.map { derivation.builtCardKeys($0.value) } ?? []
+        let moved = inputs.focusedStage != viewInputs.focusedStage || inputs.focusedKeys != viewInputs.focusedKeys
+            || !inputs.requestedCardKeys.isSubset(of: built)
+        viewInputs = inputs
+        guard moved else { return }
+        viewInputsMoved = true
+        scheduleTurn()
+    }
+
+    /// Publishes `incoming` if it is newer than what is on screen, and arms the clock from it; otherwise refuses
+    /// it (plan v2 Phase 4 step 3) and changes nothing. Every pass publishes through here, and so will the launch
+    /// fill and the verifier's recovery. Returns whether it was applied, because only an applied output is a pass
+    /// (L78).
+    @discardableResult
+    func publish(_ incoming: QueueEngineOutput<Value>) -> Bool {
+        switch QueueEngineGenerations.verdict(published: output?.generation, incoming: incoming.generation) {
+        case .apply:
+            output = incoming
+            armDeadline(QueueEngineDeadline.next(now: incoming.now,
+                                                 termNextChange: derivation.nextChange(incoming.value)))
+            return true
+        case .refuse(let published, let incoming):
+            refused(published, incoming)
+            return false
+        }
     }
 
     // MARK: - The turn
@@ -232,10 +400,44 @@ final class QueueEngine {
         schedule { [weak self] in self?.runTurn() }
     }
 
+    /// Takes in what changed, then derives and publishes only when a reason holds (the generation gate).
     private func runTurn() {
         turnScheduled = false
         counters.turns += 1
-        counters.rowsChanged += intakeTurn(now: now())
+        let now = clock.now()
+        let saveCount = saves.value(for: container)
+        let changed = intakeTurn(now: now)
+        counters.rowsChanged += changed
+        var reasons = clockDue
+        clockDue = []
+        if changed > 0 { reasons.insert(.factsChanged) }
+        if !sourcesFired.isEmpty { reasons.insert(.sourceFired) }
+        sourcesFired = []
+        if viewInputsMoved { reasons.insert(.viewInputs) }
+        viewInputsMoved = false
+        if output == nil { reasons.insert(.first) }
+        guard !reasons.isEmpty else { return }
+        let value = derivation.derive(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now))
+        generation += 1
+        let previous = output
+        guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
+                                        reasons: reasons)) else {
+            // Refused: another caller put a newer output on screen first, so nothing on screen changed and this
+            // is no pass and no floor change (L78). The clock runs on from the output that IS on screen, so the
+            // floor is never left without a timer (L51).
+            if let onScreen = output {
+                armDeadline(QueueEngineDeadline.next(now: now, termNextChange: derivation.nextChange(onScreen.value)))
+            }
+            return
+        }
+        counters.passes += 1
+        if reasons == [.clockFloor], let previous {
+            let fields = derivation.differingFields(previous.value, value)
+            if !fields.isEmpty {
+                floorChanges.append(QueueEngineFloorChange(fields: fields, at: now, generation: generation))
+                if floorChanges.count > Self.floorChangesKept { floorChanges.removeFirst() }
+            }
+        }
     }
 
     // MARK: - Intake and the resolve step
@@ -261,9 +463,12 @@ final class QueueEngine {
         var inquiries: Set<PersistentIdentifier> = []
         var small: Set<PersistentIdentifier> = []
         var everything = false
-        // A contact deleted on its own changes the show it sat under.
-        for id in resolution.deletedIDs where Self.isContact(id) {
-            if let show = recipientParent[id], !resolution.deletedIDs.contains(show) { shows.insert(show) }
+        for id in resolution.deletedIDs {
+            if let row = facts.shows[id] { resolution.deletedKeys.insert(row.naturalKey) }
+            // A contact deleted on its own changes the show it sat under.
+            if Self.isContact(id), let show = recipientParent[id], !resolution.deletedIDs.contains(show) {
+                shows.insert(show)
+            }
         }
         var changed = resolution.deletedIDs.filter(facts.holds).count
         resolveIdentities(resolution)
@@ -375,7 +580,13 @@ final class QueueEngine {
             recipientParent[contactID] = id
             holdIfTemporary(contact)
         }
-        guard facts.record(show) else {
+        let oldKey = facts.shows[id]?.naturalKey
+        let changed = facts.record(show)
+        // A rename under the same identity renames the key everywhere a surface keyed the show by it.
+        if let oldKey, let newKey = facts.shows[id]?.naturalKey, newKey != oldKey {
+            resolution.rekeyedKeys[oldKey] = newKey
+        }
+        guard changed else {
             counters.equalValueReads += 1
             return false
         }
@@ -421,6 +632,7 @@ final class QueueEngine {
 
     /// A row found gone while being read. Returns whether the store held it.
     private func remove(_ id: PersistentIdentifier, into resolution: inout QueueEngineResolution) -> Bool {
+        if let row = facts.shows[id] { resolution.deletedKeys.insert(row.naturalKey) }
         resolution.deletedIDs.insert(id)
         for (contact, show) in recipientParent where show == id { resolution.deletedIDs.insert(contact) }
         return facts.holds(id)
@@ -469,11 +681,19 @@ final class QueueEngine {
             fresh = try FactStore(shows: shows, inquiries: inquiries, smallTablesFrom: context)
         } catch {
             // A failed read is not an empty store (L215): everything held stays as it was, and it is counted.
-            counters.unreadRows.record(at: now())
+            counters.unreadRows.record(at: clock.now())
             return 0
         }
         let (changed, gone) = facts.differences(to: fresh)
-        resolution.deletedIDs.formUnion(gone)
+        for id in gone {
+            if let row = facts.shows[id] { resolution.deletedKeys.insert(row.naturalKey) }
+            resolution.deletedIDs.insert(id)
+        }
+        for (id, row) in fresh.shows {
+            if let old = facts.shows[id], old.naturalKey != row.naturalKey {
+                resolution.rekeyedKeys[old.naturalKey] = row.naturalKey
+            }
+        }
         let contactsBefore = contactMembers
         facts = fresh
         var contactsNow: Set<PersistentIdentifier> = []
@@ -528,17 +748,46 @@ final class QueueEngine {
             intake.trackerFired(id)
         }
     }
+
+    // MARK: - The clock
+
+    /// ONE timer, replacing the last, sleeping on the injected clock until `next` (L524).
+    private func armDeadline(_ next: QueueEngineDeadline) {
+        deadline = next
+        let clock = self.clock
+        observers.replaceTimer(Task { [weak self] in
+            do {
+                try await clock.sleep(max(0, next.at.timeIntervalSince(clock.now())))
+            } catch {
+                return
+            }
+            self?.deadlineArrived(next)
+        })
+    }
+
+    private func deadlineArrived(_ arrived: QueueEngineDeadline) {
+        guard deadline == arrived else { return }
+        clockDue.insert(arrived.kind == .floor ? .clockFloor : .clockTerm)
+        scheduleTurn()
+    }
+
+    private func clockEvent(_ reason: QueueEnginePassReason) {
+        clockDue.insert(reason)
+        scheduleTurn()
+    }
 }
 
 // MARK: - The structures the resolve step applies to
 
 extension QueueEngine {
-    /// What the resolve step does to one structure this engine keys by identity.
+    /// What the resolve step does to one structure this engine keys by identity or by natural key.
     enum IdentityKeyedDisposition {
         /// Purged and re-keyed by every resolution.
-        case resolved(@MainActor (QueueEngine, QueueEngineResolution) -> Void)
+        case resolved(@MainActor (QueueEngine<Value>, QueueEngineResolution) -> Void)
         /// Emptied at the start of every turn, so nothing in it outlives one.
         case drainedAtEveryTurn
+        /// Keyed by the NAME of a context input, never by a row, so no deletion or re-key reaches it.
+        case namesInputsNotRows
     }
 
     struct IdentityKeyedState {
@@ -547,9 +796,9 @@ extension QueueEngine {
         let disposition: IdentityKeyedDisposition
     }
 
-    /// Every structure this engine keys by `PersistentIdentifier` or by a `String`, and what the resolve step
-    /// does to it. `EngineIdentityKeyedStateTests` walks the stored properties by Mirror and fails on one not
-    /// listed here, and on a line here naming nothing (L96).
+    /// Every structure this engine keys by `PersistentIdentifier` or by a `String` (a natural key or an input's
+    /// name), and what the resolve step does to it. `EngineIdentityKeyedStateTests` walks the stored properties
+    /// by Mirror and fails on one not listed here, and on a line here naming nothing (L96).
     static var identityKeyedState: [IdentityKeyedState] {
         [
             IdentityKeyedState(path: "facts.shows", disposition: .resolved { $0.facts.shows.resolve($1) }),
@@ -589,11 +838,19 @@ extension QueueEngine {
                 for id in resolution.deletedIDs { engine.temporaries.removeValue(forKey: id) }
                 for temporary in resolution.rekeyedIDs.keys { engine.temporaries.removeValue(forKey: temporary) }
             }),
+            IdentityKeyedState(path: "viewInputs.focusedKeys", disposition: .resolved { engine, resolution in
+                engine.viewInputs.focusedKeys = engine.viewInputs.focusedKeys?.resolved(keys: resolution)
+            }),
+            IdentityKeyedState(path: "viewInputs.requestedCardKeys", disposition: .resolved {
+                $0.viewInputs.requestedCardKeys.resolve(keys: $1)
+            }),
             IdentityKeyedState(path: "intake.pending.fired", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.noted", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.inserted", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.updated", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.deleted", disposition: .drainedAtEveryTurn),
+            IdentityKeyedState(path: "signals", disposition: .namesInputsNotRows),
+            IdentityKeyedState(path: "sourcesFired", disposition: .namesInputsNotRows),
         ]
     }
 }
