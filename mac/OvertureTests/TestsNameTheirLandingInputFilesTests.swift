@@ -249,7 +249,8 @@ struct TestsNameTheirLandingInputFilesTests {
         for file in tests where overlay.contains(file.name) {
             let code = Self.code(file.text)
             guard derived.entryPoints.contains(where: { code.contains($0.call) }) else { continue }
-            #expect(code.contains("handoffInputsRefusal("), Comment(rawValue: """
+            // A CALL with the default inputs, the shared folder's two files; the declaration alone refuses nothing.
+            #expect(code.contains("handoffInputsRefusal()"), Comment(rawValue: """
                 \(file.name) is overlaid onto 6d3453d8 and reaches a landing without naming its files, and no \
                 longer refuses when the shared folder holds one
                 """))
