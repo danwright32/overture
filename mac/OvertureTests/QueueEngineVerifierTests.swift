@@ -486,9 +486,11 @@ final class QueueEngineVerifierTriggerTests {
         let center = NotificationCenter()
         let engine = VerifierRig.engine(store, turns, clock: clock, saves: StoreSaveCount(center: center),
                                         setup: QueueEngineVerifierSetup(read: VerifierReads.straddling(center)))
+        // The first run is the one the launch fill's end forces, at once (#4358 slice E3, D6); then the five retries.
+        await waitUntil("the forced first run was superseded") { engine.verifierCounts.superseded == 1 }
         var elapsed: TimeInterval = 0
-        // The first run after the start's quiet moment, then the five retries.
-        for (run, delay) in [3.0, 3, 6, 12, 24, 48].enumerated() {
+        for (index, delay) in [3.0, 6, 12, 24, 48].enumerated() {
+            let run = index + 1
             // The floor's sleeper until it fires at sixty seconds, the ten minute timer, and this run's timer.
             let sleepers = (elapsed < 60 ? 1 : 0) + 2
             await waitUntil("run \(run + 1)'s timer is sleeping") { clock.waiting == sleepers }
