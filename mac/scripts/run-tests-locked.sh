@@ -105,6 +105,10 @@ source "${SCRIPT_DIR}/lib/optimised-build.sh"
 # #4343 (E0): the opt in release-like run (the optimiser AND DEBUG compiled out), and its own build log check.
 # shellcheck source=./lib/release-like-build.sh
 source "${SCRIPT_DIR}/lib/release-like-build.sh"
+# #4568: the rule saying an argument is a test scope with its `-only-testing:` prefix left off, shared with
+# scripts/mutate.sh so the two refuse exactly the same shapes.
+# shellcheck source=./lib/test-scope-shape.sh
+source "${SCRIPT_DIR}/lib/test-scope-shape.sh"
 
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
@@ -1023,6 +1027,23 @@ on_signal() {
 
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
+
+  # #4568: a test scope written WITHOUT its `-only-testing:` prefix is refused before anything else, the
+  # shared lock included. Arguments go to xcodebuild after `test`, where a bare `OvertureTests/SomeSuite` is
+  # not a scope but an unknown BUILD ACTION: xcodebuild stops on `Unknown build action` with exit 65, which
+  # this runner reads as a crash (red, no test named), retries, and then follows with the pure suite probe,
+  # which takes no scope at all. So a run meant to take seconds became the whole pure scheme, about 24
+  # minutes and 10,935 tests, on the lock every agent and project on this Mac waits on. Measured twice on
+  # 2026-10-07, both through scripts/mutate.sh, which now refuses it as well; refused here too because
+  # anything that calls this runner, an agent typing a scope by hand included, reaches it the same way.
+  local bare_scope
+  if bare_scope="$(bare_test_scope "$@")"; then
+    echo "run-tests-locked.sh: BARE SCOPE - ${bare_scope} was passed as a test scope without its -only-testing: prefix." >&2
+    echo "Write it as:" >&2
+    echo "  $(bare_test_scope_corrected "${bare_scope}")" >&2
+    echo "Nothing was built or run, and the shared test lock was not taken. Passed bare, xcodebuild reads it as an unknown build action, this runner reads that failure as a crash, and it then runs the WHOLE pure suite (#4568)." >&2
+    exit 2
+  fi
 
   # #4106: OVERTURE_TEST_OPTIMISED=1 compiles the suite with Release's optimiser (lib/optimised-build.sh).
   # Off, the overrides list is EMPTY and every xcodebuild call below receives exactly the arguments it

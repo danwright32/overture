@@ -29,8 +29,7 @@ private struct Refused: Error {}
 @Suite("#4339 runScout's tail judges the landing's rows rather than fetching the table again", .serialized)
 final class RunScoutTailRowsTests {
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     @discardableResult

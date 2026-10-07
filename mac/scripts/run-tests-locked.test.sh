@@ -388,6 +388,11 @@ assert_not_contains() {
 # the real run's own reading as the fixture's pollution).
 STUB_TODAY="2001-02-03"
 
+# #4568: the arguments the wrapper is run WITH. Empty for every call that does not set it, so each of
+# those runs the whole suite exactly as before; the `+` form keeps an empty array legal under `set -u` on
+# macOS bash 3.2 (L486).
+WRAPPER_RUN_ARGS=()
+
 run_wrapper_with_stub_xcodebuild() {
   local xcodebuild_output="$1" xcodebuild_exit="$2" log_output="${3:-}" diagnostics_dir="${4:-}"
   local daemon_pid="${5:-}" daemon_etime="${6:-}" starting_baseline="${7:-}"
@@ -538,7 +543,7 @@ STUB
     OVERTURE_DIR_LOCK_TIMEOUT="${OVERTURE_DIR_LOCK_TIMEOUT:-5}" \
     OVERTURE_DIR_LOCK_POLL="${OVERTURE_DIR_LOCK_POLL:-1}" \
     SLEEP_GUARD_BIN="${SLEEP_GUARD_BIN:-${bin_dir}/caffeinate}" \
-    "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
+    "${SCRIPT_DIR}/run-tests-locked.sh" ${WRAPPER_RUN_ARGS[@]+"${WRAPPER_RUN_ARGS[@]}"} 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
   # #2821: what this run RECORDED as the count every later run is measured against. Read out here
@@ -2276,6 +2281,34 @@ assert_contains "an exclusion list that cannot be read refuses the run by name" 
 assert_equals "and nothing is built" "" "$(grep -a ' test' "${RL_DIR}/nolist-args" || true)"
 unset OVERTURE_RELEASE_LIKE_EXCLUSIONS
 rm -rf "${RL_DIR}"
+
+# --- #4568: a test scope written WITHOUT -only-testing: is refused before the lock -------------------------
+#
+# Measured 2026-10-07: xcodebuild reads a bare `OvertureTests/SomeSuite` after `test` as a build action and
+# stops on `Unknown build action` with exit 65. This runner classified that as a crash, retried it, and then
+# ran the WHOLE pure suite on the shared lock. Any caller reaches this the same way mutate.sh did, so the
+# runner refuses it itself. The stub xcodebuild records every call, so "nothing was built" is measured
+# rather than inferred from the output.
+BARE_DIR="$(fixture_scratch_dir)"
+: > "${BARE_DIR}/bare-args"
+WRAPPER_RUN_ARGS=(OvertureTests/SomeSuite)
+BARE_RUN="$(XCODEBUILD_ARGS_FILE="${BARE_DIR}/bare-args" run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_contains "a bare Target/Suite is refused by name" \
+  "run-tests-locked.sh: BARE SCOPE - OvertureTests/SomeSuite was passed as a test scope without its -only-testing: prefix." \
+  "${BARE_RUN}"
+assert_contains "naming the exact argument to write instead" "  -only-testing:OvertureTests/SomeSuite" "${BARE_RUN}"
+assert_contains "and exits 2" "exit=2" "${BARE_RUN}"
+assert_equals "and nothing is built, not the scheme and not the pure suite" "" "$(cat "${BARE_DIR}/bare-args")"
+
+# The same scope WITH its prefix reaches xcodebuild, so the refusal is about the shape alone (L159).
+: > "${BARE_DIR}/scoped-args"
+WRAPPER_RUN_ARGS=(-only-testing:OvertureTests/SomeSuite)
+SCOPED_RUN="$(XCODEBUILD_ARGS_FILE="${BARE_DIR}/scoped-args" run_wrapper_with_stub_xcodebuild "${GREEN_RUN_LOG}" 0)"
+assert_not_contains "a prefixed scope is not refused" "BARE SCOPE" "${SCOPED_RUN}"
+assert_contains "and is handed to xcodebuild as written" "test -only-testing:OvertureTests/SomeSuite" \
+  "$(cat "${BARE_DIR}/scoped-args")"
+WRAPPER_RUN_ARGS=()
+rm -rf "${BARE_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."

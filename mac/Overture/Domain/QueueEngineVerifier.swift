@@ -25,22 +25,21 @@ import SwiftData
 /// One fresh read of the SAVED store, made through a context of its own, and what a count said beside it.
 struct QueueEngineFreshRead: Sendable {
     let facts: FactStore
-    /// How many shows and inquiries a COUNT said the store holds, taken on the same context before the fetch. A
-    /// fetch that came back with fewer is a short read, never a store that lost rows (L211).
+    /// How many rows a COUNT said each table holds, taken on the same context before the fetch. A fetch that came
+    /// back with fewer is a short read, never a store that lost rows (L211).
     let counted: [FactStore.Table: Int]
 
     /// The verifier's read: a new context on `container`, a count, then the whole read.
     static func read(_ container: ModelContainer) throws -> QueueEngineFreshRead {
         let reader = ModelContext(container)
-        let counted: [FactStore.Table: Int] = [
-            .shows: try reader.fetchCount(FetchDescriptor<Prospect>()),
-            .inquiries: try reader.fetchCount(FetchDescriptor<Inquiry>()),
-        ]
+        var counted: [FactStore.Table: Int] = [:]
+        for table in FactStore.Table.allCases { counted[table] = try table.count(in: reader) }
         return QueueEngineFreshRead(facts: try FactStore.extractAll(from: reader), counted: counted)
     }
 
+    /// Whether the fetch came back with fewer rows than the count said, in ANY table it reads (L211).
     var isShort: Bool {
-        (counted[.shows] ?? 0) > facts.shows.count || (counted[.inquiries] ?? 0) > facts.inquiries.count
+        FactStore.Table.allCases.contains { (counted[$0] ?? 0) > facts.rowCount(in: $0) }
     }
 }
 
@@ -219,6 +218,21 @@ extension FactStore {
         return out.sorted()
     }
 
+    /// How many rows `table` holds.
+    func rowCount(in table: Table) -> Int {
+        switch table {
+        case .shows: return shows.count
+        case .inquiries: return inquiries.count
+        case .orgAnswers: return orgAnswers.count
+        case .watchedSources: return watchedSources.count
+        case .refusedAddresses: return refusedAddresses.count
+        case .promotedProducers: return promotedProducers.count
+        case .demotedHouses: return demotedHouses.count
+        case .excludedTowns: return excludedTowns.count
+        case .allowedSeedTowns: return allowedSeedTowns.count
+        }
+    }
+
     /// Whether this store and `other` hold the same value for `id`, absence included.
     func sameRow(_ id: PersistentIdentifier, as other: FactStore) -> Bool {
         guard let table = Table.holding(id.entityName) else { return true }
@@ -271,6 +285,21 @@ extension FactStore.Table {
         case .demotedHouses: return try Self.fetched(DemotedHouse.self, ids, in: context)
         case .excludedTowns: return try Self.fetched(ExcludedTown.self, ids, in: context)
         case .allowedSeedTowns: return try Self.fetched(AllowedSeedTown.self, ids, in: context)
+        }
+    }
+
+    /// How many rows this table holds, by a COUNT through `context`.
+    func count(in context: ModelContext) throws -> Int {
+        switch self {
+        case .shows: return try context.fetchCount(FetchDescriptor<Prospect>())
+        case .inquiries: return try context.fetchCount(FetchDescriptor<Inquiry>())
+        case .orgAnswers: return try context.fetchCount(FetchDescriptor<OrgReachabilityAnswer>())
+        case .watchedSources: return try context.fetchCount(FetchDescriptor<WatchedSource>())
+        case .refusedAddresses: return try context.fetchCount(FetchDescriptor<RefusedContactAddress>())
+        case .promotedProducers: return try context.fetchCount(FetchDescriptor<PromotedProducer>())
+        case .demotedHouses: return try context.fetchCount(FetchDescriptor<DemotedHouse>())
+        case .excludedTowns: return try context.fetchCount(FetchDescriptor<ExcludedTown>())
+        case .allowedSeedTowns: return try context.fetchCount(FetchDescriptor<AllowedSeedTown>())
         }
     }
 

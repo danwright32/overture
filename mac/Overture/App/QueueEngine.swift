@@ -200,7 +200,9 @@ final class QueueEngineIntake: @unchecked Sendable {
             $0.inserted.formUnion(inserted)
             $0.updated.formUnion(updated)
             $0.deleted.formUnion(deleted)
-            if foreign { $0.foreign.formUnion(inserted + updated) }
+            // Deletions too: a delete-only foreign save is still ATTRIBUTED, so it never falls to the full read
+            // (the turn resolves deleted rows away, and faults none of them).
+            if foreign { $0.foreign.formUnion(inserted + updated + deleted) }
         }
     }
 
@@ -707,13 +709,9 @@ final class QueueEngine<Value: Sendable> {
         let previous = output
         guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: mintGeneration(), now: now,
                                         reasons: reasons)) else {
-            // Refused, which a minted number cannot be: it is newer than every output published, minted or not
-            // (`publish` moves the counter past an unminted one). Were it ever refused, nothing on screen changed,
-            // so this is no pass and no floor change (L78), and the clock runs on from the output that IS on
-            // screen so the floor is never left without a timer (L51).
-            if let onScreen = output {
-                armDeadline(QueueEngineDeadline.next(now: now, termNextChange: derivation.nextChange(onScreen.value)))
-            }
+            // Unreachable while every publisher mints: a minted number is newer than everything published, minted
+            // or not. `publish` has already reported the refusal (a Debug stop), and an output never applied is no
+            // pass (L78).
             return
         }
         counters.passes += 1
@@ -1164,6 +1162,9 @@ final class QueueEngine<Value: Sendable> {
             return
         }
         guard verifierSetup.triggers == .automatic else { return }
+        // A new output starts a new episode: the store moved, so runs that could not say before say nothing about
+        // this one, and an episode that is stuck again is capped, and recorded, again (L710).
+        consecutiveRetries = 0
         if generation - verifiedAtGeneration >= QueueEngineVerifier.forcedEveryGenerations {
             startVerification()
         } else {

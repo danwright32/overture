@@ -27,7 +27,7 @@ final class AnUnchangedScoutCardSkipsItsBodyTests {
     private let now = Date()
 
     private func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: now)!)
+        ScoutTestClock.day(20 + n, after: now)
     }
 
     // Invented names (L155). Untriaged shows on three nights, two on each.

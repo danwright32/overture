@@ -30,7 +30,7 @@ final class AReachedOutRowRedrawsOnlyWhenItChangesTests {
     private let now = Date()
 
     private func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: now)!)
+        ScoutTestClock.day(20 + n, after: now)
     }
 
     // Invented names and addresses (L155). Shows pitched by email two days ago, so each sits on Reached out
@@ -95,7 +95,7 @@ final class AReachedOutRowRedrawsOnlyWhenItChangesTests {
         let c = try TestModelContainer.inMemory(AppSchema.models)
         let t = try seed(c.mainContext)
         let served = pass(t, at: now)
-        let keys = served.reachedOut.map(\.prospect.naturalKey)
+        let keys = served.reachedOut.map(\.show.naturalKey)
         #expect(keys.count == 5, "the fixture put \(keys.count) shows on Reached out, not five")
         let target = try #require(keys.first)
 

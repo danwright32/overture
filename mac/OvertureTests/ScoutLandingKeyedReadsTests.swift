@@ -51,9 +51,7 @@ struct ScoutLandingKeyedReadsTests {
     }
 
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: n,
-                                                        to: EasternDate.date(from: today)!)!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(today, plus: n)
     }
 
     // MARK: the working set on its own

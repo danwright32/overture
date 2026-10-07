@@ -406,8 +406,7 @@ struct QueueViewBodyCostProbeTests {
     // MARK: - The rig, on every push, no clock
 
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     // Sixty invented shows, three a night, dated from the clock so they stay inside the queue's lead-time

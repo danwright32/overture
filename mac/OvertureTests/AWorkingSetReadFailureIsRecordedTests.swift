@@ -42,8 +42,7 @@ private final class FailingAfter: @unchecked Sendable {
 @Suite("#4490 a show table unreadable during a landing is recorded, never a trap")
 final class AWorkingSetReadFailureIsRecordedTests {
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     private static func events(_ id: String) -> [ExtractedEvent] {

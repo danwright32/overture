@@ -352,7 +352,7 @@ struct QueueEnginePhase0bProbeTests {
             "stageCounts": data.stageCounts.sorted { $0.key.rawValue < $1.key.rawValue }
                 .map { "\($0.key.rawValue)=\($0.value)" }.joined(separator: ","),
             "agentInputs": String(describing: data.agentInputs),
-            "reachedOut order": data.reachedOut.map { "\($0.prospect.naturalKey)|\($0.recipient.id)|\($0.next.timeIntervalSince1970)" }.joined(separator: ";"),
+            "reachedOut order": data.reachedOut.map { "\($0.show.naturalKey)|\($0.contactId)|\($0.next.timeIntervalSince1970)" }.joined(separator: ";"),
             "feedBreaks": data.feedBreaks.map { String(describing: $0) }.joined(separator: ";"),
             "mergeSurvivorsDropped": data.mergeSurvivorsDropped.map { String(describing: $0) }.joined(separator: ";"),
             "fanOutLine": data.fanOutLine ?? "nil",
@@ -1268,7 +1268,7 @@ struct QueueEnginePhase0bProbeTests {
                 return passOut(i).rows
             }
             let baseOut = out(now)
-            let midnight1 = EasternDate.date(from: EasternDate.today(now.addingTimeInterval(86_400))) ?? now.addingTimeInterval(86_400)
+            let midnight1 = EasternDate.date(from: ScoutTestClock.day(1, after: now)) ?? now.addingTimeInterval(86_400)
             let midnight2 = midnight1.addingTimeInterval(86_400)
             var grid: [Date] = (1...48).map { now.addingTimeInterval(Double($0) * 3600) }
             grid += [midnight1.addingTimeInterval(-1), midnight1.addingTimeInterval(1),
