@@ -282,6 +282,9 @@ enum QueueEnginePassReason: Hashable, Sendable, CaseIterable {
     case sourceFired
     /// The surface asked for a different view, or for a card the last pass did not build.
     case viewInputs
+    /// The verifier found the output on screen unequal to a pass over facts that agree with the store, and this
+    /// pass is its heal (plan v7 D7).
+    case recovery
 }
 
 /// When the clock next forces a pass, and which of the two deadlines it is (plan v2 Phase 4 step 4).

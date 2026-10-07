@@ -46,20 +46,38 @@ import SwiftData
 // THE VALUE PASS IS INJECTED (`QueueEngineDerivation`). The queue's own, `QueueRenderPass.make` over these
 // facts, cannot run yet: `QueueModel.scope`, `AgentInputs.from` (#4357 G3), `RenderData` (#4357 slice I) and the
 // pass's inquiry and small table inputs still take or hold models. The cutover (#4358, slice E4) hands it in.
-// The verifier and recovery (D7, slice E2) and the launch fill (D6, slice E3) follow.
+// It is `@Sendable` over Sendable values, because the verifier runs it on its own thread (plan v7 Phase 3 step 8).
+//
+// WHO NUMBERS AN OUTPUT (#4358, slice E2). The engine, always: every publisher (the turn, the verifier's
+// recovery, the launch fill of slice E3) takes its generation from `mintGeneration()` at the moment its inputs are
+// fixed, so outputs carry distinct numbers in the order their inputs were taken, and the gate refuses exactly an
+// output whose inputs are older than the one on screen. A publisher numbering its own would collide with the
+// turn's next number, and the turn's newer output would be the one refused. An output published with a number
+// the engine did not mint moves the counter past it, so the next turn is never refused for it.
+//
+// THE VERIFIER AND RECOVERY (plan v7 D7 and decision 9, slice E2; the values are `Domain/QueueEngineVerifier.swift`).
+// After three seconds with no new output, or after twenty outputs whatever the quiet, the engine compares its
+// facts and its output with a fresh read of the saved store, on `BlockingWorkThread` (a serial queue outside the
+// cooperative pool, L241) under a 30 second deadline. A row that disagrees, and a row a save through another
+// context touched, is FAULTED, and recovery fetches it again on the main context once that context holds no
+// unsaved change for it (never a rollback, which keeps fetched values, #4106 probe 0c.7), reads it as any other
+// change, and checks the result through a throwaway context. A row that will not converge stays faulted, with a
+// `healDidNotConverge` record, for the show resolver to refuse actions on (#4357, slice I2, read by the cutover).
+// The launch fill (D6, slice E3) follows.
 //
 // NOTHING IN THE APP STARTS THIS YET. The cutover (#4358, slice E4) does.
 
 /// What one pass derives from the facts, and the three things the engine needs to know about its answer.
-struct QueueEngineDerivation<Value> {
-    /// The value pass. Runs on the main actor from a scheduled turn, never from a view body (L471).
-    let derive: @MainActor (QueueEnginePassInput) -> Value
-    /// The members of two answers that differ, by name only (C7, L222), for the floor's record.
-    let differingFields: (Value, Value) -> [String]
+struct QueueEngineDerivation<Value: Sendable>: Sendable {
+    /// The value pass, over values only. The engine runs it on the main actor from a scheduled turn, never from a
+    /// view body (L471); the verifier runs it on its own thread over a fresh read.
+    let derive: @Sendable (QueueEnginePassInput) -> Value
+    /// The members of two answers that differ, by name only (C7, L222), for the floor's and the verifier's records.
+    let differingFields: @Sendable (Value, Value) -> [String]
     /// The earliest instant at which a rule in the answer comes due, or nil when none is in play.
-    let nextChange: (Value) -> Date?
+    let nextChange: @Sendable (Value) -> Date?
     /// The cards the answer built, so a frame asking only for those is no reason to derive again.
-    let builtCardKeys: (Value) -> Set<String>
+    let builtCardKeys: @Sendable (Value) -> Set<String>
 }
 
 /// One published pass, and which store state and which pass it describes.
@@ -139,9 +157,11 @@ final class QueueEngineIntake: @unchecked Sendable {
         var inserted: Set<PersistentIdentifier> = []
         var updated: Set<PersistentIdentifier> = []
         var deleted: Set<PersistentIdentifier> = []
+        /// Every identifier a save through ANOTHER context named, which the turn faults (decision 9(a)).
+        var foreign: Set<PersistentIdentifier> = []
 
         var isEmpty: Bool {
-            fired.isEmpty && noted.isEmpty && inserted.isEmpty && updated.isEmpty && deleted.isEmpty
+            fired.isEmpty && noted.isEmpty && inserted.isEmpty && updated.isEmpty && deleted.isEmpty && foreign.isEmpty
         }
     }
 
@@ -157,8 +177,9 @@ final class QueueEngineIntake: @unchecked Sendable {
 
     func noted(_ id: PersistentIdentifier) { take { $0.noted.insert(id) } }
 
-    /// A save's identifiers, copied as handed over. Reads no row.
-    func saved(_ info: [AnyHashable: Any]?) {
+    /// A save's identifiers, copied as handed over, and whether a context other than the engine's own made it.
+    /// Reads no row.
+    func saved(_ info: [AnyHashable: Any]?, foreign: Bool) {
         func ids(_ key: ModelContext.NotificationKey) -> [PersistentIdentifier] {
             info?[key.rawValue] as? [PersistentIdentifier] ?? []
         }
@@ -169,6 +190,7 @@ final class QueueEngineIntake: @unchecked Sendable {
             $0.inserted.formUnion(inserted)
             $0.updated.formUnion(updated)
             $0.deleted.formUnion(deleted)
+            if foreign { $0.foreign.formUnion(inserted + updated) }
         }
     }
 
@@ -189,27 +211,39 @@ final class QueueEngineIntake: @unchecked Sendable {
     }
 }
 
-/// What the engine registered with notification centres and the deadline's timer, released when it goes.
+/// The engine's timers, one per job, each replacing the last of its kind.
+enum QueueEngineTimer: Hashable, Sendable {
+    /// The clock's one deadline (the next rule due, or the floor).
+    case deadline
+    /// Three seconds after an output with no other: the verifier's quiet moment.
+    case quiet
+    /// Ten minutes with no completed comparison.
+    case unverified
+    /// The next try at a faulted row.
+    case recovery
+}
+
+/// What the engine registered with notification centres and its timers, released when it goes.
 private final class QueueEngineObservers: @unchecked Sendable {
     private let lock = NSLock()
     private var tokens: [(NotificationCenter, NSObjectProtocol)] = []
-    private var timer: Task<Void, Never>?
+    private var timers: [QueueEngineTimer: Task<Void, Never>] = [:]
 
     func add(_ token: NSObjectProtocol, on center: NotificationCenter) {
         lock.withLock { tokens.append((center, token)) }
     }
 
-    func replaceTimer(_ task: Task<Void, Never>?) {
+    func replaceTimer(_ slot: QueueEngineTimer, _ task: Task<Void, Never>?) {
         let old: Task<Void, Never>? = lock.withLock {
-            defer { timer = task }
-            return timer
+            defer { timers[slot] = task }
+            return timers[slot]
         }
         old?.cancel()
     }
 
     deinit {
         for (center, token) in tokens { center.removeObserver(token) }
-        timer?.cancel()
+        for timer in timers.values { timer.cancel() }
     }
 }
 
@@ -222,9 +256,97 @@ private final class QueueEngineReference<Target: AnyObject>: @unchecked Sendable
     }
 }
 
+/// Where the verifier's durable records and its lifetime match count go: the existing divergence log and the
+/// defaults beside `cardCheckLastRanAt` (plan v7 D7 and D8, one log rather than a second one beside it, L655).
+struct QueueEngineVerifierLog {
+    let url: URL
+    let defaults: UserDefaults
+}
+
+/// How recovery brings one faulted row back to the saved values on the main context: true when the store still
+/// holds it, false when it is gone (a fetch finding nothing is a deletion, decision 9(a)). `contacts` are the
+/// contacts the engine holds under a show, fetched with it.
+typealias QueueEngineRefetch = @MainActor (PersistentIdentifier, FactStore.Table, ModelContext,
+                                           _ contacts: [PersistentIdentifier]) throws -> Bool
+
+/// Whether the verifier runs on its own triggers, or only when asked.
+enum QueueEngineVerifierTriggers: Sendable {
+    /// Three seconds of quiet, every twenty outputs, and the ten minute timer (the app's, from the cutover).
+    case automatic
+    /// Only `verifyNow()`. The engine's gate, clock and intake suites, whose subject is not the verifier and
+    /// which count the clock's sleepers; `QueueEngineVerifierTests` drives the automatic triggers.
+    case byHand
+}
+
+/// Everything the verifier and recovery are built from, injected so a test can hand in a read that throws,
+/// blocks or comes back short, and a refetch that never converges.
+struct QueueEngineVerifierSetup {
+    var triggers: QueueEngineVerifierTriggers = .automatic
+    /// The fresh read, made on the verifier's thread through a context of its own.
+    var read: @Sendable (ModelContainer) throws -> QueueEngineFreshRead = QueueEngineFreshRead.read
+    var refetch: QueueEngineRefetch = QueueEngineRecovery.refetchByIdentifier
+    /// Nil keeps the records in memory only (`verifierFindings`), for a test that does not ask about the file.
+    var log: QueueEngineVerifierLog?
+}
+
+enum QueueEngineRecovery {
+    /// The recovery's one mechanism, the one probe 0b.4 proved: a FETCH by identifier on the main context, which
+    /// brings a row holding no unsaved change back to the saved values. Never `rollback()`, whose fetched objects
+    /// keep the discarded values (#4106 probe 0c.7).
+    @MainActor static func refetchByIdentifier(_ id: PersistentIdentifier, _ table: FactStore.Table,
+                                               _ context: ModelContext, _ contacts: [PersistentIdentifier]) throws -> Bool {
+        guard let row = try table.fetch([id], in: context).first else { return false }
+        var contactIDs = contacts
+        if let show = row as? Prospect { contactIDs += show.factContacts.map(\.persistentModelID) }
+        if !contactIDs.isEmpty { _ = try FactStore.Table.fetched(Recipient.self, contactIDs, in: context) }
+        return true
+    }
+
+    /// Every model the main context holds an unsaved change on, by identity, and the shows of the contacts among
+    /// them. Outside the generic engine on purpose: the same loop inside it crashes the compiler's IR generation
+    /// for an existential `PersistentModel` (Xcode 26, measured building #4358 slice E2).
+    @MainActor static func unsavedModels(in context: ModelContext)
+        -> (ids: [PersistentIdentifier], contactShows: Set<PersistentIdentifier>) {
+        var ids: [PersistentIdentifier] = []
+        var shows: Set<PersistentIdentifier> = []
+        for list in [context.changedModelsArray, context.insertedModelsArray, context.deletedModelsArray] {
+            for model in list {
+                ids.append(model.persistentModelID)
+                if let contact = model as? Recipient, let show = contact.prospect { shows.insert(show.persistentModelID) }
+            }
+        }
+        return (ids, shows)
+    }
+}
+
+/// One verification in flight: the outputs published while it runs (D7's ring), and whether the engine stopped
+/// it. Read from the verifier's thread, so behind a lock.
+final class QueueEngineVerifierRun<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ring: [QueueEngineSnapshot<Value>]
+    private var stopped = false
+
+    init(first: QueueEngineSnapshot<Value>) {
+        ring = [first]
+    }
+
+    var snapshots: [QueueEngineSnapshot<Value>] { lock.withLock { ring } }
+    var isCancelled: Bool { lock.withLock { stopped } }
+
+    func cancel() { lock.withLock { stopped = true } }
+
+    /// Keeps `snapshot`, or cancels the run when the ring is full: a run that has fallen that far behind the
+    /// store would only ever be superseded.
+    func add(_ snapshot: QueueEngineSnapshot<Value>) {
+        lock.withLock {
+            if ring.count >= QueueEngineVerifier.ringCapacity { stopped = true } else { ring.append(snapshot) }
+        }
+    }
+}
+
 @MainActor
 @Observable
-final class QueueEngine<Value> {
+final class QueueEngine<Value: Sendable> {
 
     // MARK: - What it is built from
 
@@ -239,6 +361,12 @@ final class QueueEngine<Value> {
     @ObservationIgnored private let refused: @MainActor (Int, Int) -> Void
     @ObservationIgnored private let intake = QueueEngineIntake()
     @ObservationIgnored private let observers = QueueEngineObservers()
+    @ObservationIgnored private let verifierSetup: QueueEngineVerifierSetup
+    /// The verifier's thread: a serial queue outside the cooperative pool with a deadline, which refuses a new
+    /// item while one it gave up on is still running (the shared `BlockingWorkThread`, L241, L110).
+    @ObservationIgnored private let verifierThread = BlockingWorkThread(name: "queue-verifier")
+    /// The session the verifier's records carry (`CardDivergenceRecord.session`).
+    @ObservationIgnored private let session = UUID().uuidString
 
     // MARK: - What it keeps, keyed by identity (every one is in `identityKeyedState`)
 
@@ -263,6 +391,10 @@ final class QueueEngine<Value> {
     @ObservationIgnored private var signals: [String: ContextSignal] = [:]
     /// The context sources that fired since the last turn, by input name.
     @ObservationIgnored private var sourcesFired: Set<String> = []
+    /// Rows known to be out of step with the store, and each one's recovery bounds (D7, decision 9).
+    @ObservationIgnored private(set) var faults = QueueEngineFaults()
+    /// The verification in flight, if any (single flight).
+    @ObservationIgnored private var verification: QueueEngineVerifierRun<Value>?
 
     // MARK: - The turn and the gate
 
@@ -274,6 +406,23 @@ final class QueueEngine<Value> {
     @ObservationIgnored private(set) var deadline: QueueEngineDeadline?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private(set) var counters = QueueEngineCounters()
+
+    // MARK: - The verifier's state
+
+    @ObservationIgnored private(set) var verifierCounts = QueueEngineVerifierCounts()
+    /// Every record the verifier and recovery wrote this session, newest last, at most `findingsKept`, whether or
+    /// not a log file was handed in (the file applies the divergence log's cooldown; this keeps each one).
+    @ObservationIgnored private(set) var verifierFindings: [CardDivergenceRecord] = []
+    static var findingsKept: Int { 50 }
+    @ObservationIgnored private var cooldown = CardDivergenceLog.Cooldown()
+    @ObservationIgnored private var findingSequence = 0
+    /// The generation the last verification started at, for "every twenty outputs".
+    @ObservationIgnored private var verifiedAtGeneration = 0
+    @ObservationIgnored private var verifyAgain = false
+    /// The view the output on screen was derived for, which a verification compares at.
+    @ObservationIgnored private var publishedViewInputs: QueueEngineViewInputs?
+    /// An output mismatch with matching facts, waiting for the pass that heals it.
+    @ObservationIgnored private var outputHealFields: [String]?
 
     // MARK: - What it publishes
 
@@ -290,9 +439,11 @@ final class QueueEngine<Value> {
          events: QueueEngineSystemEvents,
          saveCenter: NotificationCenter = .default,
          schedule: @escaping QueueEngineSchedule = QueueEngineTurns.nextTurn,
-         refused: @escaping @MainActor (Int, Int) -> Void = QueueEngineTurns.refuse) {
+         refused: @escaping @MainActor (Int, Int) -> Void = QueueEngineTurns.refuse,
+         verifier: QueueEngineVerifierSetup) {
         self.context = context
         container = context.container
+        verifierSetup = verifier
         self.derivation = derivation
         self.saves = saves
         self.clock = clock
@@ -314,10 +465,11 @@ final class QueueEngine<Value> {
         started = true
         let intake = self.intake
         let store = ObjectIdentifier(container)
+        let own = ObjectIdentifier(context)
         observers.add(saveCenter.addObserver(forName: ModelContext.didSave, object: nil, queue: nil) { note in
             // A save into another store is not a change to this one (`StoreSaveCount` keeps them apart too).
             guard let saved = note.object as? ModelContext, ObjectIdentifier(saved.container) == store else { return }
-            intake.saved(note.userInfo)
+            intake.saved(note.userInfo, foreign: ObjectIdentifier(saved) != own)
         }, on: saveCenter)
         let engine = QueueEngineReference(self)
         for event in QueueEngineSystemEvents.events {
@@ -331,6 +483,7 @@ final class QueueEngine<Value> {
         var resolution = QueueEngineResolution()
         readEverything(into: &resolution)
         resolveIdentities(resolution)
+        armUnverifiedTimer()
         scheduleTurn()
     }
 
@@ -376,21 +529,48 @@ final class QueueEngine<Value> {
 
     /// Publishes `incoming` if it is newer than what is on screen, and arms the clock from it; otherwise refuses
     /// it (plan v2 Phase 4 step 3) and changes nothing. Every pass publishes through here, and so will the launch
-    /// fill and the verifier's recovery. Returns whether it was applied, because only an applied output is a pass
-    /// (L78).
+    /// fill (slice E3); the recovery's passes are the turn's own. Returns whether it was applied, because only an
+    /// applied output is a pass (L78). An applied output claims to describe the engine's facts as they stand, and
+    /// is what the verifier compares with a fresh read.
     @discardableResult
     func publish(_ incoming: QueueEngineOutput<Value>) -> Bool {
         switch QueueEngineGenerations.verdict(published: output?.generation, incoming: incoming.generation) {
         case .apply:
             output = incoming
+            // A number the engine did not mint moves the counter past it, so the next turn is not refused for it.
+            generation = max(generation, incoming.generation)
+            publishedViewInputs = viewInputs
             armDeadline(QueueEngineDeadline.next(now: incoming.now,
                                                  termNextChange: derivation.nextChange(incoming.value)))
+            published(incoming)
             return true
         case .refuse(let published, let incoming):
             refused(published, incoming)
             return false
         }
     }
+
+    /// The next generation, for an output whose inputs are being fixed NOW. Every publisher takes its number here
+    /// (see "WHO NUMBERS AN OUTPUT" above), so no publisher's output can collide with another's.
+    func mintGeneration() -> Int {
+        generation += 1
+        return generation
+    }
+
+    /// Compares the facts and the output on screen with a fresh read now, whatever the triggers say. The cutover
+    /// calls it when the launch fill ends (D6); a test calls it to produce each outcome. Single flight: a call
+    /// while one runs asks for another after it.
+    func verifyNow() {
+        startVerification()
+    }
+
+    /// Whether the show resolver must refuse an action on `id`: its held value is known to be out of step with the
+    /// store, and saving the main context's object would write the stale fields back (D7; read by #4357 slice I2).
+    func isFaulted(_ id: PersistentIdentifier) -> Bool { faults.contains(id) }
+
+    /// How many rows are faulted, since when, and how many for over an hour (stuck), for the launch notice the
+    /// cutover adds beside the verifier's match count (D7).
+    var faultSummary: QueueEngineFaults.Summary { faults.summary(at: clock.now()) }
 
     // MARK: - The turn
 
@@ -406,7 +586,9 @@ final class QueueEngine<Value> {
         counters.turns += 1
         let now = clock.now()
         let saveCount = saves.value(for: container)
-        let changed = intakeTurn(now: now)
+        let intook = intakeTurn(now: now)
+        // Recovery runs after the intake, so a faulted row a save touched this turn is tried again at once.
+        let changed = intook.changed + recover(now: now, touched: intook.touched)
         counters.rowsChanged += changed
         var reasons = clockDue
         clockDue = []
@@ -416,21 +598,28 @@ final class QueueEngine<Value> {
         if viewInputsMoved { reasons.insert(.viewInputs) }
         viewInputsMoved = false
         if output == nil { reasons.insert(.first) }
+        let healing = outputHealFields
+        if healing != nil { reasons.insert(.recovery) }
         guard !reasons.isEmpty else { return }
         let value = derivation.derive(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now))
-        generation += 1
         let previous = output
-        guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
+        guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: mintGeneration(), now: now,
                                         reasons: reasons)) else {
-            // Refused: another caller put a newer output on screen first, so nothing on screen changed and this
-            // is no pass and no floor change (L78). The clock runs on from the output that IS on screen, so the
-            // floor is never left without a timer (L51).
+            // Refused, which a minted number cannot be: it is newer than every output published, minted or not
+            // (`publish` moves the counter past an unminted one). Were it ever refused, nothing on screen changed,
+            // so this is no pass and no floor change (L78), and the clock runs on from the output that IS on
+            // screen so the floor is never left without a timer (L51).
             if let onScreen = output {
                 armDeadline(QueueEngineDeadline.next(now: now, termNextChange: derivation.nextChange(onScreen.value)))
             }
             return
         }
         counters.passes += 1
+        if let healing {
+            outputHealFields = nil
+            verifierCounts.healed += 1
+            writeFinding(.healed, fields: healing, at: now)
+        }
         if reasons == [.clockFloor], let previous {
             let fields = derivation.differingFields(previous.value, value)
             if !fields.isEmpty {
@@ -443,8 +632,8 @@ final class QueueEngine<Value> {
     // MARK: - Intake and the resolve step
 
     /// Takes in what the intake holds, resolves identities, and reads again every row it names. Returns how
-    /// many stored values changed.
-    private func intakeTurn(now: Date) -> Int {
+    /// many stored values changed, and the rows (as the FactStore keys them) the intake named.
+    private func intakeTurn(now: Date) -> (changed: Int, touched: Set<PersistentIdentifier>) {
         let pending = intake.drain()
         var resolution = QueueEngineResolution()
         for (temporary, model) in temporaries {
@@ -524,15 +713,27 @@ final class QueueEngine<Value> {
                 everything = true
             }
         }
+        // A save through ANOTHER context (decision 9(a)). The main context's own copies of what it touched may be
+        // stale (#4106 probe 2), so those rows are FAULTED, and recovery fetches each one again in this same turn
+        // once the main context holds no unsaved change for it. The identifiers come from the save itself; the
+        // counter, a separate source, is the net under them (L345): it moving with no identifier attributed
+        // means a save this observer never saw, and only then is every row read again.
+        let foreignRows = rowsOwning(pending.foreign.compactMap(current)).subtracting(resolution.deletedIDs)
+        if !foreignRows.isEmpty {
+            faults.admit(Dictionary(uniqueKeysWithValues: foreignRows.map { ($0, ["foreignSave"]) }),
+                         origin: .foreignSave, at: now)
+            writeFinding(.foreignSave, fields: foreignRows.compactMap { FactStore.Table.holding($0.entityName) }
+                            .map { "\($0)" }, at: now)
+        }
         let foreign = saves.foreignSaveCount(for: container)
         if foreign != observedForeignSaves {
             observedForeignSaves = foreign
             counters.foreignSaves.record(at: now)
             // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#4358)
-            AgentLog.note("Queue engine read every row again after a save through another context "
+            AgentLog.note("Queue engine faulted the rows a save through another context touched "
                           + "(\(counters.foreignSaves.times) this session).")
             // copy-inventory:ignore-end
-            everything = true
+            if pending.foreign.isEmpty { everything = true }
         }
 
         var second = QueueEngineResolution()
@@ -543,7 +744,270 @@ final class QueueEngine<Value> {
         }
         if everything { changed += readEverything(into: &second) }
         resolveIdentities(second)
+        return (changed, shows.union(inquiries).union(small).union(foreignRows))
+    }
+
+    /// The rows, as the FactStore keys them, that `ids` belong to: a contact's is its show's, and a model the pass
+    /// never reads belongs to none.
+    private func rowsOwning(_ ids: [PersistentIdentifier]) -> Set<PersistentIdentifier> {
+        var rows: Set<PersistentIdentifier> = []
+        for id in ids {
+            if Self.isContact(id) {
+                if let show = recipientParent[id] ?? liveContact(id)?.prospect?.persistentModelID { rows.insert(show) }
+            } else if FactStore.Table.holding(id.entityName) != nil {
+                rows.insert(id)
+            }
+        }
+        return rows
+    }
+
+    // MARK: - Recovery (D7, decision 9)
+
+    /// Tries every faulted row that is due: one whose main-context object holds an unsaved change is left alone
+    /// and counted `unmeasured(busy)`, because a fetch does not refresh a dirty row and the edit is Dan's (#4106
+    /// probe 0b.4); every other is fetched again by identifier and read as any change is. Then a throwaway context
+    /// reads the same rows, and each that now equals it is healed; each that does not has failed one attempt.
+    /// Returns how many stored values the recovery changed.
+    private func recover(now: Date, touched: Set<PersistentIdentifier>) -> Int {
+        let due = faults.due(at: now, touched: touched)
+        guard !due.isEmpty else { return 0 }
+        let dirty = rowsWithUnsavedChanges()
+        var changed = 0
+        var tried: Set<PersistentIdentifier> = []
+        var resolution = QueueEngineResolution()
+        for id in due {
+            guard !dirty.contains(id) else {
+                verifierCounts.unmeasured[.busy, default: 0] += 1
+                continue
+            }
+            guard let table = FactStore.Table.holding(id.entityName) else { continue }
+            let contacts = recipientParent.filter { $0.value == id }.map(\.key)
+            do {
+                if try verifierSetup.refetch(id, table, context, contacts) {
+                    if readRow(id, table: table, now: now, into: &resolution) { changed += 1 }
+                } else if remove(id, into: &resolution) {
+                    changed += 1
+                }
+            } catch {
+                // A failed fetch is not a deletion (L215), and not a heal either: it is a failed attempt.
+                counters.unreadRows.record(at: now)
+            }
+            tried.insert(id)
+        }
+        resolveIdentities(resolution)
+        guard !tried.isEmpty else {
+            armRecoveryTimer()
+            return changed
+        }
+        // The heal check's side, through a context of its own and never the main one it is checking (L345).
+        let stored: FactStore?
+        do {
+            let checker = ModelContext(container)
+            stored = try FactStore.extract(only: tried, from: checker)
+        } catch {
+            counters.unreadRows.record(at: now)
+            stored = nil
+        }
+        for id in tried {
+            if let stored, facts.sameRow(id, as: stored) {
+                if let entry = faults.healed(id) {
+                    verifierCounts.healed += 1
+                    writeFinding(.healed, fields: entry.fields, at: now)
+                }
+            } else if let entry = faults.failed(id, at: now) {
+                verifierCounts.healDidNotConverge += 1
+                writeFinding(.healDidNotConverge, fields: entry.fields, at: now)
+            }
+        }
+        armRecoveryTimer()
         return changed
+    }
+
+    /// The rows, as the FactStore keys them, whose main-context object holds an unsaved change, read from the
+    /// context's own lists and never from anything the engine marked (L345).
+    private func rowsWithUnsavedChanges() -> Set<PersistentIdentifier> {
+        guard context.hasChanges else { return [] }
+        let unsaved = QueueEngineRecovery.unsavedModels(in: context)
+        return rowsOwning(unsaved.ids).union(unsaved.contactShows)
+    }
+
+    private func readRow(_ id: PersistentIdentifier, table: FactStore.Table, now: Date,
+                         into resolution: inout QueueEngineResolution) -> Bool {
+        switch table {
+        case .shows: return readShow(id, now: now, into: &resolution)
+        case .inquiries: return readInquiry(id, now: now, into: &resolution)
+        default: return readSmallTableRow(id, now: now, into: &resolution)
+        }
+    }
+
+    /// Asks for a turn when the next try at a faulted row comes due: soon while a round is open, else at the
+    /// retry interval. A save touching a faulted row asks for its own turn sooner.
+    private func armRecoveryTimer() {
+        guard !faults.isEmpty else {
+            observers.replaceTimer(.recovery, nil)
+            return
+        }
+        let open = faults.entries.values.contains { $0.gaveUpAt == nil }
+        armTimer(.recovery, after: open ? QueueEngineFaults.attemptSpacingSeconds : QueueEngineFaults.retrySeconds) {
+            $0.scheduleTurn()
+        }
+    }
+
+    // MARK: - The verifier (D7)
+
+    /// After an applied output: kept in the ring of a verification in flight, or the verifier's triggers armed.
+    private func published(_ incoming: QueueEngineOutput<Value>) {
+        if let verification {
+            verification.add(snapshot(of: incoming))
+            return
+        }
+        guard verifierSetup.triggers == .automatic else { return }
+        if generation - verifiedAtGeneration >= QueueEngineVerifier.forcedEveryGenerations {
+            startVerification()
+        } else {
+            let at = generation
+            armTimer(.quiet, after: QueueEngineVerifier.quietSeconds) { engine in
+                // Quiet means no output since: a newer one re-armed this timer and this one is stale.
+                if engine.generation == at { engine.startVerification() }
+            }
+        }
+    }
+
+    private func snapshot(of output: QueueEngineOutput<Value>) -> QueueEngineSnapshot<Value> {
+        QueueEngineSnapshot(saveCount: output.saveCount, generation: output.generation, facts: facts,
+                            viewInputs: publishedViewInputs ?? viewInputs, now: output.now, value: output.value,
+                            clean: !context.hasChanges)
+    }
+
+    private func startVerification() {
+        guard verification == nil else {
+            verifyAgain = true
+            return
+        }
+        guard let output else { return }
+        verifiedAtGeneration = generation
+        verifierCounts.started += 1
+        // The held facts include the main context's unsaved edits and a fresh read sees only what is saved, so
+        // nothing comparable can be read while it holds one.
+        guard !context.hasChanges else {
+            finishVerification(.unmeasured(.busy))
+            return
+        }
+        let run = QueueEngineVerifierRun(first: snapshot(of: output))
+        verification = run
+        let container = self.container
+        let saves = self.saves
+        let read = verifierSetup.read
+        let derivation = self.derivation
+        let thread = verifierThread
+        let clock = self.clock
+        Task { [weak self] in
+            let result: QueueEngineVerification
+            do {
+                result = try await thread.run(deadlineSeconds: QueueEngineVerifier.deadlineSeconds,
+                                              sleep: { try? await clock.sleep($0) }) {
+                    QueueEngineVerifier.verify(container: container, saves: saves, read: read, ring: { run.snapshots },
+                                               derivation: derivation, cancelled: { run.isCancelled })
+                }
+            } catch BlockingWorkError.timedOut {
+                result = .unmeasured(.timedOut)
+            } catch {
+                // `BlockingWorkError.busy`: a verification the deadline gave up on has still not returned.
+                result = .unmeasured(.wedged)
+            }
+            guard let self, self.verification === run else { return }
+            self.verification = nil
+            self.finishVerification(result)
+        }
+    }
+
+    private func finishVerification(_ result: QueueEngineVerification) {
+        let now = clock.now()
+        switch result {
+        case .match:
+            verifierCounts.matches += 1
+            verifierCounts.lastMatchedAt = now
+            verifierCounts.lastComparedAt = now
+            if let log = verifierSetup.log {
+                log.defaults.set(log.defaults.integer(forKey: CardDivergenceLog.verifierMatchCountKey) + 1,
+                                 forKey: CardDivergenceLog.verifierMatchCountKey)
+                log.defaults.set(now, forKey: CardDivergenceLog.verifierLastMatchedKey)
+            }
+            armUnverifiedTimer()
+        case .factMismatch(let rows, _):
+            verifierCounts.factMismatches += 1
+            verifierCounts.lastComparedAt = now
+            writeFinding(.factMismatch, fields: rows.values.flatMap { $0 }, at: now)
+            faults.admit(rows, origin: .verifier, at: now)
+            armUnverifiedTimer()
+            scheduleTurn()
+        case .outputMismatch(let fields, _):
+            verifierCounts.outputMismatches += 1
+            verifierCounts.lastComparedAt = now
+            writeFinding(.outputMismatch, fields: fields, at: now)
+            // The facts agree, so a pass over them is the heal and carries no stale object (D7).
+            outputHealFields = fields
+            armUnverifiedTimer()
+            scheduleTurn()
+        case .superseded:
+            verifierCounts.superseded += 1
+            verifyAgain = true
+        case .cancelled:
+            verifierCounts.cancelled += 1
+            verifyAgain = true
+        case .unmeasured(let why):
+            verifierCounts.unmeasured[why, default: 0] += 1
+            switch why {
+            case .timedOut: writeFinding(.verifierTimedOut, fields: [], at: now)
+            case .wedged: writeFinding(.verifierWedged, fields: [], at: now)
+            case .busy, .readFailed, .shortRead: break
+            }
+        }
+        // Asked again while this ran, or this one could not say: once more after the next quiet moment.
+        if verifyAgain, verifierSetup.triggers == .automatic {
+            verifyAgain = false
+            let at = generation
+            armTimer(.quiet, after: QueueEngineVerifier.quietSeconds) { engine in
+                if engine.generation == at { engine.startVerification() }
+            }
+        }
+    }
+
+    /// Ten minutes with no comparison that reached a verdict writes `unverifiedTooLong`, and arms again (D7).
+    private func armUnverifiedTimer() {
+        guard verifierSetup.triggers == .automatic else { return }
+        armTimer(.unverified, after: QueueEngine.unverifiedSeconds) { engine in
+            engine.verifierCounts.unverifiedTooLong += 1
+            engine.writeFinding(.unverifiedTooLong, fields: [], at: engine.clock.now())
+            engine.armUnverifiedTimer()
+        }
+    }
+
+    private static var unverifiedSeconds: TimeInterval { QueueEngineVerifier.unverifiedTooLongSeconds }
+
+    /// One record into the divergence log, through its cooldown (D8), and into `verifierFindings`. Field NAMES
+    /// only, never a show (C7, L222).
+    private func writeFinding(_ kind: CardDivergenceRecord.Kind, fields: [String], at now: Date) {
+        findingSequence += 1
+        let record = CardDivergenceRecord(session: session, sequence: findingSequence, at: now,
+                                          fields: Array(Set(fields)).sorted(), cardsBuilt: 0, stage: nil, kind: kind)
+        verifierFindings.append(record)
+        if verifierFindings.count > Self.findingsKept { verifierFindings.removeFirst() }
+        if let log = verifierSetup.log { CardDivergenceLog.append(record, to: log.url, through: &cooldown) }
+    }
+
+    /// One timer per job on the injected clock, replacing the last of its kind (L524).
+    private func armTimer(_ slot: QueueEngineTimer, after seconds: TimeInterval,
+                          _ fire: @escaping @MainActor (QueueEngine<Value>) -> Void) {
+        let clock = self.clock
+        observers.replaceTimer(slot, Task { [weak self] in
+            do {
+                try await clock.sleep(max(0, seconds))
+            } catch {
+                return
+            }
+            if let self { fire(self) }
+        })
     }
 
     /// Applies one resolution to every structure registered in `identityKeyedState`.
@@ -755,7 +1219,7 @@ final class QueueEngine<Value> {
     private func armDeadline(_ next: QueueEngineDeadline) {
         deadline = next
         let clock = self.clock
-        observers.replaceTimer(Task { [weak self] in
+        observers.replaceTimer(.deadline, Task { [weak self] in
             do {
                 try await clock.sleep(max(0, next.at.timeIntervalSince(clock.now())))
             } catch {
@@ -788,6 +1252,8 @@ extension QueueEngine {
         case drainedAtEveryTurn
         /// Keyed by the NAME of a context input, never by a row, so no deletion or re-key reaches it.
         case namesInputsNotRows
+        /// Holds the NAMES of an output's fields (C7), never a row's identity or key, so nothing reaches it.
+        case namesFieldsNotRows
     }
 
     struct IdentityKeyedState {
@@ -833,6 +1299,13 @@ extension QueueEngine {
                 engine.recipientParent = next
             }),
             IdentityKeyedState(path: "armed", disposition: .resolved { $0.armed.resolve($1) }),
+            // A deleted row is out of step with nothing, and a re-keyed one is faulted under its new identifier.
+            IdentityKeyedState(path: "faults.entries", disposition: .resolved { $0.faults.resolve($1) }),
+            // A run in flight compares outputs as they WERE, whole, so nothing in its ring is purged; a deletion
+            // stops it instead, because the read it is making may already miss the row (plan v7 Phase 4 step 1).
+            IdentityKeyedState(path: "verification", disposition: .resolved { engine, resolution in
+                if !resolution.deletedIDs.isEmpty { engine.verification?.cancel() }
+            }),
             // A temporary row leaves this the moment its first save re-keys it, or it is gone.
             IdentityKeyedState(path: "temporaries", disposition: .resolved { engine, resolution in
                 for id in resolution.deletedIDs { engine.temporaries.removeValue(forKey: id) }
@@ -844,11 +1317,22 @@ extension QueueEngine {
             IdentityKeyedState(path: "viewInputs.requestedCardKeys", disposition: .resolved {
                 $0.viewInputs.requestedCardKeys.resolve(keys: $1)
             }),
+            // The view the output on screen was derived for, resolved as the live view is: a resolution that
+            // changes a key also changes a fact, so a pass follows and publishes this again.
+            IdentityKeyedState(path: "publishedViewInputs.focusedKeys", disposition: .resolved { engine, resolution in
+                let keys = engine.publishedViewInputs?.focusedKeys?.resolved(keys: resolution)
+                engine.publishedViewInputs?.focusedKeys = keys
+            }),
+            IdentityKeyedState(path: "publishedViewInputs.requestedCardKeys", disposition: .resolved {
+                $0.publishedViewInputs?.requestedCardKeys.resolve(keys: $1)
+            }),
+            IdentityKeyedState(path: "outputHealFields", disposition: .namesFieldsNotRows),
             IdentityKeyedState(path: "intake.pending.fired", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.noted", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.inserted", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.updated", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "intake.pending.deleted", disposition: .drainedAtEveryTurn),
+            IdentityKeyedState(path: "intake.pending.foreign", disposition: .drainedAtEveryTurn),
             IdentityKeyedState(path: "signals", disposition: .namesInputsNotRows),
             IdentityKeyedState(path: "sourcesFired", disposition: .namesInputsNotRows),
         ]

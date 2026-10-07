@@ -275,11 +275,13 @@ final class QueueEngineClockTests {
         #expect(rig.engine.floorChanges.isEmpty)
     }
 
-    // A turn whose output is REFUSED changed nothing on screen, so it is no pass and no floor change (L78). It is
-    // reachable: the launch fill and the verifier's recovery publish through the same door, and one that put the
-    // next generation on screen first makes the turn's own output an equal one. The clock keeps running, from
-    // the output still on screen, so the floor is never left without a timer (L51).
-    @Test func aRefusedOutputIsNoPassAndNoFloorChange() async throws {
+    // #4358 slice E2 decided whose counter numbers a published output: the engine's (`mintGeneration`). E1b left
+    // it open, and this test used to assert the consequence of leaving it open: another caller publishing the next
+    // generation made the turn's own, NEWER output an equal number, which the gate then refused, so the turn's
+    // change never reached the screen. That decision is reversed rather than adjusted (L252, L430), so the test is
+    // inverted: an output numbered outside the engine moves the counter past it, and the turn that follows is
+    // applied, counted, and arms the clock from itself.
+    @Test func anOutputNumberedOutsideTheEngineDoesNotGetTheNextTurnRefused() async throws {
         let store = try EngineStore(shows: 2, seed: 47)
         let turns = EngineTurns()
         let clock = EngineTestClock()
@@ -290,22 +292,43 @@ final class QueueEngineClockTests {
         turns.run()
         await waitUntil("the deadline's timer is sleeping") { clock.waiting == 1 }
         let current = try #require(engine.output)
-        // Another caller publishes the next generation before the floor's turn.
+        // Another caller publishes, numbering its output itself, before the floor's turn.
         engine.publish(QueueEngineOutput(value: current.value, saveCount: current.saveCount,
                                          generation: current.generation + 1, now: current.now, reasons: [.first]))
-        // Publishing it re-armed the clock from it; the new timer must be sleeping before the clock moves.
+        #expect(engine.output?.generation == current.generation + 1, "the other caller's output was not applied")
         await waitUntil("the published output's timer is sleeping") { clock.waiting == 1 }
         let passes = engine.counters.passes
         clock.advance(by: 60)
         await waitUntil("the floor asked for a turn") { !turns.queued.isEmpty }
         turns.run()
-        // The positive control: the turn's own output really was refused, so the rest measures something.
-        #expect(refusals.list.count == 1, "the turn's output was not refused, so this test measured nothing")
-        #expect(engine.counters.passes == passes, "a refused output was counted as a pass")
-        #expect(engine.floorChanges.isEmpty, "a refused output was recorded as the floor's change")
-        #expect(engine.output?.generation == current.generation + 1)
-        let rearmed = await waitUntil("the clock is armed again after the refusal") { clock.waiting == 1 }
-        #expect(rearmed, "a refused turn left the engine with no deadline, so the clock stopped")
+        #expect(refusals.list.isEmpty, "the turn's newer output was refused: \(refusals.list)")
+        #expect(engine.counters.passes == passes + 1)
+        #expect(engine.output?.generation == current.generation + 2 && engine.output?.reasons == [.clockFloor])
+        #expect(engine.floorChanges.map(\.fields) == [["minute"]])
+    }
+
+    // A minted number is newer than everything published, so two publishers taking numbers in turn are both
+    // applied in the order their inputs were fixed, and an output whose inputs are older than the one on screen is
+    // the one refused.
+    @Test func everyPublisherTakesItsNumberFromTheEngine() throws {
+        let store = try EngineStore(shows: 2, seed: 48)
+        let turns = EngineTurns()
+        let refusals = QueueEngineGateTests.Refusals()
+        let engine = EngineHarness.engine(store, EngineDerivations.counts(), turns: turns,
+                                          refused: { refusals.list.append(($0, $1)) })
+        engine.start()
+        turns.run()
+        let current = try #require(engine.output)
+        // A publisher fixes its inputs (taking a number), then a turn runs and publishes, then the first publishes.
+        let early = engine.mintGeneration()
+        engine.sourceFired("gmailConnected")
+        turns.run()
+        #expect(engine.output?.generation == early + 1, "the turn did not take the next number")
+        engine.publish(QueueEngineOutput(value: current.value, saveCount: current.saveCount, generation: early,
+                                         now: current.now, reasons: [.first]))
+        #expect(refusals.list.count == 1 && refusals.list.first?.1 == early,
+                "an output whose inputs predate the one on screen was applied over it")
+        #expect(engine.output?.generation == early + 1)
     }
 
     // A pass the floor shares with a real change is not the floor's doing, so it records nothing even when the

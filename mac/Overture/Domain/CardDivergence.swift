@@ -77,15 +77,35 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         self.suppressedRepeats = suppressedRepeats
     }
 
-    // #4354: the kinds this log holds. Only `.cardDivergence` has a writer today (`QueueView.recordCardCheck`).
-    // `.noOpDirty` and `.factMismatch` are the queue engine's, activated by #4358 (plan v7 Phase 4 plus 5),
-    // named here because the compaction and cooldown rules below have to hold for them before the first
-    // one is written, which is the order the plan requires (L191). Each later verifier kind joins this
-    // list in the PR that writes it.
+    // #4354: the kinds this log holds. `.cardDivergence` is written by `QueueView.recordCardCheck`.
+    // `.noOpDirty` is the queue engine's, activated by #4358 (plan v7 Phase 4 plus 5), named here because the
+    // compaction and cooldown rules below have to hold for it before the first one is written, which is the
+    // order the plan requires (L191). Each later verifier kind joins this list in the PR that writes it.
+    //
+    // #4358 slice E2: the verifier's and recovery's kinds, each written by `QueueEngine` (`writeFinding`). The
+    // engine is unwired until the cutover (#4358, slice E4), which is also where the launch notice that SAYS them
+    // arrives; until then `QueueEngine.verifierFindings` and its suites are their reader. `fields` holds
+    // `table.member` names for a mismatch, the table names for a foreign save, and nothing for the three about
+    // the verifier itself. `cardsBuilt` is 0 on every one: no card is involved.
     enum Kind: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
         case cardDivergence
         case noOpDirty
+        /// A held fact differed from a fresh read of the store.
         case factMismatch
+        /// The facts agreed and the output on screen was not the pass over them.
+        case outputMismatch
+        /// A save through another context touched these tables, and their rows were faulted (decision 9(a)).
+        case foreignSave
+        /// A faulted row, or an output, came back into step.
+        case healed
+        /// A round of attempts at a faulted row ended without it coming back into step.
+        case healDidNotConverge
+        /// Ten minutes passed with no comparison reaching a verdict.
+        case unverifiedTooLong
+        /// The verifier's thread did not answer within its deadline.
+        case verifierTimedOut
+        /// A verification was never started because one the deadline gave up on had still not returned.
+        case verifierWedged
         // Written by nobody: what a spelling this build does not know DECODES to, because a later build
         // wrote it. Kept as a record rather than failing the whole line (L255, `StallRecord`'s rule).
         case unrecognised
@@ -96,7 +116,8 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         var cooldown: TimeInterval {
             switch self {
             case .cardDivergence: return 0
-            case .noOpDirty, .factMismatch, .unrecognised: return 600
+            case .noOpDirty, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
+                 .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .unrecognised: return 600
             }
         }
     }
@@ -173,6 +194,11 @@ enum CardDivergenceLog {
     // this milestone exists to make cheap. What has to be answerable is only whether anything has ever
     // looked, which a stamp answers as well as a count and more usefully: a date says WHEN.
     static let lastRanKey = "cardCheckLastRanAt"
+    // #4358 slice E2 (plan v7 D7): the queue engine verifier's own proof that it ran, beside the card check's.
+    // A lifetime count of comparisons that MATCHED and when the last one did, so zero reads as "never verified",
+    // never as clean (L557). Written by `QueueEngine` on every match; said by the cutover's launch notice (E4).
+    static let verifierMatchCountKey = "queueVerifierMatchCount"
+    static let verifierLastMatchedKey = "queueVerifierLastMatchedAt"
     // Said once per install and not once per launch. A notice carrying no action, delivered every time,
     // teaches a person to skip the whole surface.
     static let neverRanSaidKey = "cardCheckNeverRanSaid"
