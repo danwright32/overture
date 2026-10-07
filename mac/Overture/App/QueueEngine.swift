@@ -778,7 +778,11 @@ final class QueueEngine<Value: Sendable> {
     /// Returns how many stored values the recovery changed.
     private func recover(now: Date, touched: Set<PersistentIdentifier>) -> Int {
         let due = faults.due(at: now, touched: touched)
-        guard !due.isEmpty else { return 0 }
+        guard !due.isEmpty else {
+            // Nothing is due yet, which may be the hour's cap: the next wake still comes from the fault set.
+            armRecoveryTimer()
+            return 0
+        }
         let dirty = rowsWithUnsavedChanges()
         var changed = 0
         var tried: Set<PersistentIdentifier> = []
@@ -853,14 +857,12 @@ final class QueueEngine<Value: Sendable> {
     /// Asks for a turn when the next try at a faulted row comes due: soon while a round is open, else at the
     /// retry interval. A save touching a faulted row asks for its own turn sooner.
     private func armRecoveryTimer() {
-        guard !faults.isEmpty else {
+        let now = clock.now()
+        guard let next = faults.nextTry(at: now) else {
             observers.replaceTimer(.recovery, nil)
             return
         }
-        let open = faults.entries.values.contains { $0.gaveUpAt == nil }
-        armTimer(.recovery, after: open ? QueueEngineFaults.attemptSpacingSeconds : QueueEngineFaults.retrySeconds) {
-            $0.scheduleTurn()
-        }
+        armTimer(.recovery, after: next.timeIntervalSince(now)) { $0.scheduleTurn() }
     }
 
     // MARK: - The verifier (D7)
@@ -937,7 +939,6 @@ final class QueueEngine<Value: Sendable> {
         case .match:
             verifierCounts.matches += 1
             verifierCounts.lastMatchedAt = now
-            verifierCounts.lastComparedAt = now
             if let log = verifierSetup.log {
                 log.defaults.set(log.defaults.integer(forKey: CardDivergenceLog.verifierMatchCountKey) + 1,
                                  forKey: CardDivergenceLog.verifierMatchCountKey)
@@ -946,14 +947,12 @@ final class QueueEngine<Value: Sendable> {
             armUnverifiedTimer()
         case .factMismatch(let rows, _):
             verifierCounts.factMismatches += 1
-            verifierCounts.lastComparedAt = now
             writeFinding(.factMismatch, fields: rows.values.flatMap { $0 }, at: now)
             faults.admit(rows, origin: .verifier, at: now)
             armUnverifiedTimer()
             scheduleTurn()
         case .outputMismatch(let fields, _):
             verifierCounts.outputMismatches += 1
-            verifierCounts.lastComparedAt = now
             writeFinding(.outputMismatch, fields: fields, at: now)
             // The facts agree, so a pass over them is the heal and carries no stale object (D7).
             outputHealFields = fields
@@ -961,10 +960,8 @@ final class QueueEngine<Value: Sendable> {
             scheduleTurn()
         case .superseded:
             verifierCounts.superseded += 1
-            verifyAgain = true
         case .cancelled:
             verifierCounts.cancelled += 1
-            verifyAgain = true
         case .unmeasured(let why):
             verifierCounts.unmeasured[why, default: 0] += 1
             switch why {
@@ -973,7 +970,9 @@ final class QueueEngine<Value: Sendable> {
             case .busy, .readFailed, .shortRead: break
             }
         }
-        // Asked again while this ran, or this one could not say: once more after the next quiet moment.
+        // Asked again while this ran, or this one could not say, or it judged an output older than the one now
+        // on screen: once more after the next quiet moment (L710).
+        if QueueEngineVerifier.needsAnother(after: result, onScreen: output?.generation) { verifyAgain = true }
         if verifyAgain, verifierSetup.triggers == .automatic {
             verifyAgain = false
             let at = generation

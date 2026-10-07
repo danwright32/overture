@@ -544,6 +544,44 @@ final class QueueEngineVerifierTriggerTests {
         #expect(healed != nil && capped.isEmpty)
     }
 
+    // A run that judged an output older than the one now on screen asks for another, so the newest output is not
+    // left unverified until some later one arrives (L710); one that could not say asks too; one that judged the
+    // output on screen, or measured nothing, does not.
+    @Test func aVerdictOnAnOlderOutputAsksForAnother() {
+        #expect(QueueEngineVerifier.needsAnother(after: .match(generation: 4), onScreen: 5))
+        #expect(!QueueEngineVerifier.needsAnother(after: .match(generation: 5), onScreen: 5))
+        #expect(QueueEngineVerifier.needsAnother(after: .outputMismatch(fields: ["shows"], generation: 3), onScreen: 5))
+        #expect(QueueEngineVerifier.needsAnother(after: .factMismatch(rows: [:], generation: 2), onScreen: 5))
+        #expect(QueueEngineVerifier.needsAnother(after: .superseded, onScreen: 5))
+        #expect(QueueEngineVerifier.needsAnother(after: .cancelled, onScreen: 5))
+        #expect(!QueueEngineVerifier.needsAnother(after: .unmeasured(.readFailed), onScreen: 5))
+    }
+
+    // The recovery timer's next wake comes from the fault set, so a row the hour's cap holds back still gets one,
+    // at the moment the cap frees a round, rather than waiting for an unrelated turn (L51).
+    @Test func theNextTryWakesWhenTheHoursCapFreesARound() throws {
+        let store = try EngineStore(shows: 2, seed: 77)
+        let id = try #require(try store.shows().first).persistentModelID
+        let t0 = EngineStore.baseNow
+        var faults = QueueEngineFaults()
+        #expect(faults.nextTry(at: t0) == nil)
+        faults.admit([id: []], origin: .verifier, at: t0)
+        #expect(faults.nextTry(at: t0) == t0 + QueueEngineFaults.attemptSpacingSeconds, "an open round is not tried soon")
+        var at = t0
+        for round in 0..<QueueEngineFaults.roundsPerHour {
+            for _ in 0..<QueueEngineFaults.attemptsPerRound { _ = faults.failed(id, at: at) }
+            if round < QueueEngineFaults.roundsPerHour - 1 {
+                #expect(faults.nextTry(at: at) == at + QueueEngineFaults.retrySeconds)
+            }
+            at += QueueEngineFaults.retrySeconds
+        }
+        let capped = at - QueueEngineFaults.retrySeconds
+        #expect(faults.due(at: capped + QueueEngineFaults.retrySeconds, touched: [id]).isEmpty, "the cap did not hold")
+        #expect(faults.nextTry(at: capped + QueueEngineFaults.retrySeconds) == t0 + 3600,
+                "a capped row's next wake is not when the hour frees a round")
+        #expect(faults.due(at: t0 + 3600, touched: []) == [id], "the row is not due when the cap frees a round")
+    }
+
     // The field names a mismatch carries, read by Mirror over two real extractions.
     @Test func aMismatchNamesTheTableAndMember() throws {
         let store = try EngineStore(shows: 2, seed: 76)

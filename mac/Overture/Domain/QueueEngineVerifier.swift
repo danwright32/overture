@@ -128,6 +128,18 @@ enum QueueEngineVerifier {
         return .superseded
     }
 
+    /// Whether another verification should follow `result`: one that could not say (superseded or cancelled),
+    /// and one that judged an output older than the one now on screen, which would otherwise go unverified until
+    /// some later output asked (L710). An unmeasured run is left to the next output's own trigger.
+    static func needsAnother(after result: QueueEngineVerification, onScreen: Int?) -> Bool {
+        switch result {
+        case .superseded, .cancelled: return true
+        case .match(let generation), .factMismatch(_, let generation), .outputMismatch(_, let generation):
+            return generation < (onScreen ?? generation)
+        case .unmeasured: return false
+        }
+    }
+
     /// One snapshot against one fresh read: the facts first, then the output a pass over the FRESH facts gives,
     /// at the snapshot's own instant and view.
     static func compare<Value: Sendable>(_ snapshot: QueueEngineSnapshot<Value>, with fresh: FactStore,
@@ -327,6 +339,20 @@ struct QueueEngineFaults: Equatable, Sendable {
         return ended ? entry : nil
     }
 
+    /// When the next try at any row comes due: soon while a round is open, else the retry interval after its
+    /// give-up, held back to when the hour's cap frees a round. Nil when nothing is faulted.
+    func nextTry(at now: Date) -> Date? {
+        entries.values.map { entry -> Date in
+            guard let gaveUp = entry.gaveUpAt else { return now.addingTimeInterval(Self.attemptSpacingSeconds) }
+            var at = gaveUp.addingTimeInterval(Self.retrySeconds)
+            let lastHour = entry.rounds.filter { now.timeIntervalSince($0) < 3600 }.sorted()
+            if lastHour.count >= Self.roundsPerHour, let oldest = lastHour.first {
+                at = max(at, oldest.addingTimeInterval(3600))
+            }
+            return max(at, now)
+        }.min()
+    }
+
     /// The row matches again: it leaves the set, and its entry is handed back for the `healed` record.
     mutating func healed(_ id: PersistentIdentifier) -> Entry? { entries.removeValue(forKey: id) }
 
@@ -360,6 +386,4 @@ struct QueueEngineVerifierCounts: Equatable, Sendable {
     var healDidNotConverge = 0
     var unverifiedTooLong = 0
     var lastMatchedAt: Date?
-    /// The last comparison that reached a verdict (a match or a mismatch), which the ten minute timer runs from.
-    var lastComparedAt: Date?
 }
