@@ -108,7 +108,7 @@ struct ACollapsedCardActsOnItsGroupTests {
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let card = try #require(try cards(ctx).first)
 
-        ProspectMutations.setStatus(card, .queued, nil, prospects: stored, context: ctx,
+        ProspectMutations.setStatus(card, .queued, nil, shows: stored, context: ctx,
                                     feedback: ActionFeedback())
         #expect(first.status == .queued)
         #expect(second.status == .queued,
@@ -152,7 +152,7 @@ struct ACollapsedCardActsOnItsGroupTests {
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let card = try #require(try cards(ctx).first { $0.id == first.naturalKey })
         let stack = QueueUndoStack()
-        ProspectMutations.setStatus(card, .queued, nil, prospects: stored, context: ctx,
+        ProspectMutations.setStatus(card, .queued, nil, shows: stored, context: ctx,
                                     feedback: ActionFeedback(), undo: stack, undoLabel: "Keep")
         #expect(first.status == .queued)
         #expect(second.status == .queued)
@@ -172,7 +172,7 @@ struct ACollapsedCardActsOnItsGroupTests {
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let card = try #require(try cards(ctx).first)
 
-        #expect(ProspectMutations.recordOutcome(card, .notAFit, prospects: stored, context: ctx,
+        #expect(ProspectMutations.recordOutcome(card, .notAFit, shows: stored, context: ctx,
                                                 feedback: ActionFeedback()))
         #expect(first.status == .dismissed)
         #expect(second.status == .dismissed)
@@ -189,7 +189,7 @@ struct ACollapsedCardActsOnItsGroupTests {
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let card = try #require(try cards(ctx).first)
 
-        #expect(ProspectMutations.recordOutcome(card, .pitchingOtherShows, prospects: stored,
+        #expect(ProspectMutations.recordOutcome(card, .pitchingOtherShows, shows: stored,
                                                 context: ctx, feedback: ActionFeedback()))
         #expect(first.status == .dismissed)
         #expect(second.status != .dismissed,

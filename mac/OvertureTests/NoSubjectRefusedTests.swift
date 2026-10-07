@@ -67,7 +67,7 @@ struct NoSubjectRefusedTests {
 
         ProspectMutations.prepManually(QueueItem(p), email: "olga@org.example", name: nil,
                                        subject: "   ", body: "A real email body.",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.draftBody == nil, "Nothing may be written when the save is refused")
         #expect(p.status == .queued)

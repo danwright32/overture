@@ -123,7 +123,7 @@ struct ReprepOverHandWrittenTests {
         let his = drafted(ctx, key: "his", writtenByDan: true)
         let ai = drafted(ctx, key: "ai", writtenByDan: false)
 
-        ProspectMutations.bulkReprep(.draftOnly, prospects: [his, ai], context: ctx,
+        ProspectMutations.bulkReprep(.draftOnly, shows: [his, ai], context: ctx,
                                      feedback: ActionFeedback(), now: now)
 
         #expect(ai.reprepDraftRequested)
@@ -137,7 +137,7 @@ struct ReprepOverHandWrittenTests {
         let ctx = try context()
         let his = drafted(ctx, key: "his", writtenByDan: true)
 
-        ProspectMutations.bulkReprep(.both, prospects: [his], context: ctx,
+        ProspectMutations.bulkReprep(.both, shows: [his], context: ctx,
                                      feedback: ActionFeedback(), now: now)
 
         #expect(his.reprepContactsRequested)
@@ -149,7 +149,7 @@ struct ReprepOverHandWrittenTests {
         let ctx = try context()
         let his = drafted(ctx, key: "his", writtenByDan: true)
 
-        ProspectMutations.bulkReprep(.contactsOnly, prospects: [his], context: ctx,
+        ProspectMutations.bulkReprep(.contactsOnly, shows: [his], context: ctx,
                                      feedback: ActionFeedback(), now: now)
 
         #expect(his.reprepContactsRequested)

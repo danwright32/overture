@@ -213,7 +213,7 @@ struct FormOutreachTests {
         let r = p.recipients[0]
         r.formOutreachStartedAt = Date(timeIntervalSince1970: 1_000_000)
 
-        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, prospects: [p],
+        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, shows: [p],
                                           context: ctx, feedback: ActionFeedback())
 
         #expect(r.formOutreachStartedAt == nil)
@@ -239,7 +239,7 @@ struct FormOutreachTests {
         emailed.sentAt = Date(timeIntervalSince1970: 2_000_000)
         emailed.gmailMessageId = "<mid-1@x.org>"
 
-        ProspectMutations.cancelFormPitch(QueueItem(p), formContact.id, prospects: [p],
+        ProspectMutations.cancelFormPitch(QueueItem(p), formContact.id, shows: [p],
                                           context: ctx, feedback: ActionFeedback())
 
         #expect(formContact.formOutreachRecordedAt != nil)

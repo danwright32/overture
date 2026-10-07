@@ -326,7 +326,7 @@ struct QueueUndoApplyTests {
         let p = show(ctx, status: .new)
         let stack = QueueUndoStack()
 
-        ProspectMutations.setStatus(QueueItem(p), .queued, nil, prospects: [p], context: ctx,
+        ProspectMutations.setStatus(QueueItem(p), .queued, nil, shows: [p], context: ctx,
                                     feedback: ActionFeedback(), undo: stack, undoLabel: "Keep")
 
         #expect(stack.canUndo)
@@ -339,7 +339,7 @@ struct QueueUndoApplyTests {
         let stack = QueueUndoStack()
 
         // The approve call site passes no stack at all, so nothing lands even though it is the same setter.
-        ProspectMutations.setStatus(QueueItem(p), .approved, nil, prospects: [p], context: ctx,
+        ProspectMutations.setStatus(QueueItem(p), .approved, nil, shows: [p], context: ctx,
                                     feedback: ActionFeedback())
 
         #expect(stack.canUndo == false)
@@ -351,7 +351,7 @@ struct QueueUndoApplyTests {
         let p = show(ctx, status: .new)
         let stack = QueueUndoStack()
 
-        ProspectMutations.setStatus(QueueItem(p), .queued, nil, prospects: [p], context: ctx,
+        ProspectMutations.setStatus(QueueItem(p), .queued, nil, shows: [p], context: ctx,
                                     feedback: ActionFeedback(), undo: stack, undoLabel: "Keep")
         #expect(p.status == .queued)
 
