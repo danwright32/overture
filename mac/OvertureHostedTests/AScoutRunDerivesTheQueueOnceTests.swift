@@ -77,11 +77,14 @@ struct AScoutRunDerivesTheQueueOnceTests {
         let undoStack: QueueUndoStack
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
+        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
+        // memo's two second window cannot be counted as a change the run caused (#4516's mechanism).
+        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
             RowsFromStore { (rows: [Prospect]) in
                 QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, onConnectGmail: { })
+                          allProspects: rows, clock: clock, onConnectGmail: { })
             }
             .modelContainer(container)
             .environment(feedback)
@@ -180,7 +183,7 @@ struct AScoutRunDerivesTheQueueOnceTests {
     private func watchRun(native: Int, inline: Int) async throws -> Run {
         let c = try TestModelContainer.inMemory(AppSchema.models)
         let (window, hosting) = host(c)
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(hosting, replacingWith: AnyView(EmptyView()), in: window) }
         let ctx = c.mainContext
         seed(ctx)
         var ids: Set<String> = []

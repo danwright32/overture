@@ -125,7 +125,8 @@ struct OpeningACardMenuStaysInTheCardTests {
                               styleMask: [.borderless], backing: .buffered, defer: false)
         // AppKit's default releases the window while this scope still holds it (#3480).
         window.isReleasedWhenClosed = false
-        defer { window.close() }
+        // #4534: unmounted before the close, by the window, since the hosting view is built below.
+        defer { HostedPassCounting.unmountAndClose(window) }
         let hosting = NSHostingView(rootView: AnyView(Harness(container: c, feedback: ActionFeedback(),
                                                               dayOffOffer: DayOffOfferRequest(),
                                                               undoStack: QueueUndoStack(),

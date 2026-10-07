@@ -163,6 +163,10 @@ struct FeltWaitCostTests {
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOffOffer = DayOffOfferRequest()
+        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
+        // memo's two second window cannot add a whole-store pass the press never caused, and the
+        // passes-per-press ratio below stays about the press (#4516's mechanism).
+        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
             // #3846: QueueView takes its rows rather than querying the table itself, because RootView
@@ -170,7 +174,7 @@ struct FeltWaitCostTests {
             // RootView's part, so what is measured below is still the store-to-screen path.
             RowsFromStore { (rows: [Prospect]) in
                 QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows)
+                          allProspects: rows, clock: clock)
             }
             .modelContainer(container)
             .environment(feedback)
