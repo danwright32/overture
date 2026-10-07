@@ -773,7 +773,7 @@ final class QueueEngine<Value: Sendable> {
     // MARK: - Recovery (D7, decision 9)
 
     /// Tries every faulted row that is due: one whose main-context object holds an unsaved change is left alone
-    /// and counted `unmeasured(busy)`, because a fetch does not refresh a dirty row and the edit is Dan's (#4106
+    /// and counted once (`waitedForEdit`), because a fetch does not refresh a dirty row and the edit is Dan's (#4106
     /// probe 0b.4); every other is fetched again by identifier and read as any change is. Then a throwaway context
     /// reads the same rows, and each that now equals it is healed; each that does not has failed one attempt.
     /// Returns how many stored values the recovery changed.
@@ -790,7 +790,7 @@ final class QueueEngine<Value: Sendable> {
         var resolution = QueueEngineResolution()
         for id in due {
             guard !dirty.contains(id) else {
-                verifierCounts.unmeasured[.busy, default: 0] += 1
+                if faults.waitingForEdit(id) { verifierCounts.waitedForEdit += 1 }
                 continue
             }
             guard let table = FactStore.Table.holding(id.entityName) else { continue }

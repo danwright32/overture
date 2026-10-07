@@ -282,6 +282,9 @@ struct QueueEngineFaults: Equatable, Sendable {
         var rounds: [Date] = []
         /// When the last round gave up, or nil while one is open or none has run.
         var gaveUpAt: Date?
+        /// Whether recovery has found the row waiting on an unsaved edit, so the wait is counted once per fault
+        /// rather than once per turn (L344).
+        var waitedForEdit = false
     }
 
     /// Attempts in one round, and how long one round may run (D7: "3 attempts or 60 s per round"), and how long
@@ -353,6 +356,14 @@ struct QueueEngineFaults: Equatable, Sendable {
         }.min()
     }
 
+    /// Recovery found the row holding an unsaved edit. True the first time for this fault, which is the one
+    /// that is counted.
+    mutating func waitingForEdit(_ id: PersistentIdentifier) -> Bool {
+        guard let entry = entries[id], !entry.waitedForEdit else { return false }
+        entries[id]?.waitedForEdit = true
+        return true
+    }
+
     /// The row matches again: it leaves the set, and its entry is handed back for the `healed` record.
     mutating func healed(_ id: PersistentIdentifier) -> Entry? { entries.removeValue(forKey: id) }
 
@@ -384,6 +395,8 @@ struct QueueEngineVerifierCounts: Equatable, Sendable {
     var unmeasured: [QueueEngineVerification.Unmeasured: Int] = [:]
     var healed = 0
     var healDidNotConverge = 0
+    /// Faulted rows recovery left alone because the main context held an unsaved edit on them, once per fault.
+    var waitedForEdit = 0
     var unverifiedTooLong = 0
     var lastMatchedAt: Date?
 }

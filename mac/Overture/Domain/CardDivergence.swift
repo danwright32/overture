@@ -552,8 +552,9 @@ enum CardDivergenceLog {
     // window ends carries that count as `suppressedRepeats`, and a window that ends with nothing after it
     // is handed back by `drainEnded` so its count is written rather than lost to a quiet period (L710).
     //
-    // In memory, owned by whichever writer holds it; the engine's verifier is that owner (#4358), and its
-    // hourly tick is where `drainEnded` is called. Pure, so every outcome is produced by a test rather
+    // In memory, owned by whichever writer holds it; the queue engine is that owner (#4358), and it calls
+    // `drainEnded` on every turn (`QueueEngine.drainHeldRepeats`), which its clock's floor makes at least once a
+    // minute. Pure, so every outcome is produced by a test rather
     // than watched not to happen (L151).
     struct Cooldown: Equatable, Sendable {
         struct Key: Hashable, Sendable {

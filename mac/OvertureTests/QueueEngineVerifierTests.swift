@@ -4,8 +4,8 @@ import Testing
 
 // #4358 (plan v7 D7 and decision 9, slice E2): the queue engine's verifier and recovery, one test that PRODUCES each
 // outcome (L151): match, factMismatch, outputMismatch, superseded twice over (a read straddling saves, and a read
-// at a save count no output describes), cancelled, unmeasured for each of its reasons (busy at the start, busy at
-// the recovery, readFailed, shortRead, timedOut, wedged), healed, healDidNotConverge, a foreign save, and
+// at a save count no output describes), cancelled, unmeasured for each of its reasons (busy, readFailed, shortRead,
+// timedOut, wedged), a recovery waiting once on an unsaved edit, healed, healDidNotConverge, a foreign save, and
 // unverifiedTooLong; then the triggers (three seconds of quiet, twenty outputs), the durable record, the fault set's
 // bounds, and the scan keeping the verifier off the cooperative pool. One file for the suites, on E1a's reasoning
 // (every new file adds project file hunks to the review diff). The store, schedule, clock and counting derivation
@@ -308,7 +308,10 @@ final class QueueEngineRecoveryTests {
         await waitUntil("the foreign save asked for a turn") { !turns.queued.isEmpty }
         turns.run()
         #expect(engine.isFaulted(id), "a row with an unsaved edit was not left faulted")
-        #expect(engine.verifierCounts.unmeasured[.busy] ?? 0 >= 1)
+        // Counted once per fault, however many turns find it still waiting (L344).
+        engine.sourceFired("gmailConnected")
+        turns.run()
+        #expect(engine.verifierCounts.waitedForEdit == 1)
         #expect(show.groupName == "Dan's unsaved edit", "recovery discarded Dan's unsaved edit")
         #expect(!engine.verifierFindings.contains { $0.kind == .healed })
         try store.context.save()
