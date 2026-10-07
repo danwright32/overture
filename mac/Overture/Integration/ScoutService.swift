@@ -624,21 +624,24 @@ enum ScoutService {
                          // #4335 (RC6): where each landed source's feed movement line is appended, after its save.
                          movementLog: any FeedMovementLog.Sink = FeedMovementLog.file)
                          async throws -> Outcome {
-        let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
         // #3071: REQUIRED, not swallowed. An empty answer here means a repeat client is not recognised
         // as one, so a show Dan has already shot reads as cold and gets pitched as a stranger.
-        // #4339 (A11): read OFF the main thread whenever nothing is pending (`LandingInputs.history`): measured on
-        // a live store clone the table read and the history built from it were 204.5 and 40.0 ms of this first
-        // hold at 1,372 shows, 812.8 and 203.1 at 4x. Still REQUIRED: an unreadable table refuses the run here.
-        let history: [HistoryRecord]
-        switch await LandingInputs.history(readProspectTable: readProspectTable, into: context) {
-        case .success(let read): history = read
+        // #4339 (A11): read OFF the main thread whenever nothing is pending: measured on a live store clone the
+        // table read and the history built from it were 204.5 and 40.0 ms of this first hold at 1,372 shows, 812.8
+        // and 203.1 at 4x. Still REQUIRED: an unreadable table refuses the run here.
+        // #4558: with Downbeat's export and the blocked calendar, through `LandingInputs`, the one builder every
+        // landing reads its inputs through, by its refusing read; this used to build the export read and the
+        // calendar itself beside it.
+        let loaded: LandingInputs.Inputs
+        switch await LandingInputs.readRefusingUnreadableShowTable(now: now, readProspectTable: readProspectTable,
+                                                                   into: context) {
+        case .success(let read): loaded = read
         case .failure(let unreadable): throw StoreReadFailure(read: .repeatClientHistory, underlying: unreadable)
         }
-        let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
-                                      context: context)
+        let history = loaded.history
+        let blocked = loaded.blocked
 
         // #3071: the one that matters most. An empty watchlist plans zero sources, so the scout scans
         // nothing and reports an ordinary quiet run (L98).
@@ -734,7 +737,7 @@ enum ScoutService {
                     outcome.sources.append(SourceResult(sourceId: source.sourceId, orgName: source.orgName,
                                                         state: .notAttempted, listingsURL: source.listingsURL))
                 }
-                outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+                outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.exportHealth)
                 return nil
             }
             let read = await venueBrandCorpusOffMain(container: context.container, read: readProspectTable,
@@ -871,7 +874,7 @@ enum ScoutService {
         if let refused = entryFlush.refusal {
             outcome.landingStop = refused
             for slot in reports { reportNotAttempted(slot) }
-            outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+            outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.exportHealth)
             return outcome
         }
         // #4335 (A6): the landing's record of itself, written before anything is applied, after the last await
@@ -892,7 +895,7 @@ enum ScoutService {
             } catch {
                 outcome.landingStop = .journalNotWritten(why: HandoffDecodeFailure.describe(error))
                 for slot in reports { reportNotAttempted(slot) }
-                outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+                outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.exportHealth)
                 return outcome
             }
         }
@@ -991,7 +994,7 @@ enum ScoutService {
             outcome.sources.removeAll { $0.state == .queuedForReading && neverHandedOver.contains($0.sourceId) }
             reportWaiting(SourceSchedule.waitingToRead(deferred: plan.deferred)
                           + toRead.map(\.source).filter { !notAttempted.contains($0.sourceId) })
-            outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+            outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.exportHealth)
             return outcome      // save one failed: the landing stops here
         }
         // #4330: released here, before the read budget question.
@@ -1090,7 +1093,7 @@ enum ScoutService {
         // here reached toRead, which means it has something to read by definition.
         reportWaiting(SourceSchedule.waitingToRead(deferred: plan.deferred) + declined)
 
-        outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.health)
+        outcome.clientListWarning = DownbeatBridge.warningText(for: loaded.exportHealth)
 
         // Reconcile bookings from Downbeat: a contacted prospect that's now a Downbeat
         // client gets outcome booked automatically (#41).
@@ -1102,7 +1105,7 @@ enum ScoutService {
         // both fold into the tail's one save below (save two), which carries them with the fairness clock.
         _ = DownbeatBooking.reconcileBooked(entities: DownbeatBooking.bookingEntities(prospects: tailRows, in: context),
                                             clients: loaded.clients, bookings: loaded.bookings,
-                                            health: loaded.health, now: Date())
+                                            health: loaded.exportHealth, now: Date())
         // #1238: retire any show a blocked town this run may have (re-)surfaced, so blocking a town keeps
         // future scouts out too, not just the shows present when Dan blocked it. Idempotent.
         onNativeStep(.clearingBlockedTowns)
