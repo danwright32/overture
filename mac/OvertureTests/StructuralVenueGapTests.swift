@@ -204,7 +204,8 @@ struct StructuralVenueGapTests {
                 pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
                 launch: { _ in },
                 now: now,
-                defaults: ScratchDefaults.make("svg"))
+                defaults: ScratchDefaults.make("svg"),
+                exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         }
 
         // Half (b): the blank row's own link was carried into the reconcile, so the show it belongs to is

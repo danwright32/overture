@@ -74,7 +74,8 @@ struct ScoutReadsLandTogetherTests {
             fetch: fetch,
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: ScratchDefaults.make("ScoutReadsLandTogetherTests"),
-            onNativeProgress: onProgress)
+            onNativeProgress: onProgress,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     private func storedTitles(_ ctx: ModelContext) throws -> [String] {

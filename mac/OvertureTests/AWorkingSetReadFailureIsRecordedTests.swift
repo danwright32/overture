@@ -103,7 +103,8 @@ final class AWorkingSetReadFailureIsRecordedTests {
             fetch: { url, _, _ in FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString, contentHash: "same") },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: ScratchDefaults.make("AWorkingSetReadFailureIsRecordedTests"),
-            readProspectTable: read)
+            readProspectTable: read,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     @Test func runScoutRefusesByNameWhenTheTableCannotBeReadAtAll() async throws {

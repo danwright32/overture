@@ -215,12 +215,10 @@ final class LandingRecoveryTests {
         _ = try await interruptedIngest(["a", "b"], into: ctx, f)
         let waiting = try #require(try LandingRecovery.survey(journals: f.journals, pending: f.pending, in: ctx).first)
         #expect(waiting.finding == .replay)
-        let absentExport = URL(fileURLWithPath: "/dev/null/no-downbeat-export.json")
-        let absentHistory = URL(fileURLWithPath: "/dev/null/no-imported-history.json")
 
         let refusal = await LandingRecovery.inputsForReplay(waiting) {
             await LandingInputs.readRefusingUnreadableShowTable(
-                exportURL: absentExport, historyURL: absentHistory,
+                exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
                 readProspectTable: { _ in throw TableUnreadable() }, into: ctx)
         }
         guard case .refused(let said) = refusal else {
@@ -244,8 +242,8 @@ final class LandingRecoveryTests {
         landed.orgDoNotContact = true
         try ctx.save()
         let read = await LandingRecovery.inputsForReplay(waiting) {
-            await LandingInputs.readRefusingUnreadableShowTable(exportURL: absentExport, historyURL: absentHistory,
-                                                                into: ctx)
+            await LandingInputs.readRefusingUnreadableShowTable(exportURL: AbsentHandoff.export,
+                                                                historyURL: AbsentHandoff.history, into: ctx)
         }
         guard case .read(let inputs) = read else {
             Issue.record("a show table that reads was refused")

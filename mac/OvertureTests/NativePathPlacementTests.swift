@@ -49,7 +49,8 @@ struct NativePathPlacementTests {
             extractor: StubSourceExtractor(listing: ExtractedListing(events: events,
                                                                      verdict: .upcomingListings)),
             now: now,
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     // THE #1005 fix, through the native door. A run whose kept shows named WHERE they are records that on

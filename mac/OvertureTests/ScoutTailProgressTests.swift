@@ -49,7 +49,8 @@ struct ScoutTailProgressTests {
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: defaults(),
-            onNativeStep: { steps.append($0) })
+            onNativeStep: { steps.append($0) },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(steps == [.handingPagesToTheReader, .checkingBookings, .clearingBlockedTowns, .saving])
     }
@@ -67,7 +68,8 @@ struct ScoutTailProgressTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: defaults(),
             onNativeProgress: { _, index, _ in timeline.append("source \(index)") },
-            onNativeStep: { timeline.append("step \($0.rawValue)") })
+            onNativeStep: { timeline.append("step \($0.rawValue)") },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(timeline.prefix(2) == ["source 1", "source 2"])
         #expect(timeline.dropFirst(2).allSatisfy { $0.hasPrefix("step ") })
@@ -86,7 +88,8 @@ struct ScoutTailProgressTests {
             into: ctx, extractor: noEvents, fetch: page("same"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") }, launch: { _ in },
             defaults: defaults(),
-            onNativeStep: { steps.append($0) })
+            onNativeStep: { steps.append($0) },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(!steps.contains(.handingPagesToTheReader), "there was nothing to hand over")
         #expect(steps == [.checkingBookings, .clearingBlockedTowns, .saving])
@@ -106,7 +109,8 @@ struct ScoutTailProgressTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in throw Nope() },
             defaults: defaults(),
-            onNativeStep: { steps.append($0) })
+            onNativeStep: { steps.append($0) },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(steps.contains(.handingPagesToTheReader))
         #expect(steps.suffix(3) == [.handingPagesToTheReader, .clearingBlockedTowns, .saving]

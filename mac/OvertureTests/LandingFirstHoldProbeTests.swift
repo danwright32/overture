@@ -249,7 +249,10 @@ final class LandingFirstHoldProbeTests {
             if factor == 1 && ProcessInfo.processInfo.environment["MEASURE_4339_HISTORY_FIRST"] != nil {
                 Self.say("x1 before the history read: context has changes \(ctx.hasChanges)")
                 // #4558: runScout reads its history through the refusing read, with the export and the calendar.
-                let (_, historyHold) = try await measure { await LandingInputs.readRefusingUnreadableShowTable(into: ctx) }
+                let (_, historyHold) = try await measure {
+                    await LandingInputs.readRefusingUnreadableShowTable(exportURL: inputs.exportURL,
+                                                                        historyURL: inputs.historyURL, into: ctx)
+                }
                 Self.say("x1 history read alone: " + historyHold.text)
             }
             // `TEST_RUNNER_MEASURE_4339_SAMPLE=<dir outside any checkout>`: the first run in this process at 1x is
@@ -287,7 +290,8 @@ final class LandingFirstHoldProbeTests {
                             defer { reads.note(onMain: Thread.isMainThread, from: t0, to: Phase0.now()) }
                             return try ScoutService.readProspectTable(context)
                         },
-                        landings: LandingSingleFlight())
+                        landings: LandingSingleFlight(),
+                        exportURL: inputs.exportURL, importedHistory: inputs.historyURL)
                     return "\(outcome.sources.count) sources reported, save failed \(outcome.saveFailed), "
                         + "stop \(outcome.landingStop.map { "\($0)" } ?? "none"), "
                         + "client warning \(outcome.clientListWarning == nil ? "none" : "set")"

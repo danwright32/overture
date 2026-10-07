@@ -122,7 +122,8 @@ struct ScoutLandingsWaitTheirTurnTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: now, defaults: ScratchDefaults.make("ScoutLandingsWaitTheirTurnTests"),
             askReadBudget: askReadBudget,
-            landings: flight, landingPriority: priority, sequenceFloor: { 0 })
+            landings: flight, landingPriority: priority, sequenceFloor: { 0 },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     private func ingest(_ r: ScoutExtractResults, into ctx: ModelContext, flight: LandingSingleFlight,
@@ -326,7 +327,8 @@ struct ScoutLandingsWaitTheirTurnTests {
                                           venue: "Merkin Hall", performanceDate: Self.night(30),
                                           sourceUrl: "https://pasted.example/1")
                     ], note: nil)])
-            })
+            },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         model.urlText = "https://pasted.example/events"
         await model.start(into: ctx, now: now, today: ScoutTestClock.beforeAllFixtures, sleep: { _ in })
         guard case .added(let n, _) = model.phase, n > 0 else {

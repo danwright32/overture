@@ -41,7 +41,8 @@ struct LeadIntakeReconcileTests {
                 ScoutExtractResults(version: 1, generatedAt: "2026-07-12T00:00:00Z",
                                     results: [ScoutExtractResult(sourceId: id, verdict: .upcomingListings,
                                                                  events: [event], note: nil)])
-            })
+            },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     // A sweep of Carnegie's whole feed, by a source with a feed history of its own: the only thing
