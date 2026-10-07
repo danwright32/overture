@@ -20,7 +20,13 @@
 # and the naming every Xcode test target takes by default) and the suite is an identifier. Narrower than
 # "any argument not starting with a dash" on purpose (L93): xcodebuild options take values that do not start
 # with one (`-parallel-testing-enabled YES`, `-resultBundlePath <dir>`, `-destination platform=macOS`), and a
-# rule refusing those would refuse the ordinary case. Two near shapes are deliberately left out:
+# rule refusing those would refuse the ordinary case. What it DOES refuse among option values is only a
+# RELATIVE value of exactly this shape, such as `-resultBundlePath FooTests/out`: accepted as the cost,
+# because no caller in this repository passes one (the two that pass arguments, scripts/landing-oracle.sh
+# and scripts/lib/copy-docs-rebuild.sh, pass prefixed scopes), a bundle or folder path normally carries a
+# dot or a leading slash, and skipping every word after a flag would also skip the bare scope written after
+# `-parallel-testing-enabled YES`. The fixture pins this trade-off rather than leaving it implied. Two near
+# shapes are deliberately left out:
 #
 #   * a target name ALONE (`OvertureTests`), because `-scheme`, `-testPlan` and `-target` take a name of
 #     exactly that shape as their value, and nothing here can tell which reading was meant;

@@ -43,6 +43,11 @@ assert_equals "an option and its value are not" "1|" "$(bare_of -parallel-testin
 assert_equals "a destination is not" "1|" "$(bare_of -destination platform=macOS)"
 assert_equals "a build setting is not" "1|" "$(bare_of OTHER_SWIFT_FLAGS=-DX)"
 assert_equals "an absolute path is not" "1|" "$(bare_of -resultBundlePath /tmp/OvertureTests/bundle)"
+assert_equals "a bundle path carrying its extension is not" "1|" "$(bare_of -resultBundlePath FooTests/out.xcresult)"
+# The accepted cost, pinned so it is a decision rather than an accident: a RELATIVE option value of exactly
+# the scope shape IS refused. No caller passes one; see the header for why the rule does not skip values.
+assert_equals "a relative value of exactly the scope shape is refused, knowingly" "0|FooTests/out" \
+  "$(bare_of -resultBundlePath FooTests/out)"
 assert_equals "a shell fixture path is not" "1|" "$(bare_of scripts/verify-and-merge-branch.test.sh)"
 assert_equals "a source file name is not (no scope can be derived from it)" "1|" "$(bare_of OvertureTests/RunSlotTests.swift)"
 assert_equals "a target name with no suite is not (a -scheme or -testPlan value looks the same)" "1|" \
