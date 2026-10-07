@@ -409,6 +409,9 @@ final class QueueEngineVerifierTriggerTests {
         // The floor, the quiet timer and the ten minute timer.
         await waitUntil("the three timers are sleeping") { clock.waiting == 3 }
         clock.advance(by: 2.9)
+        // The clock ends a due sleep inside `advance`, so a quiet timer that ended early is already gone from the
+        // sleepers here, before its turn could run and start anything (seen to survive a check on `started` alone).
+        #expect(clock.waiting == 3, "the quiet timer ended before three seconds")
         #expect(engine.verifierCounts.started == 0, "the verifier started before three seconds of quiet")
         clock.advance(by: 0.1)
         await VerifierRig.finished(engine, beyond: 0, "the verification after three quiet seconds")
