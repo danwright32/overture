@@ -285,6 +285,8 @@ struct QueueEngineVerifierSetup {
     /// The fresh read, made on the verifier's thread through a context of its own.
     var read: @Sendable (ModelContainer) throws -> QueueEngineFreshRead = QueueEngineFreshRead.read
     var refetch: QueueEngineRefetch = QueueEngineRecovery.refetchByIdentifier
+    /// The heal check's side: the recovered rows read through a context of its own, never the main one (L345).
+    var healCheck: @MainActor (Set<PersistentIdentifier>, ModelContainer) throws -> FactStore = QueueEngineRecovery.readAlone
     /// Nil keeps the records in memory only (`verifierFindings`), for a test that does not ask about the file.
     var log: QueueEngineVerifierLog?
 }
@@ -300,6 +302,12 @@ enum QueueEngineRecovery {
         if let show = row as? Prospect { contactIDs += show.factContacts.map(\.persistentModelID) }
         if !contactIDs.isEmpty { _ = try FactStore.Table.fetched(Recipient.self, contactIDs, in: context) }
         return true
+    }
+
+    /// The rows `ids` names, read through a throwaway context.
+    @MainActor static func readAlone(_ ids: Set<PersistentIdentifier>, _ container: ModelContainer) throws -> FactStore {
+        let checker = ModelContext(container)
+        return try FactStore.extract(only: ids, from: checker)
     }
 
     /// Every model the main context holds an unsaved change on, by identity, and the shows of the contacts among
@@ -800,16 +808,18 @@ final class QueueEngine<Value: Sendable> {
             return changed
         }
         // The heal check's side, through a context of its own and never the main one it is checking (L345).
-        let stored: FactStore?
+        let stored: FactStore
         do {
-            let checker = ModelContext(container)
-            stored = try FactStore.extract(only: tried, from: checker)
+            stored = try verifierSetup.healCheck(tried, container)
         } catch {
+            // The check could not be read, which measures nothing about the rows (L11): no heal and no failed
+            // attempt, so a failed read can never be recorded as a row that would not converge.
             counters.unreadRows.record(at: now)
-            stored = nil
+            armRecoveryTimer()
+            return changed
         }
         for id in tried {
-            if let stored, facts.sameRow(id, as: stored) {
+            if facts.sameRow(id, as: stored) {
                 if let entry = faults.healed(id) {
                     verifierCounts.healed += 1
                     writeFinding(.healed, fields: entry.fields, at: now)

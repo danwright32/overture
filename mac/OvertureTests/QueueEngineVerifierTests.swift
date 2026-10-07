@@ -321,10 +321,14 @@ final class QueueEngineRecoveryTests {
     /// An engine that hears no save (its save centre and its save counter are private ones), and a save through
     /// another context it therefore never learns of: the held row is stale and only the verifier can find it.
     private func unheardForeignSave(_ store: EngineStore, _ turns: EngineTurns, clock: EngineTestClock,
-                                    refetch: @escaping QueueEngineRefetch) async throws -> (CountsEngine, PersistentIdentifier) {
+                                    refetch: @escaping QueueEngineRefetch,
+                                    healCheck: @escaping @MainActor (Set<PersistentIdentifier>, ModelContainer) throws
+                                        -> FactStore = QueueEngineRecovery.readAlone)
+        async throws -> (CountsEngine, PersistentIdentifier) {
+        var setup = QueueEngineVerifierSetup(triggers: .byHand, refetch: refetch)
+        setup.healCheck = healCheck
         let engine = VerifierRig.engine(store, turns, clock: clock, saves: StoreSaveCount(center: NotificationCenter()),
-                                        saveCenter: NotificationCenter(),
-                                        setup: QueueEngineVerifierSetup(triggers: .byHand, refetch: refetch))
+                                        saveCenter: NotificationCenter(), setup: setup)
         let id = try #require(try store.shows().first).persistentModelID
         try await foreignSave(store.container, id, "written where nobody listened")
         turns.run()
@@ -376,6 +380,29 @@ final class QueueEngineRecoveryTests {
         engine.sourceFired("gmailConnected")
         turns.run()
         #expect(engine.verifierFindings.count == findings, "a round that gave up was tried again at once")
+    }
+
+    // A heal check that cannot be read measured nothing about the row (L11): it is neither healed nor a failed
+    // attempt, so three turns of it write no `healDidNotConverge`, and the row stays faulted.
+    @Test func aHealCheckThatCannotBeReadIsNoAttempt() async throws {
+        let store = try EngineStore(shows: 3, seed: 65)
+        let turns = EngineTurns()
+        let clock = EngineTestClock()
+        let (engine, id) = try await unheardForeignSave(store, turns, clock: clock,
+                                                        refetch: QueueEngineRecovery.refetchByIdentifier,
+                                                        healCheck: { _, _ in throw CocoaError(.fileReadUnknown) })
+        let unread = engine.counters.unreadRows.times
+        for attempt in 1...3 {
+            if attempt > 1 {
+                await waitUntil("the next try's timer is sleeping") { clock.waiting >= 2 }
+                clock.advance(by: QueueEngineFaults.attemptSpacingSeconds)
+            }
+            await waitUntil("try \(attempt) asked for a turn") { !turns.queued.isEmpty }
+            turns.run()
+        }
+        #expect(engine.counters.unreadRows.times == unread + 3, "the failed heal check reads were not counted")
+        #expect(engine.verifierFindings.map(\.kind) == [.factMismatch], "\(engine.verifierFindings.map(\.kind))")
+        #expect(engine.isFaulted(id) && engine.faults.entries[id]?.attempts == 0)
     }
 
     @Test func aForeignSaveIsRecordedByTableAndHealedInItsOwnTurn() async throws {
