@@ -24,7 +24,10 @@ import SwiftData
 // One reversible queue action. VALUE TYPES ONLY, and the constraint is not fussiness:
 //
 // Never a `Prospect`: rows are deleted at runtime (`NaturalKeyVenueMigration`), so a captured model
-// object can outlive the row it describes. The natural key is looked up fresh at undo time instead.
+// object can outlive the row it describes. The show is looked up fresh at undo time instead, by its store
+// IDENTITY with the natural key as the witness (#4532), never by the key alone: `naturalKey` is unique and
+// reassigned, and a merge hands a deleted show's key to the survivor, so a key lookup found the survivor
+// and undid onto a show Dan never acted on (L145, L75, L15).
 // Never a `ModelContext`, and never the `ActionFeedback`: the app is LSUIElement, so closing the
 // window tears RootView down while the process lives on in the menu bar, and a captured feedback
 // object would post its acknowledgment to something no view observes, which is indistinguishable
@@ -33,6 +36,12 @@ struct QueueUndoEntry: Equatable, Sendable {
     // One row's before-and-after. #1500 made an action able to cover a whole night at once, so the
     // snapshot moved down a level: the entry is what Dan DID, and this is what it did to each show.
     struct Row: Equatable, Sendable {
+        // #4532: the store identifier of the show this row acted on, read off the row when the action was
+        // recorded. The IDENTITY, with `naturalKey` below as its witness (`ShowIdentity`). Optional only
+        // because a row built by hand, which only a test does, names no stored show; such a row resolves
+        // to nothing rather than to whatever holds its key, exactly as a hand-built card does (#4538). Not
+        // defaulted, so no recorder can forget it and still compile (L168).
+        let showID: PersistentIdentifier?
         let naturalKey: String
         let groupName: String
 
@@ -107,6 +116,11 @@ struct QueueUndoEntry: Equatable, Sendable {
         func stillApplies(status: ReviewStatus, showOutcomeRaw: String?) -> Bool {
             status == resultingStatus && showOutcomeRaw == resultingShowOutcomeRaw
         }
+
+        // The identity this row resolves through, or nil for a hand-built row naming no stored show.
+        var identity: ShowIdentity? {
+            showID.map { ShowIdentity(showID: $0, naturalKey: naturalKey) }
+        }
     }
 
     // Held as one row plus the rest, rather than an array, so "an entry always covers at least one show"
@@ -173,14 +187,15 @@ struct QueueUndoEntry: Equatable, Sendable {
         primaryRow.stillApplies(status: status, showOutcomeRaw: showOutcomeRaw)
     }
 
-    // The one-show action: the shape every caller but #1500's night uses.
-    init(naturalKey: String, groupName: String, actionLabel: String,
+    // The one-show action, built by hand. Only tests build one this way; the app records through
+    // `init(recording:on:...)`, which reads the identity off the row.
+    init(showID: PersistentIdentifier?, naturalKey: String, groupName: String, actionLabel: String,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorShowOutcomeAt: Date?, priorDismissedAt: Date?,
          priorConflictClearedKey: String?,
          resultingStatus: ReviewStatus, resultingShowOutcomeRaw: String?,
          droppedNights: [String] = []) {
         self.init(actionLabel: actionLabel, batchLabel: nil,
-                  primaryRow: Row(naturalKey: naturalKey, groupName: groupName,
+                  primaryRow: Row(showID: showID, naturalKey: naturalKey, groupName: groupName,
                                   priorStatus: priorStatus, priorShowOutcomeRaw: priorShowOutcomeRaw,
                                   priorShowOutcomeAt: priorShowOutcomeAt,
                                   priorDismissedAt: priorDismissedAt,
@@ -220,7 +235,8 @@ extension QueueUndoEntry.Row {
          priorDismissedAt: Date?,
          priorConflictClearedKey: String?, droppedNights: [String] = [],
          priorNightDecisions: NightDecisionLists? = nil) {
-        self.init(naturalKey: prospect.naturalKey,
+        self.init(showID: prospect.persistentModelID,
+                  naturalKey: prospect.naturalKey,
                   groupName: prospect.groupName,
                   priorStatus: priorStatus,
                   priorShowOutcomeRaw: priorShowOutcomeRaw,
@@ -267,6 +283,9 @@ enum QueueUndo {
     struct Outcome: Equatable, Sendable {
         let restored: Int
         let total: Int
+        // #4532: why each row the identity could not find was refused, one entry per such row. A row that
+        // WAS found and had moved on is not here: that is `stillApplies`, and it keeps its own sentence.
+        let refusals: [ShowIdentity.Refusal]
 
         var didAnything: Bool { restored > 0 }
         var isPartial: Bool { restored > 0 && restored < total }
@@ -275,7 +294,11 @@ enum QueueUndo {
 
     // Applies every row of the entry that is still exactly how the action left it, and reports how many
     // that was. A row that is gone (deleted at runtime by NaturalKeyVenueMigration) or that moved on is an
-    // ordinary outcome, not an error, which is why an entry holds keys rather than objects.
+    // ordinary outcome, not an error, which is why an entry holds identities rather than objects.
+    //
+    // #4532: each row is found through `ShowIdentity`, the one rule every row press resolves by (#4538),
+    // so a show merged away since, or a row whose own key has moved, is REFUSED rather than found by key.
+    // `shows` must be live (RootView's query), never a render pass's captured rows.
     //
     // The precondition is what replaced the "wall". A background writer (the reconcile tick, a scout
     // import, a retirement sweep), a later action of Dan's, and a send that moved the show on are all
@@ -285,16 +308,53 @@ enum QueueUndo {
     // it is invisible from the keyboard: the show comes back, so the press looks like it worked.
     @MainActor
     @discardableResult
-    static func apply(_ entry: QueueUndoEntry, resolving lookup: (String) -> Prospect?,
+    static func apply(_ entry: QueueUndoEntry, resolving shows: some ShowResolver,
                       in context: ModelContext,
                       export: DayOffEditing.Export = DownbeatBridge.loadedExport()) -> Outcome {
-        let applicable = entry.rows.compactMap { row -> (Prospect, QueueUndoEntry.Row)? in
-            guard let prospect = lookup(row.naturalKey),
-                  row.stillApplies(status: prospect.status,
-                                   showOutcomeRaw: prospect.showOutcomeRaw) else { return nil }
-            return (prospect, row)
+        apply(entry, found: entry.rows.map { row in
+            // A hand-built row names no stored show, and resolves to nothing rather than to whatever holds
+            // its key, said as `gone` the way a hand-built card is (`ShowResolver.show(for:feedback:)`).
+            row.identity?.resolve(in: shows) ?? .refused(.gone)
+        }, in: context, export: export)
+    }
+
+    // The one-show call, for a caller already holding the row: nothing is resolved, the row is the one
+    // handed in. nil is the row being gone.
+    @MainActor
+    @discardableResult
+    static func apply(_ entry: QueueUndoEntry, to prospect: Prospect?, in context: ModelContext,
+                      export: DayOffEditing.Export = DownbeatBridge.loadedExport()) -> Bool {
+        let found: ShowIdentity.Outcome = prospect.map { .found($0) } ?? .refused(.gone)
+        return apply(entry, found: entry.rows.map { _ in found }, in: context, export: export).didAnything
+    }
+
+    // What `nothingUndoneSentence` says when an undo put nothing back (#1415, #4532). A one-show entry the
+    // identity could not find says WHY, in the refusal's own words; one that was found and had moved on
+    // keeps the sentence it always had. A night is counted rather than named, as it always was.
+    static func nothingUndoneSentence(for entry: QueueUndoEntry, outcome: Outcome) -> String {
+        guard entry.rows.count == 1 else { return ActionAck.undoSkippedNight(count: entry.rows.count) }
+        if let refusal = outcome.refusals.first { return refusal.undoSentence(org: entry.groupName) }
+        return ActionAck.undoSkipped(org: entry.groupName)
+    }
+
+    @MainActor
+    private static func apply(_ entry: QueueUndoEntry, found: [ShowIdentity.Outcome],
+                              in context: ModelContext, export: DayOffEditing.Export) -> Outcome {
+        var refusals: [ShowIdentity.Refusal] = []
+        var applicable: [(Prospect, QueueUndoEntry.Row)] = []
+        for (row, outcome) in zip(entry.rows, found) {
+            switch outcome {
+            case .refused(let refusal):
+                refusals.append(refusal)
+            case .found(let prospect):
+                guard row.stillApplies(status: prospect.status,
+                                       showOutcomeRaw: prospect.showOutcomeRaw) else { continue }
+                applicable.append((prospect, row))
+            }
         }
-        guard !applicable.isEmpty else { return Outcome(restored: 0, total: entry.rows.count) }
+        guard !applicable.isEmpty else {
+            return Outcome(restored: 0, total: entry.rows.count, refusals: refusals)
+        }
         // The precondition is checked BEFORE the day off is touched, not after. A stale entry means Dan's
         // row moved on under him, and taking the block off anyway would silently unblock a night he told
         // Overture he cannot work, freeing every show on it to be drafted and sent.
@@ -334,15 +394,7 @@ enum QueueUndo {
             // so an undo of any other action never writes over a draft Dan has now.
             if let draft = row.priorDraft { prospect.restoreKeptNightDraft(draft) }
         }
-        return Outcome(restored: applicable.count - blocked, total: entry.rows.count)
-    }
-
-    // The one-show call, unchanged for every caller that reverses a single action on a single row.
-    @MainActor
-    @discardableResult
-    static func apply(_ entry: QueueUndoEntry, to prospect: Prospect?, in context: ModelContext,
-                      export: DayOffEditing.Export = DownbeatBridge.loadedExport()) -> Bool {
-        apply(entry, resolving: { _ in prospect }, in: context, export: export).didAnything
+        return Outcome(restored: applicable.count - blocked, total: entry.rows.count, refusals: refusals)
     }
 }
 

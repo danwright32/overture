@@ -1411,26 +1411,27 @@ struct RootView: View {
             }
         }
         guard !actionable.isEmpty else { return }
-        // What only a replay reads (the client list, the match history, the blocked calendar), built only when
-        // one is waiting.
-        let replays = actionable.contains { $0.finding == .replay }
-        let loaded = replays ? DownbeatBridge.loadWithHealth(now: Date()) : nil
-        // The match history a replay is judged against. A read that fails is SAID and the replay waits with its
-        // copy kept, never run against an empty history that would land it matched against nothing (L215).
-        var existing: [Prospect] = []
-        if replays, let waiting = actionable.first(where: { $0.finding == .replay }) {
-            switch LandingRecovery.showsForReplay(waiting, fetch: { try context.fetch(FetchDescriptor<Prospect>()) }) {
-            case .read(let shows): existing = shows
+        // What only a replay reads (the client list, the match history, the blocked calendar), read only when
+        // one is waiting, through `LandingInputs` as every other landing reads them (#4526), so the show table
+        // is read off the main thread. A table that cannot be read is SAID and the replay waits with its copy
+        // kept, never run against an empty history that would land it matched against nothing (L215).
+        // The read can suspend, so the survey is a moment old when the replay lands; the landing re-validates
+        // each source against a later run's sequence under its own token (`ScoutExtractIngest`), as it already
+        // had to for a replay that waits for another landing to let go of the store.
+        var inputs: LandingInputs.Inputs?
+        if let waiting = actionable.first(where: { $0.finding == .replay }) {
+            switch await LandingRecovery.inputsForReplay(waiting, read: {
+                await LandingInputs.readRefusingUnreadableShowTable(into: context)
+            }) {
+            case .read(let read): inputs = read
             case .refused(let said):
                 sayRecovery(said)
                 return
             }
         }
         let recovered = await LandingRecovery.recoverNext(
-            journals: journals, pending: .live, clients: loaded?.clients ?? [],
-            history: replays ? LocalHistory.forMatching(existing: existing) : [],
-            blocked: loaded.map { ScoutService.blockedCalendar(export: ($0.bookings, $0.blockedDates, $0.health),
-                                                               context: context) } ?? .empty,
+            journals: journals, pending: .live, clients: inputs?.clients ?? [],
+            history: inputs?.history ?? [], blocked: inputs?.blocked ?? .empty,
             // Started when the scout flag went up; a run press or a reader in flight keeps it down.
             sweep: {
                 runScout(auto: true, depth: .watchOnly)
@@ -1729,16 +1730,14 @@ struct RootView: View {
     // next Cmd+Z retry the same dead entry forever instead of reaching the one behind it.
     private func performQueueUndo() {
         guard let entry = undoStack.takeTop() else { return }
-        let outcome = QueueUndo.apply(entry, resolving: { key in
-            allProspects.first { $0.naturalKey == key }
-        }, in: context)
+        // #4532: by each row's store identity, never its key, so an undo recorded on a show merged away
+        // since is refused rather than applied to the survivor that adopted its key.
+        let outcome = QueueUndo.apply(entry, resolving: allProspects, in: context)
         guard outcome.didAnything else {
             // #1415: the row moved since (a scout re-scored it, a sweep took it, a send made it contacted)
             // or is gone, so there is nothing to put back. Since #1134 the store and the visible stage move
             // independently, so a silent no-op here is pixel-identical to a working undo; say so instead.
-            feedback.acknowledge(entry.rows.count == 1
-                                 ? ActionAck.undoSkipped(org: entry.groupName)
-                                 : ActionAck.undoSkippedNight(count: entry.rows.count))
+            feedback.acknowledge(QueueUndo.nothingUndoneSentence(for: entry, outcome: outcome))
             return
         }
         // #1415: an undo usually restores the row into a stage Dan is not looking at, so name what came

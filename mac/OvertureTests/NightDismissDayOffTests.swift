@@ -117,8 +117,7 @@ struct NightDismissDayOffTests {
 
         let entry = try #require(undo.takeTop())
         #expect(entry.blockedDays == QueueUndoEntry.BlockedDays(start: "2026-11-18", end: "2026-11-18"))
-        let byKey = Dictionary(uniqueKeysWithValues: [a, b].map { ($0.naturalKey, $0) })
-        QueueUndo.apply(entry, resolving: { byKey[$0] }, in: ctx, export: noExport)
+        QueueUndo.apply(entry, resolving: [a, b], in: ctx, export: noExport)
 
         #expect(DayOffEditing.rows(in: ctx).isEmpty, "the night is not left blocked after the undo")
         #expect(a.status != .dismissed)

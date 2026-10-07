@@ -99,6 +99,27 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
                     + "again if it is still there"
             }
         }
+
+        // #4532: the same three causes, said for Cmd+Z. Separate from `sentence` because two of those
+        // speak of a row Dan pressed and tell him to press it again, and pressing Cmd+Z again reverses the
+        // NEXT action on the stack rather than retrying this one (L111). So these say what happened and
+        // that nothing was undone, and ask for nothing. `org` is the name the Edit menu showed, which an
+        // undo entry always holds.
+        //
+        // COLD READ, 2026-10-06, in the order Dan meets it: the menu said "Undo Dismiss: X", he pressed
+        // it, nothing came back, and the banner says why. "Nothing was undone" rather than "nothing to
+        // undo", because in the second case the show is there and a different night now.
+        func undoSentence(org: String) -> String {
+            switch self {
+            case .gone:
+                return "\(org) was merged into another show or removed since, so nothing was undone"
+            case .reKeyed:
+                return "\(org) was merged, or moved to a different night, since then, so nothing was undone"
+            case .drawnBeforeItsFirstSave:
+                return "\(org) was still being added when you acted on it, so Overture could not tell which "
+                    + "show to put back. Nothing was undone"
+            }
+        }
     }
 
     enum Outcome {
