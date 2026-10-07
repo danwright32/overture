@@ -272,3 +272,181 @@ struct RepliesWaitingAreDueWorkTests {
         #expect(try rows(context, now: sent.addingTimeInterval(2 * day)).counts.repliesToAnswer == 0)
     }
 }
+
+// #4531: the Follow-ups sheet's five lists in ONE order, whatever order the store hands rows over in.
+//
+// Every list here runs over an unsorted whole-store read and over each show's contacts, a relationship
+// SwiftData hands back in whatever order it likes (L343). Each sorted by one field (a send instant, a
+// request instant, a reply's arrival, a performance date) or by nothing at all, and where two rows tied
+// they kept the order they arrived in, so the sheet could reorder between launches on unchanged data
+// (L419). #4357 slice I3 made the queue's render pass total and left these, because the pass reads only
+// their counts.
+//
+// WHAT THIS RUNS. One corpus, planted so every list holds a tie on what it sorts by, run through
+// `DueWork.rows` over 20 seeded permutations of the shows, of each show's contacts and of the inquiries,
+// and every list compared by identity (`TermsOverFacts.dueLines`) with the first permutation's. The seed
+// is fixed, so a red run reproduces exactly (L339). One address sits on several shows, because a contact's
+// `id` is its email and is shared across shows, so a tie broken by it alone is not broken at all; and one
+// show holds two contacts on one address, which only the store's identifier tells apart.
+//
+// Every name and address is invented, on example.org or act.example (L155, L222). The clock is pinned
+// (L130).
+@MainActor
+@Suite("The Follow-ups sheet's lists hold one order whatever order the store returns (#4531)")
+struct DueWorkTotalOrderTests {
+    private let container: ModelContainer
+    private let context: ModelContext
+    private let sent = Date(timeIntervalSince1970: 1_780_000_000)   // 2026-05-28
+    private let day: TimeInterval = 86_400
+    private var now: Date { sent.addingTimeInterval(10 * day) }
+    private let seed: UInt64 = 4531
+    private let permutationCount = 20
+
+    init() throws {
+        container = try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self])
+        context = container.mainContext
+    }
+
+    private func prospect(_ key: String, on date: String) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: "Ensemble \(key)", discipline: "choral",
+                         venue: "Quarry Hall", performanceDate: date, sourceListingURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .contacted)
+        context.insert(p)
+        return p
+    }
+
+    // A show pitched at `sent`, each address on its own email.
+    @discardableResult
+    private func emailed(_ key: String, on date: String = "2027-07-01", _ emails: [String]) -> Prospect {
+        let p = prospect(key, on: date)
+        p.sentAt = sent
+        p.setRecipients(emails.enumerated().map { index, email in
+            let r = Recipient(id: email, email: email, provenance: .act)
+            r.sendState = .sent
+            r.sentAt = sent
+            r.gmailThreadId = "t-\(key)-\(email)-\(index)"
+            r.gmailMessageId = "<\(key)-\(email)-\(index)>"
+            return r
+        })
+        return p
+    }
+
+    // A form pitch with a conversation Overture proposes as its reply, waiting on Dan to confirm it.
+    @discardableResult
+    private func proposed(_ key: String, form: String) -> Prospect {
+        let p = prospect(key, on: "2027-07-01")
+        let r = Recipient(id: "form:\(form)", email: nil, name: "Corin", provenance: .act)
+        r.contactFormURL = form
+        r.formOutreachURL = form
+        r.outreachChannel = .contactForm
+        r.formOutreachRecordedAt = now.addingTimeInterval(-3 * day)
+        r.sentAt = now.addingTimeInterval(-3 * day)
+        r.sendState = .sent
+        p.setRecipients([r])
+        ProposedConversation.propose(
+            ProposedConversation.Candidate(messageId: "m-\(key)", threadId: "t-m-\(key)",
+                                           fromAddress: "corin@example.org", fromName: "Corin",
+                                           subject: "Re: the spring concert",
+                                           sentAt: now.addingTimeInterval(-3_600), score: 9),
+            on: r, now: now)
+        return p
+    }
+
+    private func inquiry(_ name: String, event: String, repliedAt: Date) -> Inquiry {
+        let i = Inquiry(source: .contactForm, inquirerName: name, inquirerEmail: "\(name)@example.org",
+                        eventName: event)
+        context.insert(i)
+        i.replied = true
+        i.repliedAt = repliedAt
+        return i
+    }
+
+    // Every list's tie, planted. Keys are inserted out of natural key order so the planted order is not
+    // already the sorted one.
+    private func plantedCorpus() throws -> (shows: [Prospect], inquiries: [Inquiry]) {
+        // Silent nudges: all sent at `sent`. One show with two separate emails ties within itself, and
+        // the shared address sits on two shows.
+        emailed("silent b", ["shared@act.example", "second@act.example"])
+        emailed("silent a", ["shared@act.example"])
+        // And one show holding TWO contacts on one address, which `SendGroup.oneRowPerGroup` collapses to
+        // one row: which of the two it kept followed the order the relationship handed them over in.
+        emailed("silent c", ["twice@act.example", "twice@act.example"])
+        // After the show: two shows on one passed night, one prompt kind.
+        emailed("after b", on: "2026-06-01", ["shared@act.example"])
+        emailed("after a", on: "2026-06-01", ["other@act.example"])
+        // Stalled reply drafts: asked for at one instant, never arrived.
+        for key in ["stall b", "stall a"] {
+            let r = emailed(key, ["stalled@act.example"]).recipients[0]
+            r.replied = true
+            r.repliedAt = now.addingTimeInterval(-2 * 3_600)
+            r.lastReplyText = "Thanks for getting in touch."
+            r.replyDraftRequestedAt = now.addingTimeInterval(-Recipient.replyDraftStallTimeout - 60)
+            r.replyDraftBody = nil
+        }
+        // Replies to answer: two shows written back at one instant, and two inquiries about one event
+        // written back at that same instant, so they share a natural key as well.
+        for key in ["reply b", "reply a"] {
+            emailed(key, ["replied@act.example"]).recipients[0].reopenOnReply(at: sent.addingTimeInterval(day))
+        }
+        let inquiries = [inquiry("marta", event: "Winter recital", repliedAt: sent.addingTimeInterval(day)),
+                         inquiry("lena", event: "Winter recital", repliedAt: sent.addingTimeInterval(day))]
+        // Conversations to confirm: a list that had no order at all.
+        proposed("confirm b", form: "https://quarry.example/contact")
+        proposed("confirm a", form: "https://quarry.example/contact")
+        // Saved, so every identifier the order falls back to is a permanent one.
+        try context.save()
+        return (try context.fetch(FetchDescriptor<Prospect>()), inquiries)
+    }
+
+    private func lines(_ shows: [Prospect], contacts: [PersistentIdentifier: [Recipient]],
+                       inquiries: [Inquiry]) -> [String: [String]] {
+        TermsOverFacts.dueLines(DueWork.rows(from: shows, contacts: { contacts[$0.persistentModelID] ?? [] },
+                                             inquiries: inquiries, now: now, replyRunAlive: false))
+    }
+
+    // The positive control: every list holds the tie this exists to break, so a green below is about
+    // ties rather than about lists too short to have any (L159).
+    @Test func everyListHoldsATieOnWhatItSortsBy() throws {
+        let corpus = try plantedCorpus()
+        let rows = DueWork.rows(from: corpus.shows, contacts: { $0.recipients }, inquiries: corpus.inquiries,
+                                now: now, replyRunAlive: false)
+
+        #expect(rows.silent.filter { $0.recipient.sentAt == sent }.count >= 3)
+        #expect(rows.silent.filter { $0.prospect.naturalKey == "silent c" }.count == 1,
+                "the show with two contacts on one address no longer collapses them to one row")
+        #expect(Set(rows.afterTheShow.map { "\($0.prompt.kind) \($0.prospect.performanceDate ?? "")" }).count
+                < rows.afterTheShow.count, "no two after the show rows tie")
+        #expect(rows.stalledReplyDrafts.count >= 2)
+        #expect(Set(rows.stalledReplyDrafts.map(\.requestedAt)).count == 1)
+        #expect(rows.repliesToAnswer.count >= 4)
+        #expect(Set(rows.repliesToAnswer.compactMap(\.arrivedAt)).count == 1)
+        #expect(rows.conversationsToConfirm.count >= 2)
+    }
+
+    @Test func everyListIsInOneOrderWhateverOrderTheShowsAndTheirContactsArriveIn() throws {
+        let corpus = try plantedCorpus()
+        var generator = SeededGenerator(seed: seed)
+        var answers: [[String: [String]]] = []
+        var showOrders = Set<[String]>()
+        for _ in 0..<permutationCount {
+            let shows = corpus.shows.shuffled(using: &generator)
+            var contacts: [PersistentIdentifier: [Recipient]] = [:]
+            for show in shows {
+                contacts[show.persistentModelID] = show.recipients.shuffled(using: &generator)
+            }
+            showOrders.insert(shows.map(\.naturalKey))
+            answers.append(lines(shows, contacts: contacts, inquiries: corpus.inquiries.shuffled(using: &generator)))
+        }
+
+        try #require(showOrders.count > 1, "the shuffle never changed the order the shows arrive in")
+        let first = try #require(answers.first)
+        for list in first.keys.sorted() {
+            let orders = Set(answers.map { $0[list] ?? [] })
+            #expect(orders.count == 1,
+                    "\(list) came back in \(orders.count) orders over \(permutationCount) permutations of seed \(seed)")
+        }
+    }
+}
