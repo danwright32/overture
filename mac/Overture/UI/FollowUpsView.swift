@@ -144,7 +144,11 @@ struct FollowUpsView: View {
     // classify run that is still beating means nothing is stalled (#471), and a test has to be able to
     // render both sides of that without a live detached run.
     var replyRunAliveOverride: Bool?
-    private var replyRunAlive: Bool { replyRunAliveOverride ?? ReplyClassifyService.isRunning(now: Date()) }
+    // #4522: judged at the same instant as everything else on the sheet, so a pinned `nowOverride` also
+    // pins the classify run's heartbeat.
+    private var replyRunAlive: Bool {
+        replyRunAliveOverride ?? ReplyClassifyService.isRunning(now: nowOverride ?? Date())
+    }
     // #4522: the instant the sheet is drawn at, a seam of the same shape as the two above. The app never
     // passes it, so the sheet goes on dating its drawing by the live clock. A hosted test pins it, because
     // what is due is a comparison between a stored show date and this instant, and with only the show date

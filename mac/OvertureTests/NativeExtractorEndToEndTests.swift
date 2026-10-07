@@ -99,7 +99,10 @@ struct NativeExtractorEndToEndTests {
     // The join reaches the SAME boundary the agent path does: every mapped event survives the ingest guard,
     // so these bytes go on to become prospects rather than being silently dropped downstream.
     @Test func mappedEventsSurviveTheIngestGuard() async throws {
-        for event in try await venueTixExtractor().extract().events {
+        let events = try await venueTixExtractor().extract().events
+        // #4522: an empty listing would pass the loop below having examined nothing (L98).
+        try #require(events.count == 2)
+        for event in events {
             #expect(ExtractedEventGuard.isUsable(event), "\(event.title) should survive the boundary guard")
         }
     }
