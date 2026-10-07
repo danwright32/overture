@@ -174,6 +174,9 @@ struct RunNightDropWiringTests {
     func undoPutsTheNightBack() throws {
         let ctx = ModelContext(try container())
         let p = run(ctx)
+        // #4532: saved first, as every row Dan can press is. The entry records the row's store identity,
+        // and an identity minted before the first save names nothing afterwards (`ShowIdentity`).
+        try ctx.save()
         let undo = QueueUndoStack()
         let key = p.naturalKey
         ProspectMutations.dismissForReason(item(p), .dateConflict, prospects: [p], context: ctx,
@@ -182,7 +185,7 @@ struct RunNightDropWiringTests {
         #expect(p.performanceDate == "2026-09-30")
 
         let entry = try #require(undo.takeTop())
-        let outcome = QueueUndo.apply(entry, resolving: { k in k == p.naturalKey ? p : nil }, in: ctx)
+        let outcome = QueueUndo.apply(entry, resolving: [p], in: ctx)
 
         #expect(outcome.didAnything)
         #expect(p.performanceDate == "2026-08-19")

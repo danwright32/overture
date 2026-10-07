@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1801 sentences**.
+Every sentence Overture can say to Dan: **1804 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 674 of the 1801 below hold a
+  sentence carrying a VALUE: 677 of the 1804 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -3464,9 +3464,15 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "\(org) was already pitched, so \"\(outcome.label)\" doesn't apply to it. Nothing changed."
     `Domain/ShowOutcome.swift`
+"\(org) was merged into another show or removed since, so nothing was undone"
+    `Domain/ShowIdentity.swift`
 "\(org) was merged, or moved to a different night, after this row was drawn. Nothing was changed. The list has caught up, so press it again"
     `Domain/ShowIdentity.swift`
+"\(org) was merged, or moved to a different night, since then, so nothing was undone"
+    `Domain/ShowIdentity.swift`
 "\(org) was still being added when this row was drawn, so Overture could not tell which show you pressed. Nothing was changed. The list has caught up, so press it again if it is still there"
+    `Domain/ShowIdentity.swift`
+"\(org) was still being added when you acted on it, so Overture could not tell which show to put back. Nothing was undone"
     `Domain/ShowIdentity.swift`
 "\(org) went by before it was pitched."
     `Domain/ShowOutcome.swift`

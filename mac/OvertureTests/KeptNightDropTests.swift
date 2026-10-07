@@ -112,7 +112,7 @@ struct KeptNightDropTests {
 
         dropFirstNight(p, ctx, undo: undo)
         let entry = try #require(undo.takeTop())
-        let outcome = QueueUndo.apply(entry, resolving: { _ in p }, in: ctx, export: export)
+        let outcome = QueueUndo.apply(entry, resolving: [p], in: ctx, export: export)
 
         #expect(outcome.restored == 1)
         #expect(p.performanceDate == "2026-08-19")
@@ -173,7 +173,7 @@ struct KeptNightDropTests {
         #expect(p.hasDraft == false)
 
         let entry = try #require(undo.takeTop())
-        QueueUndo.apply(entry, resolving: { _ in p }, in: ctx, export: export)
+        QueueUndo.apply(entry, resolving: [p], in: ctx, export: export)
         #expect(p.status == .drafted)
         #expect(p.draftBody == "Hi, I would love to photograph your Aug 19 show.")
     }
