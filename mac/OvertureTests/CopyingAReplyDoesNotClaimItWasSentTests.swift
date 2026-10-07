@@ -69,7 +69,7 @@ struct CopyingAReplyDoesNotClaimItWasSentTests {
         let p = showWithADraftedReply(ctx)
         let r = p.recipients[0]
 
-        ProspectMutations.copyReply(item(p), r.id, prospects: [p], context: ctx,
+        ProspectMutations.copyReply(item(p), r.id, shows: [p], context: ctx,
                                     feedback: ActionFeedback())
 
         #expect(r.replyHandledAt == nil, "copying marked the conversation answered (#2869)")
@@ -85,7 +85,7 @@ struct CopyingAReplyDoesNotClaimItWasSentTests {
         let ctx = try context()
         let p = showWithADraftedReply(ctx, peers: 3)
 
-        ProspectMutations.copyReply(item(p), p.recipients[0].id, prospects: [p], context: ctx,
+        ProspectMutations.copyReply(item(p), p.recipients[0].id, shows: [p], context: ctx,
                                     feedback: ActionFeedback())
 
         #expect(p.recipients.allSatisfy { $0.replyHandledAt == nil },
@@ -100,7 +100,7 @@ struct CopyingAReplyDoesNotClaimItWasSentTests {
         let p = showWithADraftedReply(ctx)
         let r = p.recipients[0]
 
-        ProspectMutations.copyReply(item(p), r.id, prospects: [p], context: ctx,
+        ProspectMutations.copyReply(item(p), r.id, shows: [p], context: ctx,
                                     feedback: ActionFeedback())
 
         #expect(r.replyCopiedAt != nil, "nothing records that the draft was taken, so nothing can offer the confirm")
@@ -113,9 +113,9 @@ struct CopyingAReplyDoesNotClaimItWasSentTests {
         let p = showWithADraftedReply(ctx)
         let r = p.recipients[0]
 
-        ProspectMutations.copyReply(item(p), r.id, prospects: [p], context: ctx,
+        ProspectMutations.copyReply(item(p), r.id, shows: [p], context: ctx,
                                     feedback: ActionFeedback())
-        ProspectMutations.confirmCopiedReplySent(item(p), r.id, prospects: [p], context: ctx,
+        ProspectMutations.confirmCopiedReplySent(item(p), r.id, shows: [p], context: ctx,
                                                  feedback: ActionFeedback())
 
         #expect(r.replyHandledAt != nil)
@@ -130,8 +130,8 @@ struct CopyingAReplyDoesNotClaimItWasSentTests {
         let p = showWithADraftedReply(ctx)
         let r = p.recipients[0]
 
-        ProspectMutations.copyReply(item(p), r.id, prospects: [p], context: ctx, feedback: ActionFeedback())
-        ProspectMutations.confirmCopiedReplySent(item(p), r.id, prospects: [p], context: ctx,
+        ProspectMutations.copyReply(item(p), r.id, shows: [p], context: ctx, feedback: ActionFeedback())
+        ProspectMutations.confirmCopiedReplySent(item(p), r.id, shows: [p], context: ctx,
                                                  feedback: ActionFeedback())
         #expect(r.replyCopiedAt == nil)
     }
@@ -143,7 +143,7 @@ struct CopyingAReplyDoesNotClaimItWasSentTests {
         let p = showWithADraftedReply(ctx)
         let r = p.recipients[0]
 
-        ProspectMutations.confirmCopiedReplySent(item(p), r.id, prospects: [p], context: ctx,
+        ProspectMutations.confirmCopiedReplySent(item(p), r.id, shows: [p], context: ctx,
                                                  feedback: ActionFeedback())
 
         #expect(r.replyHandledAt == nil, "an answer was recorded on a draft nobody took (#2869)")

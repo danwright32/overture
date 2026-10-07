@@ -48,7 +48,7 @@ struct RecordOutcomeTests {
         let ctx = try context()
         let p = show(ctx)
 
-        let ok = ProspectMutations.recordOutcome(QueueItem(p), .hadPaidWork, prospects: [p],
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .hadPaidWork, shows: [p],
                                                  context: ctx, feedback: ActionFeedback())
 
         #expect(ok)
@@ -66,7 +66,7 @@ struct RecordOutcomeTests {
         let ctx = try context()
         let p = pitched(ctx)
 
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, shows: [p],
                                             context: ctx, feedback: ActionFeedback())
 
         #expect(p.showOutcome == .theySaidNotNow)
@@ -80,7 +80,7 @@ struct RecordOutcomeTests {
         let ctx = try context()
         let p = pitched(ctx)
 
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .booked, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .booked, shows: [p],
                                             context: ctx, feedback: ActionFeedback())
 
         #expect(p.showOutcome == .booked)
@@ -96,7 +96,7 @@ struct RecordOutcomeTests {
         let ctx = try context()
         let p = pitched(ctx)
 
-        let ok = ProspectMutations.recordOutcome(QueueItem(p), .dateConflict, prospects: [p],
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .dateConflict, shows: [p],
                                                  context: ctx, feedback: ActionFeedback())
 
         #expect(!ok)
@@ -107,7 +107,7 @@ struct RecordOutcomeTests {
         let ctx = try context()
         let p = show(ctx)
 
-        let ok = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, shows: [p],
                                                  context: ctx, feedback: ActionFeedback())
 
         #expect(!ok)
@@ -120,7 +120,7 @@ struct RecordOutcomeTests {
         let ctx = try context()
         for (i, outcome) in [ShowOutcome.wentBy, .tooFar].enumerated() {
             let p = show(ctx, key: "k\(i)")
-            let ok = ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: [p],
+            let ok = ProspectMutations.recordOutcome(QueueItem(p), outcome, shows: [p],
                                                      context: ctx, feedback: ActionFeedback())
             #expect(!ok)
             #expect(p.showOutcome == nil)
@@ -134,7 +134,7 @@ struct RecordOutcomeTests {
         let p = pitched(ctx)
         let feedback = ActionFeedback()
 
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .dateConflict, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .dateConflict, shows: [p],
                                             context: ctx, feedback: feedback)
 
         #expect(feedback.message != nil)
@@ -149,7 +149,7 @@ struct RecordOutcomeTests {
         let p = pitched(ctx)
         let feedback = ActionFeedback()
 
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .turnedThemDown, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .turnedThemDown, shows: [p],
                                             context: ctx, feedback: feedback)
 
         let said = feedback.message ?? ""
@@ -182,11 +182,11 @@ struct RecordOutcomeTests {
     @Test func anEndingCanBeTakenBackAndTheShowReadsOpenAgain() throws {
         let ctx = try context()
         let p = pitched(ctx)
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNo, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNo, shows: [p],
                                             context: ctx, feedback: ActionFeedback())
         #expect(p.showOutcome == .theySaidNo)
 
-        let ok = ProspectMutations.reopenOutcome(QueueItem(p), prospects: [p], context: ctx,
+        let ok = ProspectMutations.reopenOutcome(QueueItem(p), shows: [p], context: ctx,
                                                  feedback: ActionFeedback())
 
         #expect(ok)
@@ -199,13 +199,13 @@ struct RecordOutcomeTests {
     @Test func theContactsAreNeverTouchedByAnEnding() throws {
         let ctx = try context()
         let p = pitched(ctx)
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, shows: [p],
                                             context: ctx, feedback: ActionFeedback())
 
         #expect(p.recipients.allSatisfy { $0.resolution == nil })
         #expect(p.performanceStatus == .lostDoorOpen, "read off the show's own ending")
 
-        _ = ProspectMutations.reopenOutcome(QueueItem(p), prospects: [p], context: ctx,
+        _ = ProspectMutations.reopenOutcome(QueueItem(p), shows: [p], context: ctx,
                                             feedback: ActionFeedback())
 
         #expect(p.recipients.allSatisfy { $0.resolution == nil })
@@ -219,7 +219,7 @@ struct RecordOutcomeTests {
         let p = pitched(ctx)
         let feedback = ActionFeedback()
 
-        let ok = ProspectMutations.reopenOutcome(QueueItem(p), prospects: [p], context: ctx,
+        let ok = ProspectMutations.reopenOutcome(QueueItem(p), shows: [p], context: ctx,
                                                  feedback: feedback)
 
         #expect(!ok)
@@ -231,11 +231,11 @@ struct RecordOutcomeTests {
     @Test func theReopenAcknowledgmentNamesWhatWasRemoved() throws {
         let ctx = try context()
         let p = pitched(ctx)
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, shows: [p],
                                             context: ctx, feedback: ActionFeedback())
         let feedback = ActionFeedback()
 
-        _ = ProspectMutations.reopenOutcome(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        _ = ProspectMutations.reopenOutcome(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
 
         let said = feedback.message ?? ""
         #expect(said.contains("Orchestra of St Luke's"))
@@ -256,7 +256,7 @@ struct RecordOutcomeTests {
         let p = pitched(ctx)
         let undo = QueueUndoStack()
 
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, shows: [p],
                                             context: ctx, feedback: ActionFeedback(), undo: undo)
 
         #expect(undo.canUndo)
@@ -271,7 +271,7 @@ struct RecordOutcomeTests {
         let ctx = try context()
         let p = pitched(ctx)
         let undo = QueueUndoStack()
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, shows: [p],
                                             context: ctx, feedback: ActionFeedback(), undo: undo)
         #expect(p.showOutcomeAt != nil)
 
@@ -289,11 +289,11 @@ struct RecordOutcomeTests {
     @Test func undoingACloseOutOverAnEarlierEndingRestoresTheEarlierOne() throws {
         let ctx = try context()
         let p = pitched(ctx)
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, shows: [p],
                                             context: ctx, feedback: ActionFeedback())
         let undo = QueueUndoStack()
 
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, shows: [p],
                                             context: ctx, feedback: ActionFeedback(), undo: undo)
         let entry = try #require(undo.takeTop())
         #expect(QueueUndo.apply(entry, to: p, in: ctx))
@@ -349,7 +349,7 @@ struct RecordOutcomeTests {
         let p = show(ctx, status: .queued)
         let undo = QueueUndoStack()
 
-        _ = ProspectMutations.recordOutcome(QueueItem(p), .hadPaidWork, prospects: [p],
+        _ = ProspectMutations.recordOutcome(QueueItem(p), .hadPaidWork, shows: [p],
                                             context: ctx, feedback: ActionFeedback(), undo: undo)
         let entry = try #require(undo.takeTop())
         #expect(QueueUndo.apply(entry, to: p, in: ctx))

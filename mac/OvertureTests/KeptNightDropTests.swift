@@ -50,7 +50,7 @@ struct KeptNightDropTests {
     }
 
     private func dropFirstNight(_ p: Prospect, _ ctx: ModelContext, undo: QueueUndoStack) {
-        ProspectMutations.dismissForReason(QueueItem(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: ActionFeedback(), offer: DayOffOfferRequest(),
                                            undo: undo, now: now, export: export)
     }
@@ -166,7 +166,7 @@ struct KeptNightDropTests {
         let undo = QueueUndoStack()
 
         ProspectMutations.dismissAll([p.naturalKey], reason: .pitchingOtherShows, dateLabel: "Aug 19",
-                                     prospects: [p], context: ctx, feedback: ActionFeedback(),
+                                     shows: [p], context: ctx, feedback: ActionFeedback(),
                                      undo: undo, now: now, export: export)
 
         #expect(p.status == .new)

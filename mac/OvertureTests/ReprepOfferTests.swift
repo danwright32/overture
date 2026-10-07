@@ -103,7 +103,7 @@ struct ReprepActionTests {
         let feedback = ActionFeedback()
         let counter = ReprepLaunches()
 
-        await ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx,
+        await ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, shows: [p], context: ctx,
                                        feedback: feedback,
                                        startPrep: { _, _, _ in counter.launches += 1 })
 
@@ -120,7 +120,7 @@ struct ReprepActionTests {
         let feedback = ActionFeedback()
         let counter = ReprepLaunches()
 
-        await ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx,
+        await ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, shows: [p], context: ctx,
                                        feedback: feedback,
                                        startPrep: { _, _, _ in counter.launches += 1 })
 

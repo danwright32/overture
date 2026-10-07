@@ -179,7 +179,7 @@ struct ConfidenceHeldDownIsRecordedTests {
 
         let feedback = ActionFeedback()
         ProspectMutations.dismissConfidenceHeldDown(QueueItem(p), "sorrel@sorrelmanemagic.example",
-                                                    prospects: [p], context: ctx, feedback: feedback)
+                                                    shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.first?.heldDownToUnverifiedDismissed == true)
         #expect(p.recipients.first?.isHeldDownToUnverified == false)
@@ -206,7 +206,7 @@ struct ConfidenceHeldDownIsRecordedTests {
 
         let feedback = ActionFeedback()
         ProspectMutations.dismissConfidenceHeldDown(QueueItem(p), "sorrel@sorrelmanemagic.example",
-                                                    prospects: [p], context: ctx, feedback: feedback)
+                                                    shows: [p], context: ctx, feedback: feedback)
 
         let item = QueueItem(p)
         #expect(item.unverifiedContactEmails == ["info@theowl.example"])

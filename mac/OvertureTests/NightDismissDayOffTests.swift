@@ -40,7 +40,7 @@ struct NightDismissDayOffTests {
     private func dismissNight(_ shows: [Prospect], _ reason: ShowOutcome, ctx: ModelContext,
                               undo: QueueUndoStack) -> DayOffOfferRequest.Pending? {
         ProspectMutations.dismissAll(shows.map(\.naturalKey), reason: reason, dateLabel: "Nov 18",
-                                     nightDate: "2026-11-18", prospects: shows, context: ctx,
+                                     nightDate: "2026-11-18", shows: shows, context: ctx,
                                      feedback: ActionFeedback(), undo: undo, now: now, export: noExport)
     }
 
@@ -95,7 +95,7 @@ struct NightDismissDayOffTests {
         let ctx = try context()
         let a = show(ctx, "The Lantern Cabaret", on: "2026-11-18")
         let offer = ProspectMutations.dismissAll([a.naturalKey], reason: .dateConflict, dateLabel: "Date TBD",
-                                                 nightDate: "tbd", prospects: [a], context: ctx,
+                                                 nightDate: "tbd", shows: [a], context: ctx,
                                                  feedback: ActionFeedback(), undo: QueueUndoStack(),
                                                  now: now, export: noExport)
         #expect(offer == nil)
@@ -149,7 +149,7 @@ struct NightDismissDayOffTests {
         let undo = QueueUndoStack()
         let request = DayOffOfferRequest()
 
-        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, prospects: [run], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, shows: [run], context: ctx,
                                            feedback: ActionFeedback(), offer: request, undo: undo,
                                            now: now, export: noExport)
         let offer = try #require(request.pending)

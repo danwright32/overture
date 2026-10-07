@@ -48,7 +48,7 @@ struct StrikeAFormContactTests {
         try ctx.save()
 
         ProspectMutations.removeRecipientManually(QueueItem(p), struck.id, struck.name,
-                                                  prospects: [p], context: ctx,
+                                                  shows: [p], context: ctx,
                                                   feedback: ActionFeedback())
 
         let ledger = ContactRefusal.ledger(in: ctx)
@@ -64,7 +64,7 @@ struct StrikeAFormContactTests {
         let struck = add(p, name: "Eliah B. Johnson", formURL: "https://eliahbjohnson.example/contact")
         try ctx.save()
         ProspectMutations.removeRecipientManually(QueueItem(p), struck.id, struck.name,
-                                                  prospects: [p], context: ctx, feedback: ActionFeedback())
+                                                  shows: [p], context: ctx, feedback: ActionFeedback())
 
         _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now", results: [
             PrepResult(naturalKey: p.naturalKey, contacts: [
@@ -86,7 +86,7 @@ struct StrikeAFormContactTests {
         try ctx.save()
 
         ProspectMutations.removeRecipientManually(QueueItem(p), struck.id, struck.name,
-                                                  prospects: [p], context: ctx, feedback: ActionFeedback())
+                                                  shows: [p], context: ctx, feedback: ActionFeedback())
 
         let ledger = ContactRefusal.ledger(in: ctx)
         #expect(!ledger.isRefused(email: nil, formURL: "https://emmettthackyre.example/booking",
@@ -102,7 +102,7 @@ struct StrikeAFormContactTests {
         try ctx.save()
 
         ProspectMutations.removeRecipientManually(QueueItem(p), struck.id, struck.name,
-                                                  prospects: [p], context: ctx, feedback: ActionFeedback())
+                                                  shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(ContactRefusal.ledger(in: ctx).isRefused(email: "someone@example.test",
                                                           showKey: p.naturalKey, orgKey: nil))
@@ -119,7 +119,7 @@ struct StrikeAFormContactTests {
         try ctx.save()
         for r in [form, address] {
             ProspectMutations.removeRecipientManually(QueueItem(p), r.id, r.name,
-                                                      prospects: [p], context: ctx, feedback: ActionFeedback())
+                                                      shows: [p], context: ctx, feedback: ActionFeedback())
         }
 
         let struck = ContactRefusal.ledger(in: ctx).struckAddresses(showKey: p.naturalKey, orgKey: nil)

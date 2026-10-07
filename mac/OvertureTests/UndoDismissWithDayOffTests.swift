@@ -37,7 +37,7 @@ struct UndoDismissWithDayOffTests {
     private let noExport: DayOffEditing.Export = (bookings: [], blockedDates: [], health: .ok)
 
     private func dismissEntry(_ ctx: ModelContext, _ p: Prospect, into stack: QueueUndoStack) {
-        ProspectMutations.dismissForReason(QueueItem(p), .dateConflict, prospects: [p], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(p), .dateConflict, shows: [p], context: ctx,
                                            feedback: ActionFeedback(), offer: DayOffOfferRequest(),
                                            undo: stack)
     }
@@ -77,7 +77,7 @@ struct UndoDismissWithDayOffTests {
         let ctx = try context()
         let p = show(ctx, key: "vpo-18", on: "2026-11-18", status: .new)
         let stack = QueueUndoStack()
-        ProspectMutations.setStatus(QueueItem(p), .queued, nil, prospects: [p], context: ctx,
+        ProspectMutations.setStatus(QueueItem(p), .queued, nil, shows: [p], context: ctx,
                                     feedback: ActionFeedback(), undo: stack, undoLabel: "Keep")
 
         #expect(stack.attachBlockedDaysOff(start: "2026-11-18", end: "2026-11-18",
