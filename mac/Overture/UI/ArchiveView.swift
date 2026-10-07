@@ -98,6 +98,12 @@ struct ArchiveView: View {
     // were three matches.
     var initialQuery: String = ""
     var onConnectGmail: () -> Void = {}
+    // #4534: the clock the scope is built at and the render memo's two second window is judged by, read
+    // ONCE per pass in `makeScope`. The app passes nothing and gets the wall clock, so nothing it does
+    // changes. A hosted test passes a FROZEN clock, so a derivation count it asserts is about the memo's
+    // key rather than how long the runner took to reach the next evaluation, the mechanism #4516 found on
+    // the queue and the Sources sheet. `TheAppHandsNoSurfaceAClockTests` holds the app to the default.
+    var clock: () -> Date = Date.init
 
     private var today: String { QueueModel.easternToday() }
     // #3655 Phase 5: the pass, which yields a ROW for every show in the store and a CARD only for the
@@ -138,7 +144,7 @@ struct ArchiveView: View {
         fingerprint.add(refusedAddresses)
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
         // #4356: one instant for the memo and the scope it builds, so they reason about the same moment.
-        let now = Date()
+        let now = clock()
         return scopeMemo.value(fingerprint: fingerprint, cardKeys: keys, now: now,
                                savesIn: context.container,
                                // #4252: the whole-store scope (277 ms on the live store, 2026-09-25) against

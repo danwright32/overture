@@ -521,7 +521,8 @@ struct RemovingOneSourceCostsOnePassTests {
         let (window, hosting) = host(Harness(container: c, prospects: [], feedback: ActionFeedback()))
         _ = await waitUntilQuiet(in: hosting)
 
-        window.close()
+        HostedPassCounting.closeLeavingMounted(window, because: "this is the positive control: a sheet whose "
+            + "window is only closed must still be evaluated, and `tearDown` below takes it down")
         let closedBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
         ctx.insert(WatchedSource(sourceId: "src-closed", orgName: "Closed Window Guild",
                                  listingsURL: "https://closed.example/events", kind: .html))
@@ -544,6 +545,52 @@ struct RemovingOneSourceCostsOnePassTests {
         #expect(evaluatedAfterTearDown == 0, Comment(rawValue:
             "a sheet taken down with tearDown was evaluated \(evaluatedAfterTearDown) times after a save "
             + "into its store, so it is still in the graph and a later test would be charged for it (#4516)"))
+    }
+
+    // #4534: the two teardowns the other counting suites now use take the sheet out of the graph too, so
+    // the scan that sends every suite to them is sending it somewhere that works. One reading each, on the
+    // same fixture and the same wake as `aSheetTornDownIsNeverEvaluatedAgain`, whose positive control above
+    // shows that wake evaluating a sheet whose window was only closed.
+    //
+    //   BY THE WINDOW   an `AnyView` root, taken down by `unmountAndClose(window)`, which is all a suite
+    //                   holding only the window (`Phase0cViewRig.host`) can call.
+    //   MOUNTED         the real type inside `HostedPassCounting.Mounted`, taken down by
+    //                   `unmountAndClose(hosting, in:)`, which the suites hosting the real type call.
+    @Test func eachSharedTeardownTakesTheSheetOutOfTheGraph() async throws {
+        for teardown in ["by the window", "mounted"] {
+            let c = try container()
+            let ctx = c.mainContext
+            _ = seed(ctx)
+            let sheet = SourcesView(prospects: [], clock: HostedPassCounting.frozenClock())
+                .modelContainer(c)
+                .environment(ActionFeedback())
+            let appearedBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
+            let takeDown: () -> Void
+            let hostingView: NSView
+            if teardown == "by the window" {
+                let (window, hosting) = host(AnyView(sheet))
+                hostingView = hosting
+                takeDown = { HostedPassCounting.unmountAndClose(window) }
+            } else {
+                let (window, hosting) = host(HostedPassCounting.Mounted(content: sheet))
+                hostingView = hosting
+                takeDown = { HostedPassCounting.unmountAndClose(hosting, in: window) }
+            }
+            _ = await waitUntilQuiet(in: hostingView)
+            #expect(QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface) > appearedBefore,
+                    "the \(teardown) sheet never drew, so the zero below would mean nothing was mounted (L98)")
+
+            takeDown()
+            let before = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)
+            ctx.insert(WatchedSource(sourceId: "src-\(teardown)", orgName: "Taken Down Guild",
+                                     listingsURL: "https://taken.example/events", kind: .html))
+            try ctx.save()
+            _ = await waitUntilQuiet(in: hostingView)
+            let evaluated = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface) - before
+            #expect(evaluated == 0, Comment(rawValue:
+                "a sheet taken down \(teardown) was evaluated \(evaluated) times after a save into its store, "
+                + "so it is still in the graph and a later test would be charged for it (#4534)"))
+        }
     }
 }
 

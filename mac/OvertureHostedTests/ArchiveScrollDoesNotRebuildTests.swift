@@ -121,12 +121,19 @@ struct ArchiveScrollDoesNotRebuildTests {
 
         // #3846: the Archive takes its rows rather than querying the whole table a second time, so
         // this harness plays RootView's part and the path measured below is still store to screen.
-        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+        //
+        // #4534: the Archive is handed a FROZEN clock, so an evaluation this test does not schedule (a late
+        // SwiftData refetch) landing past the render memo's two second window cannot derive the store and
+        // be read as the scroll's doing. `ExternalRebuildProbeTests.aRedrawPastTheMemoWindowDerivesOnlyOn
+        // TheWallClock` shows the window doing exactly that on the wall clock. Unmounted before its window
+        // closes, so no later test can wake it.
+        let clock = HostedPassCounting.frozenClock()
+        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows, clock: clock) }
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
         let (window, hosting) = host(view)
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(hosting, replacingWith: AnyView(EmptyView()), in: window) }
 
         let scroll = try #require(firstScrollView(in: hosting),
                                   "the Archive laid out no scrolling list, so nothing was scrolled")
