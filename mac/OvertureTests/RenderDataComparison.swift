@@ -10,7 +10,7 @@ import SwiftData
 //
 // BY VALUE, three ways, and never by description:
 //   - a member that is already a value with real equality is compared with `==`;
-//   - a member that holds MODELS (`queueScope`, `reachedOut`, `inquiriesByRowID`, the Reached out list) is
+//   - a member that holds MODELS (`inquiriesByRowID`, the Reached out list) is
 //     compared through a projection onto store identifiers and the values beside them, because a model's
 //     equality is object identity and two passes over one store hold different objects for the same row;
 //   - the one class, `CardStore`, is compared through `contents`, the value it holds.
@@ -37,7 +37,8 @@ enum RenderDataComparison {
     // building the list costs nothing beside the comparison it serves.
     static var fields: [Field] { [
         Field(name: "cards", how: .projection) { $0.cards.contents == $1.cards.contents && preambleAgrees($0, $1) },
-        Field(name: "queueScope", how: .projection) { $0.queueScope.map(\.persistentModelID) == $1.queueScope.map(\.persistentModelID) },
+        // #4357 step 5: identities now, so compared as the values they are.
+        Field(name: "queueScope", how: .value) { $0.queueScope == $1.queueScope },
         Field(name: "selfBooking", how: .value) { $0.selfBooking == $1.selfBooking },
         Field(name: "agentInputs", how: .value) { $0.agentInputs == $1.agentInputs },
         Field(name: "gmailConnected", how: .value) { $0.gmailConnected == $1.gmailConnected },
@@ -46,7 +47,7 @@ enum RenderDataComparison {
         Field(name: "prepRunning", how: .value) { $0.prepRunning == $1.prepRunning },
         Field(name: "checkRunSince", how: .value) { $0.checkRunSince == $1.checkRunSince },
         Field(name: "checkLookups", how: .value) { $0.checkLookups == $1.checkLookups },
-        Field(name: "reachedOut", how: .projection) { reachedOut($0.reachedOut) == reachedOut($1.reachedOut) },
+        Field(name: "reachedOut", how: .value) { $0.reachedOut == $1.reachedOut },
         Field(name: "reachedOutKeys", how: .value) { $0.reachedOutKeys == $1.reachedOutKeys },
         Field(name: "feedBreaks", how: .value) { $0.feedBreaks == $1.feedBreaks },
         Field(name: "mergeSurvivorsDropped", how: .value) { $0.mergeSurvivorsDropped == $1.mergeSurvivorsDropped },
@@ -99,26 +100,14 @@ enum RenderDataComparison {
     /// placed here before the guard passes.
     static let cardStoreMembers: [String: String] = [
         "cards": "contents.cards",
-        "showsByKey": "contents.shows",
-        "contactsByKey": "contents.contacts",
+        // #4357 step 5: one member holding both maps, over whatever rows the store was built from.
+        "sources": "contents.shows, contents.contacts",
         "requestedKeys": "contents.requestedKeys",
         "preamble": "preambleFields",
         "registry": "left out: where the NEXT pass's requests are recorded, not what this pass produced",
         "expectedFirstFrameMisses": "left out: counted by the surfaces that read the store after the pass",
         "unexpectedCardMisses": "left out: counted by the surfaces that read the store after the pass",
     ]
-
-    private struct ReachedOutKey: Equatable {
-        let show: PersistentIdentifier
-        let contact: PersistentIdentifier
-        let next: Date
-    }
-
-    private static func reachedOut(_ entries: [(prospect: Prospect, recipient: Recipient, next: Date)])
-        -> [ReachedOutKey] {
-        entries.map { ReachedOutKey(show: $0.prospect.persistentModelID, contact: $0.recipient.persistentModelID,
-                                    next: $0.next) }
-    }
 
     private enum EntryKey: Equatable {
         case show(PersistentIdentifier, PersistentIdentifier, Date)

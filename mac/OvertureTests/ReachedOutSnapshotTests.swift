@@ -4,8 +4,8 @@ import SwiftData
 
 // #3651 (milestone #80, Phase 1): finding the row behind a press on the Reached out list.
 //
-// WHAT THIS EXISTS TO STOP. `RenderData.reachedOut` holds live `Prospect` and `Recipient` references
-// across a render snapshot, and `LaunchMigrations` runs deleting passes on the main context with a
+// WHAT THIS EXISTS TO STOP. `RenderData.reachedOut` held live `Prospect` and `Recipient` references
+// across a render snapshot (it holds these snapshots since #4357 step 5), and `LaunchMigrations` runs deleting passes on the main context with a
 // window open, as do `DuplicateContactMerge`, `SameNightTitleVariantMerge`, `DriftedRunMerge` and
 // `ContactRefusal`. Reading a property off a deleted model is a crash, not a stale row.
 //

@@ -27,7 +27,7 @@ struct ArchiveViewSendStateTests {
     // So this hands it a store already holding exactly the card the test built, which keeps the assertion
     // about send-state threading and nothing else, while still driving the real row-request path.
     private func store(holding item: QueueItem) -> QueueModel.CardStore {
-        QueueModel.CardStore(cards: [item.id: item], shows: [], contactsByKey: [:],
+        QueueModel.CardStore(cards: [item.id: item], shows: [Prospect](), contactsByKey: [:],
                              preamble: QueueModel.CardPreamble(
                                 linked: [:], inherited: [:],
                                 venueBrands: ProducerGate.VenueBrands(shows: [], overrides: .none),

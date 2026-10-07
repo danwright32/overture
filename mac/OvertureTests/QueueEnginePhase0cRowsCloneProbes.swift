@@ -508,9 +508,11 @@ extension QueueEnginePhase0cRowsProbeTests {
             let agentInputs = agent()
             func renderData() -> QueueView.RenderData {
                 QueueView.RenderData(
-                    cards: scope.cards, queueScope: inQueue, selfBooking: selfBooking, agentInputs: agentInputs,
+                    cards: scope.cards, queueScope: inQueue.map { ShowIdentity($0) }, selfBooking: selfBooking, agentInputs: agentInputs,
                     gmailConnected: false, probeRunning: false, checkRunning: false, prepRunning: false,
-                    checkRunSince: nil, checkLookups: nil, reachedOut: reachedOut, reachedOutKeys: reachedKeys,
+                    checkRunSince: nil, checkLookups: nil,
+                    reachedOut: reachedOut.map { ReachedOutSnapshot(show: $0.prospect, contact: $0.recipient, next: $0.next) },
+                    reachedOutKeys: reachedKeys,
                     feedBreaks: feedBreaks, mergeSurvivorsDropped: merged,
                     pendingBookings: QueueModel.pendingBookingCount(rows),
                     summary: QueueModel.summary(visibleRows), missedByACheckKeys: missed, fanOutLine: nil, rows: rows,
@@ -658,7 +660,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 ("ShowLink.group", sShowLinkGroup), ("titlesByKey", sTitles), ("drawn set", sDrawn),
                 ("ShowLink.collapse", sCollapse), ("laterLookalikes", sLookalikes), ("nightsByKey", sNights),
                 ("CardPreamble init", sPreamble), ("row loop (hidden check, contacts, row)", sLoop),
-                ("card check over no cards", sCheck), ("CardStore init (showsByKey)", sCardStore),
+                ("card check over no cards", sCheck), ("CardStore init (sources)", sCardStore),
                 ("Scope init", sScopeInit),
             ]
             let scopeNamed = scopeTerms.reduce(0) { $0 + $1.1.median }
