@@ -312,10 +312,9 @@ struct OutputsHoldNoModelTests {
     @Test func aCardStoreOverFactsHoldsNoModelAndBuildsTheModelsCard() throws {
         let container = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
         let (show, contacts, _) = try FactsFixture.liveRow(variant: 1, in: container.mainContext)
-        // The fixture writes each string field with its own name, so both contacts would share the id "id",
-        // which the card's own grouping refuses (it traps on a duplicate key). Two distinct addresses instead.
-        for (index, contact) in contacts.enumerated() { contact.id = "contact\(index)@example.invalid" }
-        try container.mainContext.save()
+        // The fixture writes each string field with its own name, so both contacts share the id "id": two
+        // contacts on one address, which the card build trapped on until #4589 keyed it on the row identity.
+        try #require(Set(contacts.map(\.id)).count == 1, "the fixture no longer puts both contacts on one address")
         let facts = RowFacts.extract(show)
         let pre = Self.preamble()
         let overFacts = Self.store(over: facts, preamble: pre)

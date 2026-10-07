@@ -4275,13 +4275,18 @@ extension QueueItem {
         // one before it consults the lint, so linting the rest would be work nobody uses: measured, that
         // was 24 extra runs per render on this store's shape.
         let pendingRecipients = contactsOnce.filter { $0.sendState == .pending }
-        let lintBlockersByRecipient = Dictionary(uniqueKeysWithValues:
-            pendingRecipients.map { ($0.id, $0.draftLintBlockers(body: body)) })
+        // #4589: keyed on the ROW identity, never `id`. `id` is the contact's email address (#4207), and one
+        // show can hold two contacts on one address, so a uniquely keyed map over it trapped with "Duplicate
+        // values for key" and took the app down from inside a card build. Merged rather than unique even on
+        // the row identity: the same row handed in twice is the same contact, whose answer is the same.
+        let lintBlockersByRecipient = Dictionary(
+            pendingRecipients.map { ($0.persistentModelID, $0.draftLintBlockers(body: body)) },
+            uniquingKeysWith: { first, _ in first })
         // Falls back to the real derivation for a contact the map does not hold, so this can never answer
         // "no findings" for a body nobody checked. The readers take it as an @autoclosure, so a
         // non-pending contact never reaches this at all.
         func lintBlockers(_ r: Row.Contact) -> [DraftIssue] {
-            lintBlockersByRecipient[r.id] ?? r.draftLintBlockers(body: body)
+            lintBlockersByRecipient[r.persistentModelID] ?? r.draftLintBlockers(body: body)
         }
         let draftLintBlockers = DraftIssue.orderedBlockers(
             Set(pendingRecipients.flatMap { lintBlockers($0) }))
