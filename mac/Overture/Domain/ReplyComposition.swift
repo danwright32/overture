@@ -148,7 +148,7 @@ extension ReplyComposition {
                 requestedAt: { recipient.replyDraftRequestedAt },
                 request: {
                     ProspectMutations.draftReply(prospect.naturalKey, recipient.id,
-                                                 prospects: [prospect], context: context,
+                                                 shows: [prospect], context: context,
                                                  feedback: feedback)
                 },
                 writtenByDan: { recipient.replyDraftWrittenByDan },

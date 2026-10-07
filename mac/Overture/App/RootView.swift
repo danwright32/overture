@@ -565,7 +565,7 @@ struct RootView: View {
     }
 
     private func bulkReprep(_ mode: ReprepMode) {
-        ProspectMutations.bulkReprep(mode, prospects: allProspects, context: context, feedback: feedback)
+        ProspectMutations.bulkReprep(mode, shows: allProspects, context: context, feedback: feedback)
     }
 
     // #355: glanceable freshness, reusing the same coarse relative-time formatter PrepStatus and
@@ -1730,16 +1730,14 @@ struct RootView: View {
     // next Cmd+Z retry the same dead entry forever instead of reaching the one behind it.
     private func performQueueUndo() {
         guard let entry = undoStack.takeTop() else { return }
-        let outcome = QueueUndo.apply(entry, resolving: { key in
-            allProspects.first { $0.naturalKey == key }
-        }, in: context)
+        // #4532: by each row's store identity, never its key, so an undo recorded on a show merged away
+        // since is refused rather than applied to the survivor that adopted its key.
+        let outcome = QueueUndo.apply(entry, resolving: allProspects, in: context)
         guard outcome.didAnything else {
             // #1415: the row moved since (a scout re-scored it, a sweep took it, a send made it contacted)
             // or is gone, so there is nothing to put back. Since #1134 the store and the visible stage move
             // independently, so a silent no-op here is pixel-identical to a working undo; say so instead.
-            feedback.acknowledge(entry.rows.count == 1
-                                 ? ActionAck.undoSkipped(org: entry.groupName)
-                                 : ActionAck.undoSkippedNight(count: entry.rows.count))
+            feedback.acknowledge(QueueUndo.nothingUndoneSentence(for: entry, outcome: outcome))
             return
         }
         // #1415: an undo usually restores the row into a stage Dan is not looking at, so name what came

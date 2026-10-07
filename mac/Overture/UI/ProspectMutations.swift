@@ -4,44 +4,18 @@ import AppKit
 
 // Every SwiftData mutation a queue row can trigger, moved out of QueueView so the same row
 // component (Mark menu, Keep/Dismiss, booking confirm, and so on) behaves identically wherever
-// it is shown: originally only the main Queue, now also the Archive lookup. Each function takes
-// the full prospects array to find its target, since #4357 slice I2 by the card's store identifier
-// through `ShowIdentity` rather than by natural key.
+// it is shown: originally only the main Queue, now also the Archive lookup.
+//
+// #4357 slice I2: each action takes the SHOWS it may act on as a `ShowResolver` and finds its own
+// through `ShowResolver.show(for:feedback:)`, which resolves the card's store identifier with the key
+// as a witness and says each refusal's own cause (#1778). Never an array searched by key: after a merge
+// a key names a survivor Dan did not press (B3), and `AControlThatFindsNothingSaysSoTests` refuses both
+// a lookup written here and a `[Prospect]` parameter coming back.
 @MainActor
 enum ProspectMutations {
 
-    // #1778: the show behind the row Dan pressed, or nil HAVING SAID SO.
-    //
-    // Fifty row actions found it inline and returned silently when it came back empty, so the control
-    // was offered, pressed, and did nothing with nothing said. That is this issue's own test answered
-    // yes by a route it did not name: it expected a DOMAIN rule refusing, and this is the lookup. One
-    // helper rather than fifty guards, because the lookup is the one thing every action shares (L30).
-    //
-    // It speaks only for its OWN failure. A guard that carries domain conditions beside this still
-    // refuses those on its own terms, and those refusals already say their piece (ShowOutcome
-    // .refusedLine is the worked example). Nothing here changes what any action DOES.
-    //
-    // #4357 slice I2: it finds the show by the card's IDENTIFIER, with the key as a witness, through
-    // `ShowIdentity`, where it used to find whichever row held the card's key. A merge can hand a deleted
-    // show's key to a survivor, and the old lookup then acted on the survivor with nothing said (B3). The
-    // refusals say their own causes. These two helpers and the array they take go in the slice that moves
-    // every action onto `ShowResolver` (#4357), which cannot share a pull request with this one: its diff is
-    // past what a review can read.
-    static func model(for item: QueueItem, in prospects: [Prospect],
-                      feedback: ActionFeedback) -> Prospect? {
-        prospects.show(for: item, feedback: feedback)
-    }
-
-    // The same question where the caller holds a key rather than a row (the reply actions). `org` is
-    // optional because those callers genuinely do not know it, and the message says so rather than
-    // naming the wrong show.
-    static func model(forKey naturalKey: String, org: String?, in prospects: [Prospect],
-                      feedback: ActionFeedback) -> Prospect? {
-        prospects.show(forKey: naturalKey, org: org, feedback: feedback)
-    }
-
-    static func toggleVoiceLearning(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func toggleVoiceLearning(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.excludedFromVoiceLearning.toggle()
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
             feedback.acknowledge(ActionAck.voiceLearning(excluded: model.excludedFromVoiceLearning, org: item.groupName))
@@ -51,10 +25,10 @@ enum ProspectMutations {
     // #2261: Dan asks for a show's frozen reachability answer to be researched again. A flag, never a
     // clearing of the verdict: the old answer stays on the card until a new one lands on top of it, so a
     // re-check that then fails leaves him no worse off than before he pressed (L5).
-    static func requestReachabilityRecheck(_ item: QueueItem, prospects: [Prospect],
+    static func requestReachabilityRecheck(_ item: QueueItem, shows: some ShowResolver,
                                            context: ModelContext, feedback: ActionFeedback,
                                            now: Date = Date()) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         // Idempotent. Pressing twice must not move the request's timestamp, which is what the row reads to
         // decide it has already been acknowledged.
         guard model.reachabilityRecheckRequestedAt == nil else { return }
@@ -66,8 +40,8 @@ enum ProspectMutations {
 
     // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that
     // reply so it does not re-flag, while a genuinely new reply still will.
-    static func dismissReply(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func dismissReply(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.dismissAutoReply(now: Date())
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -75,8 +49,8 @@ enum ProspectMutations {
     // Dan hand marks one contact's outcome from the conversation surface (attribution only for
     // Booked, never sets the lead booking). Stamps the manual source so detection will not overwrite it.
     static func markContact(_ item: QueueItem, _ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool,
-                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                            shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.markOutcomeManually(resolution: resolution, bounced: bounced) }
         model.resumePausedRecipients()
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -97,10 +71,10 @@ enum ProspectMutations {
     // land (L12).
     @discardableResult
     static func recordOutcome(_ item: QueueItem, _ outcome: ShowOutcome,
-                              prospects: [Prospect], context: ModelContext,
+                              shows: some ShowResolver, context: ModelContext,
                               feedback: ActionFeedback,
                               undo: QueueUndoStack? = nil) -> Bool {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return false }
+        guard let model = shows.show(for: item, feedback: feedback) else { return false }
         guard ShowOutcome.menu(wasPitched: model.wasPitched).contains(outcome) else {
             feedback.acknowledge(ShowOutcome.refusedLine(outcome, org: item.groupName,
                                                          wasPitched: model.wasPitched),
@@ -132,7 +106,7 @@ enum ProspectMutations {
             // something else that night" is true of one night and says nothing about the others, so it
             // must not close rows it never judged (L11, and Dan's call recorded on #4030).
             if !RunNightDrop.isAboutOneNight(outcome) {
-                for sibling in siblings(of: item, in: prospects) {
+                for sibling in siblings(of: item, in: shows) {
                     sibling.markDismissed(reason: outcome)
                 }
             }
@@ -182,9 +156,9 @@ enum ProspectMutations {
     // Clears the contact-level record too, for the same reason `resumeStandDown` does: leaving the contacts
     // closed would keep the show reading as closed on a decision he just reversed.
     @discardableResult
-    static func reopenOutcome(_ item: QueueItem, prospects: [Prospect], context: ModelContext,
+    static func reopenOutcome(_ item: QueueItem, shows: some ShowResolver, context: ModelContext,
                               feedback: ActionFeedback) -> Bool {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return false }
+        guard let model = shows.show(for: item, feedback: feedback) else { return false }
         guard let had = model.showOutcome else { return false }
         model.showOutcome = nil
         // #2915: and its stamp, or the next close-out inherits this one's moment and a reply is compared
@@ -202,10 +176,10 @@ enum ProspectMutations {
     // caller anywhere in `mac/Overture`: it was reached only by its own tests, so the undo it was built
     // to provide was unreachable (L3). Found while generalising it to inquiries, and fixed here rather
     // than filed, because shipping a second unreachable function beside the first is not a fix.
-    static func detachConversation(_ item: QueueItem, _ recipientId: String, prospects: [Prospect],
+    static func detachConversation(_ item: QueueItem, _ recipientId: String, shows: some ShowResolver,
                                    context: ModelContext, feedback: ActionFeedback,
                                    now: Date = Date()) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+        guard let model = shows.show(for: item, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         switch DetachConversation.detach(recipient, on: model, now: now) {
         case .refused(let reason):
@@ -221,8 +195,8 @@ enum ProspectMutations {
     // email already belongs to an active or settled contact. The venue/org flags never block; they
     // only ride along in the confirmation banner.
     static func addRecipientManually(_ item: QueueItem, email: String, name: String?,
-                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                     shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
 
         // #2629: a ROUTE. An address still behaves exactly as it did; a contact form or a social profile
         // is now accepted too, because those are the ways in Dan actually has on the shows this control's
@@ -321,17 +295,17 @@ enum ProspectMutations {
     // store, and #1773's guard rightly refuses that spelling in the factory, which runs once per card per
     // render pass. And it reads the booking-history file, which is real disk work. Neither belongs on a
     // render path: the row calls this only when the editor is actually opened.
-    static func manualPrepPrefill(_ item: QueueItem, prospects: [Prospect]) -> ManualPrepPrefill.Result {
+    static func manualPrepPrefill(_ item: QueueItem, shows: some ShowResolver) -> ManualPrepPrefill.Result {
         // #4357 slice I2: by identity, and SILENT on a refusal, because this is a read for a sheet rather
         // than the result of a press, so a nil is an ordinary answer with nothing to acknowledge.
-        guard let model = ShowIdentity(item)?.resolve(in: prospects).show else {
+        guard let model = ShowIdentity(item)?.resolve(in: shows).show else {
             // No prospect behind this card is not "nothing was found": it is a lookup that could not run,
             // and saying "checked past emails and the booking sheet" would be a claim about work that
             // never happened (L11). The history is the half that genuinely could not be consulted.
             return ManualPrepPrefill.Result(filled: nil, suggestions: [], emptyReason: .historyUnreadable)
         }
         let history = LocalHistory.importedWithHealth()
-        return ManualPrepPrefill.build(for: model, amongst: prospects, history: history.records,
+        return ManualPrepPrefill.build(for: model, amongst: shows.everyShow, history: history.records,
                                        historyUnreadable: history.unreadable)
     }
 
@@ -388,8 +362,8 @@ enum ProspectMutations {
     // rewritten anyway.
     static func prepManually(_ item: QueueItem, email: String, name: String?,
                              subject: String, body: String, sendsTogether: Bool = true,
-                             prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                             shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
 
         // #3369: #901's gate stood here too, refusing Dan's OWN hand-written pitch for a night carrying a
         // clash. It is the clearest case for the decision of 2026-09-01: he is typing the email himself,
@@ -468,8 +442,8 @@ enum ProspectMutations {
     // address and the removal silently undoes itself. This is the one path both surfaces take (the
     // triage card and the draft-review panel), so a strike means the same thing wherever Dan makes it.
     static func removeRecipientManually(_ item: QueueItem, _ recipientId: String, _ name: String?,
-                                        prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                        shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         // #2438: recorded for a form-only contact too. It used to require an address, so striking one
         // whose only handle is a form fell straight through to the hard delete below, and a deleted
         // pending row is indistinguishable from one never found, so the next run put it back. Dan struck
@@ -495,9 +469,9 @@ enum ProspectMutations {
     // no Recipient row on this card at all. His call, 2026-08-09: striking one means "not for this
     // organisation", so it leaves every show that inherits it rather than only this one.
     static func removeInheritedAddress(_ item: QueueItem, email: String,
-                                       prospects: [Prospect], context: ModelContext,
+                                       shows: some ShowResolver, context: ModelContext,
                                        feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         // No organisation to attach it to means the address cannot have been inherited in the first
         // place, so there is nothing this could truthfully record. Refuse rather than guess at a nearby
         // scope (L75): a strike written against the wrong key silently spares the address it names and
@@ -515,8 +489,8 @@ enum ProspectMutations {
     }
 
     static func dismissContactReply(_ item: QueueItem, _ recipientId: String,
-                                    prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                    shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoReply() }
         model.resumePausedRecipients()
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -525,8 +499,8 @@ enum ProspectMutations {
     // Dan marked an auto-detected bounce as wrong (#398): revert it and remember that bounce
     // message so it does not re-flag, while a genuinely new bounce still will.
     static func dismissContactBounce(_ item: QueueItem, _ recipientId: String,
-                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                     shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.dismissAutoBounce() }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -534,8 +508,8 @@ enum ProspectMutations {
     // #388: Dan judged a specific "looks like the venue" heuristic guess to be wrong for this one
     // contact, unblocking it from sending.
     static func dismissVenueMatch(_ item: QueueItem, _ recipientId: String,
-                                  prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                  shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikeVenueDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -552,17 +526,17 @@ enum ProspectMutations {
     // record-a-DM path opens. Nothing here loosens #2147: the app still never CLAIMS a route nobody tied
     // to the show, it now knows when somebody did.
     static func confirmGuessedProfile(_ item: QueueItem, _ recipientId: String,
-                                      prospects: [Prospect], context: ModelContext,
+                                      shows: some ShowResolver, context: ModelContext,
                                       feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.nameMatchOnlyDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     // #722: same shape as dismissVenueMatch above, for a suspected press/media contact.
     static func dismissPressContactMatch(_ item: QueueItem, _ recipientId: String,
-                                         prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                         shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikePressContactDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -570,8 +544,8 @@ enum ProspectMutations {
     // #726: Dan judged a specific "looks like a duplicate outreach" heuristic guess to be wrong
     // for this one contact, unblocking it from sending.
     static func dismissDuplicateContactMatch(_ item: QueueItem, _ recipientId: String,
-                                             prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                             shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikeDuplicateContactDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -580,8 +554,8 @@ enum ProspectMutations {
     // a confident find down for naming no page stops speaking for it and the card stops calling it
     // unverified. The three above unblock a send; this one corrects a claim, which is the only difference.
     static func dismissConfidenceHeldDown(_ item: QueueItem, _ recipientId: String,
-                                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                          shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.heldDownToUnverifiedDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -590,9 +564,9 @@ enum ProspectMutations {
     // answer about THIS address, like the four guards beside it, and the next ingest asks again only if
     // the address or the name actually changes.
     static func dismissAddressInAnotherName(_ item: QueueItem, _ recipientId: String,
-                                            prospects: [Prospect], context: ModelContext,
+                                            shows: some ShowResolver, context: ModelContext,
                                             feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.looksLikeAnotherPersonsDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -637,12 +611,12 @@ enum ProspectMutations {
     // the card's on a second, unscoped copy of the same three lines, so pressing Draft a reply on a card
     // drafted every waiting conversation. There is no unscoped version left for a caller to reach: the
     // scope is built here from the arguments naming the conversation, not asked of the caller.
-    static func draftReply(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
+    static func draftReply(_ naturalKey: String, _ recipientId: String, shows: some ShowResolver,
                            context: ModelContext, feedback: ActionFeedback,
                            // #2975: wrapped rather than named directly, because `launchReplyDrafter`
                            // now carries its own defaulted seams and no longer has this narrower shape.
                            start: ReplyDraftLaunch = { try launchReplyDrafter($0, $1) }) {
-        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback),
+        guard let model = shows.show(forKey: naturalKey, org: nil, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         // #4208: held so a launch that starts nothing can put them back. The request stamp is what tells a
         // newer message from them apart from the draft on file (`replyPostdatesDraftRequest`), so moving
@@ -671,14 +645,14 @@ enum ProspectMutations {
     }
 
     static func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String,
-                               prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                               shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.applyReplyDraftEdit(body) }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func copyReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+    static func copyReply(_ item: QueueItem, _ recipientId: String, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               let body = recipient.replyDraftBody, !body.isEmpty else { return }
         NSPasteboard.general.clearContents()
@@ -703,9 +677,9 @@ enum ProspectMutations {
     // skips the clipboard entirely. The control is only ever offered after a copy anyway; the refusal is
     // what makes that a property of the mutation rather than of the one screen that calls it.
     static func confirmCopiedReplySent(_ item: QueueItem, _ recipientId: String,
-                                       prospects: [Prospect], context: ModelContext,
+                                       shows: some ShowResolver, context: ModelContext,
                                        feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+        guard let model = shows.show(for: item, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               recipient.replyCopiedAt != nil else { return }
         // #2191: the same routine the in-app send runs, so answering by pasting into Gmail clears the
@@ -722,8 +696,8 @@ enum ProspectMutations {
     // the row into the state that waits on his answer. It records NO outreach: nothing has been sent
     // yet, and claiming otherwise here is exactly the lie the confirm step exists to prevent.
     static func beginFormPitch(_ item: QueueItem, _ recipientId: String, _ formURL: String,
-                               prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+                               shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               let pitch = OutgoingPitch.text(for: recipient, of: model) else { return }
         NSPasteboard.general.clearContents()
@@ -738,8 +712,8 @@ enum ProspectMutations {
 
     // Step two: he says he sent it. This is the moment the outreach becomes real.
     static func recordFormPitch(_ item: QueueItem, _ recipientId: String,
-                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+                                shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }),
               model.recordFormOutreach(recipient, now: Date(), formURL: recipient.contactFormURL) else { return }
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
@@ -749,8 +723,8 @@ enum ProspectMutations {
     // ...or he says he didn't, which puts the row back exactly where it was rather than leaving it in a
     // half state he has to come back to.
     static func cancelFormPitch(_ item: QueueItem, _ recipientId: String,
-                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+                                shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         // ONE direction, and #3069 is why. This button is drawn only on `.awaitingConfirmation`, which
         // proves the record has not been made yet, so backing out is all there ever is to do here. The
@@ -833,8 +807,8 @@ enum ProspectMutations {
     // that leaves a row untriaged (L370).
     //
     // THE FRONTING ROW IS EXCLUDED, and that is load bearing rather than tidiness. Every caller has
-    // already acted on it through `model(for:)`, and `setStatus` runs this loop BEFORE it reads the row's
-    // prior status: a set including the front row would clear its dismissal first, so the undo entry
+    // already acted on it through `ShowResolver.show(for:)`, and `setStatus` runs this loop BEFORE it reads
+    // the row's prior status: a set including the front row would clear its dismissal first, so the undo entry
     // would record the state the press had just produced and Cmd+Z would restore nothing (#3566 is why
     // the prior state is read first at all). `undoingTheKeepOnACollapsedCardStillRestoresWhatItWas`
     // asserts it; the mutation putting the front row back is CAUGHT by that test alone.
@@ -843,17 +817,17 @@ enum ProspectMutations {
     // they did before this issue on the ordinary row.
     // #4357 slice I2: the members are held as KEYS (`QueueItem.collapsedMemberKeys`), so each resolves
     // through the identity the rows hold for it, never by a filter over the keys themselves.
-    private static func siblings(of item: QueueItem, in prospects: [Prospect]) -> [Prospect] {
+    private static func siblings(of item: QueueItem, in shows: some ShowResolver) -> [Prospect] {
         guard !item.collapsedMemberKeys.isEmpty else { return [] }
         let others = item.collapsedMemberKeys.filter { $0 != item.id }
         guard !others.isEmpty else { return [] }
-        return prospects.shows(forKeys: others)
+        return shows.shows(forKeys: others)
     }
 
     static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: ShowOutcome?,
-                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                          shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback,
                           undo: QueueUndoStack? = nil, undoLabel: String? = nil) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         // #4030: a KEEP on a collapsed card keeps every row the card stands for. Dan's call, 2026-09-22,
         // with the alternative in front of him: the card is the only one drawn for the group, so keeping
         // the front row alone would leave the hidden copies undecided, and they come back as untriaged
@@ -864,7 +838,7 @@ enum ProspectMutations {
         // `aboutOneNight`, #2691), which is settled below in `recordOutcome`, and a status change that is
         // neither (approve, unapprove, skip draft) says nothing about the other rows.
         if status == .queued {
-            for sibling in siblings(of: item, in: prospects) {
+            for sibling in siblings(of: item, in: shows) {
                 sibling.clearDismissal(to: status)
                 sibling.clearConflict()
             }
@@ -919,7 +893,7 @@ enum ProspectMutations {
     @discardableResult
     static func dismissAll(_ keys: [String], reason: ShowOutcome, dateLabel: String,
                            nightDate: String? = nil,
-                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                           shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback,
                            undo: QueueUndoStack? = nil, now: Date = Date(),
                            export: DayOffEditing.Export = DownbeatBridge.loadedExport())
         -> DayOffOfferRequest.Pending? {
@@ -928,7 +902,7 @@ enum ProspectMutations {
         // ("assume it runs twice"). An entry describing a dismissal that did not happen would spend the
         // next Cmd+Z doing nothing while looking exactly like a working undo.
         // #4357 slice I2: the night's rows are held as keys, so each resolves through its identity.
-        let targets = prospects.shows(forKeys: keys)
+        let targets = shows.shows(forKeys: keys)
             .filter { !($0.status == .dismissed && $0.showOutcome == reason) }
         guard !targets.isEmpty else { return nil }
         // #1743: read BEFORE anything moves. A night already blocked shows as a clash on the night itself
@@ -1069,7 +1043,7 @@ enum ProspectMutations {
     // always means he'll block it, so a modal he acts on is right. It is still an offer, never automatic:
     // nothing is blocked until he confirms in the picker (or he closes it with Not now).
     static func dismissForReason(_ item: QueueItem, _ reason: ShowOutcome,
-                                 prospects: [Prospect], context: ModelContext,
+                                 shows: some ShowResolver, context: ModelContext,
                                  feedback: ActionFeedback, offer: DayOffOfferRequest,
                                  undo: QueueUndoStack? = nil, now: Date = Date(),
                                  export: DayOffEditing.Export = DownbeatBridge.loadedExport()) {
@@ -1081,7 +1055,7 @@ enum ProspectMutations {
         // #4357 slice I2: resolved SILENTLY here, by identity, because a refusal falls through to
         // `setStatus` below, which resolves the same card again and is the one that says why.
         if RunNightDrop.isAboutOneNight(reason),
-           let model = ShowIdentity(item)?.resolve(in: prospects).show {
+           let model = ShowIdentity(item)?.resolve(in: shows).show {
             let priorStatus = model.status
             let priorReason = model.showOutcomeRaw
             // #3566: and WHEN that ending was recorded, so an undo cannot leave a stamp behind an ending it cleared.
@@ -1178,7 +1152,7 @@ enum ProspectMutations {
                 return
             }
         }
-        setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback,
+        setStatus(item, .dismissed, reason, shows: shows, context: context, feedback: feedback,
                   undo: undo, undoLabel: "Dismiss")
         // #2373: the offer covers the dismissed night and nothing else. The engagement sweep that used to
         // stand here (#939) fed a widening the rule no longer performs, so it is gone with it.
@@ -1276,8 +1250,8 @@ enum ProspectMutations {
     }
 
     static func saveDraft(_ item: QueueItem, _ subject: String, _ body: String,
-                         prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                         shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.applyEdit(subject: subject, body: body)
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1286,8 +1260,8 @@ enum ProspectMutations {
     // rather than a plain flag, so a show he has never touched still reads as the default rather than as a
     // decision he made.
     static func setSendsTogether(_ item: QueueItem, _ together: Bool,
-                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                 shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.sendsTogetherOverride = together
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1299,12 +1273,12 @@ enum ProspectMutations {
     // #1824: async, because the launch now renders this show's own listing page before starting the run, so
     // the draft is grounded in what the show actually is. The caller awaits it from a task rather than
     // blocking the click.
-    static func reprep(_ item: QueueItem, mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+    static func reprep(_ item: QueueItem, mode: ReprepMode, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback,
                        now: Date = Date(),
                        startPrep: @MainActor (ModelContext, Date, Set<String>) async throws -> Void = { ctx, now, keys in
                            _ = try await PrepQueueService.startPrep(from: ctx, now: now, includedKeys: keys)
                        }) async {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
 
         // #3369: the clash guard that stood here is gone with the gate it enforced. It existed because
         // `needsPrep` refused a clashed show before reading the re-prep flags, so a request set here would
@@ -1344,8 +1318,11 @@ enum ProspectMutations {
     // draft, not yet contacted or dismissed, no re-prep already pending, and not served within the
     // cooldown window. Shared by RootView's menu-disabled check and bulkReprep itself, so what the
     // menu shows enabled always agrees with what a tap would actually queue.
-    static func bulkReprepEligible(_ prospects: [Prospect], now: Date) -> [Prospect] {
-        prospects.filter {
+    //
+    // #4357 slice I2: over `everyShow`, the one resolver requirement that hands back every row rather than
+    // resolving one, because a bulk action acts on all of them and has no card to resolve.
+    static func bulkReprepEligible(_ shows: some ShowResolver, now: Date) -> [Prospect] {
+        shows.everyShow.filter {
             $0.hasDraft && ($0.status == .drafted || $0.status == .approved)
                 && !$0.reprepDraftRequested && !$0.reprepContactsRequested
                 && !ReprepRequest.isInCooldown(lastServedAt: $0.reprepLastServedAt, now: now)
@@ -1356,9 +1333,11 @@ enum ProspectMutations {
     // prospect is already covered by the normal Prep flow and is skipped rather than
     // double-flagged. #733: also silently skips anything already pending or re-prepped within the
     // cooldown window, reporting the skip in the confirmation rather than a per-prospect dialog.
-    static func bulkReprep(_ mode: ReprepMode, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback, now: Date = Date()) {
-        let baseEligible = prospects.filter { $0.hasDraft && ($0.status == .drafted || $0.status == .approved) }
-        let eligible = bulkReprepEligible(prospects, now: now)
+    static func bulkReprep(_ mode: ReprepMode, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback, now: Date = Date()) {
+        // Read once and judged twice, so the two counts the confirmation compares come from one read.
+        let every = shows.everyShow
+        let baseEligible = every.filter { $0.hasDraft && ($0.status == .drafted || $0.status == .approved) }
+        let eligible = bulkReprepEligible(every, now: now)
         guard !eligible.isEmpty else {
             if baseEligible.isEmpty {
                 feedback.acknowledge(ActionAck.bulkReprepNothingEligible, tone: .warning)
@@ -1390,8 +1369,8 @@ enum ProspectMutations {
     }
 
     static func correctClassification(_ item: QueueItem, discipline: Discipline,
-                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                      shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         // #2688: the context is passed, so the correction is RECORDED as well as applied. Without it
         // every correction Dan makes is spent on the row he is looking at and the same unreadable title
         // comes back next week.
@@ -1407,8 +1386,8 @@ enum ProspectMutations {
     // is deliberately left alone: it stays scout-name-derived, so the next scout's exact-key match still
     // finds this row and never inserts a duplicate.
     static func renameGroup(_ item: QueueItem, to newName: String,
-                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                            shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if model.scoutGroupName == nil { model.scoutGroupName = model.groupName }
@@ -1421,8 +1400,8 @@ enum ProspectMutations {
 
     // #1274: hand the name back to the scout. Restore the latest tracked scout name (kept current by
     // ScoutService.apply) and clear the override so future scouts own the name again.
-    static func resetGroupName(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func resetGroupName(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         if let scoutName = model.scoutGroupName { model.groupName = scoutName }
         model.groupNameOverriddenByDan = false
         if context.saveOrWarn(org: model.groupName, feedback: feedback) {
@@ -1433,14 +1412,14 @@ enum ProspectMutations {
 
     // "Remind me later" for ONE contact: steps just that contact's reminder forward, without sending.
     static func remindRecipientLater(_ item: QueueItem, _ recipientId: String,
-                                     prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+                                     shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.updateRecipient(id: recipientId) { $0.remindLater(now: Date()) }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func confirmBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func confirmBooking(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.outcome = .booked
         model.outcomeSourceRaw = OutcomeSource.manual.rawValue
         model.outcomeAt = Date()
@@ -1449,8 +1428,8 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func dismissBookingSuggestion(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func dismissBookingSuggestion(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.bookingSuggested = false
         model.bookingSuggestionDismissed = true
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -1465,8 +1444,8 @@ enum ProspectMutations {
     // Offered with an Undo, on the #845 principle: this is the action that lets an email go out for a
     // night he cannot work, so a mis-click has to be reversible from the banner it happened in, rather
     // than needing him to find the row again and work out how to put the flag back.
-    static func clearConflict(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+    static func clearConflict(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback),
               model.hasUnclearedConflict else { return }   // nothing to clear, and nothing to pre-approve
         model.clearConflict()
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
@@ -1478,8 +1457,8 @@ enum ProspectMutations {
         }
     }
 
-    static func dismissAlreadyCoveredFlag(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func dismissAlreadyCoveredFlag(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.alreadyCoveredDismissed = true
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1488,18 +1467,18 @@ enum ProspectMutations {
     // OrgDoNotContact, which needs every prospect so it can reach the org's OTHER shows: protecting
     // the next scout while leaving three of their shows drafted and ready to send in the queue would
     // be a feature that looks like it works and still sends the email.
-    static func setOrgDoNotContact(_ item: QueueItem, _ on: Bool, prospects: [Prospect],
+    static func setOrgDoNotContact(_ item: QueueItem, _ on: Bool, shows: some ShowResolver,
                                    context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         // #802: the refusal now also takes the org off the WATCHLIST, or a standing watchlist would
         // re-check their calendar every run forever and keep putting their shows in front of Dan.
         // Nothing would send, but that is not what "we'll leave you alone" means. The sources are
         // fetched here because this is where a ModelContext exists; OrgDoNotContact stays pure.
         let sources = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
         if on {
-            OrgDoNotContact.mark(orgOf: model, in: prospects, sources: sources)
+            OrgDoNotContact.mark(orgOf: model, in: shows.everyShow, sources: sources)
         } else {
-            OrgDoNotContact.unmark(orgOf: model, in: prospects, sources: sources)
+            OrgDoNotContact.unmark(orgOf: model, in: shows.everyShow, sources: sources)
         }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1514,15 +1493,15 @@ enum ProspectMutations {
     // have), so the returned Bool is the only thing that distinguishes a real change from a no-op, and
     // it is what an undo stack (#1413) must consult before offering to reverse one of these.
     @discardableResult
-    static func confirmPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) -> Bool {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+    static func confirmPerformerMatch(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) -> Bool {
+        guard let model = shows.show(for: item, feedback: feedback),
               model.confirmPerformerMatch() else { return false }
         return context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
     @discardableResult
-    static func dismissPerformerMatch(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) -> Bool {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+    static func dismissPerformerMatch(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) -> Bool {
+        guard let model = shows.show(for: item, feedback: feedback),
               model.dismissPerformerMatch() else { return false }
         return context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1535,8 +1514,8 @@ enum ProspectMutations {
     // Written PER RECIPIENT, and deliberately not on the show, because `effectiveBody` is per recipient:
     // a performer with their own letter can be held while the shared body is fine, and a show-level flag
     // would wave through text nobody looked at (L83).
-    static func overrideGreeting(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func overrideGreeting(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         for r in model.recipients where r.sendState == .pending && r.isBlockedByGreeting {
             r.greetingOverriddenBody = r.effectiveBody
         }
@@ -1549,8 +1528,8 @@ enum ProspectMutations {
     // to different text silently reinstates the block with no extra reset logic. Only recipients that
     // are actually blocked and still pending are touched: a clean recipient gains no stale override,
     // and one already sent is left alone.
-    static func overrideDraftLint(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func overrideDraftLint(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         for r in model.recipients where r.sendState == .pending && r.isBlockedByDraftLint {
             r.lintOverriddenBody = r.effectiveBody
         }
@@ -1559,9 +1538,9 @@ enum ProspectMutations {
 
     // #3326 (plan 2.8): the second way out of a draft naming a night Dan skipped: pitch that night after
     // all. Through the one writer, recorded as `chosen` because he pressed it, and saved or said.
-    static func pitchNightAfterAll(_ item: QueueItem, night: String, prospects: [Prospect],
+    static func pitchNightAfterAll(_ item: QueueItem, night: String, shows: some ShowResolver,
                                    context: ModelContext, feedback: ActionFeedback, now: Date = Date()) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         do {
             try model.recordNightDecisions(pitched: [NightDecision(night: night, at: now, origin: .chosen)],
                                            skipped: [])
@@ -1572,14 +1551,14 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func rejectBooking(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func rejectBooking(_ item: QueueItem, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.rejectAutoBooking(bookingId: model.autoBookedFromBookingId, now: Date())
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func setLostReason(_ item: QueueItem, _ reason: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+    static func setLostReason(_ item: QueueItem, _ reason: String, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback) {
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         model.lostReason = QueueModel.normalizedLostReason(reason)
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
@@ -1609,7 +1588,7 @@ enum ProspectMutations {
     // and is still rendered by Review (StageNavigation now holds a show there until every contact has been
     // emailed), which is the disappearance this issue was filed about. Approving only what is still
     // `.drafted` keeps this idempotent, so a retry on an already-approved show does not re-approve it.
-    static func approveAndSend(_ item: QueueItem, prospects: [Prospect], context: ModelContext,
+    static func approveAndSend(_ item: QueueItem, shows: some ShowResolver, context: ModelContext,
                                feedback: ActionFeedback,
                                selecting: [String]? = nil, together: Bool? = nil,
                                sender: MailSender = liveSender(),
@@ -1617,13 +1596,13 @@ enum ProspectMutations {
                                clearSending: @escaping (String) -> Void,
                                onNeedsReconnect: @escaping () -> Void,
                                onSent: @escaping (_ naturalKey: String, _ fullySent: Bool) -> Void = { _, _ in }) {
-        guard let model = model(for: item, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(for: item, feedback: feedback) else { return }
         if model.status == .drafted {
             // Through the same setter every other status change uses, so approving here cannot quietly
             // skip the bookkeeping (the dismissal fields, the conflict rules) that setter owns.
-            setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback)
+            setStatus(item, .approved, nil, shows: shows, context: context, feedback: feedback)
         }
-        performSend(item.id, prospects: prospects, context: context, feedback: feedback,
+        performSend(item.id, shows: shows, context: context, feedback: feedback,
                     selecting: selecting, together: together, sender: sender,
                     markSending: markSending, clearSending: clearSending,
                     onNeedsReconnect: onNeedsReconnect, onSent: onSent)
@@ -1631,7 +1610,7 @@ enum ProspectMutations {
 
     // #2017: `selecting` is the contacts Dan ticked on the send sheet, and `together` the choice he made
     // there. Both nil leaves the path every other caller uses untouched.
-    static func performSend(_ naturalKey: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+    static func performSend(_ naturalKey: String, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback,
                            selecting: [String]? = nil, together: Bool? = nil,
                            sender: MailSender = liveSender(),
                            markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,
@@ -1640,7 +1619,7 @@ enum ProspectMutations {
                            // left). The queue plays its leaving delight only when the row actually departs, so a
                            // partial send on a multi-recipient show (still someone pending) does not trigger it.
                            onSent: @escaping (_ naturalKey: String, _ fullySent: Bool) -> Void = { _, _ in }) {
-        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback) else { return }
+        guard let model = shows.show(forKey: naturalKey, org: nil, feedback: feedback) else { return }
         // Written at the COMMIT, not as he flips it, so cancelling the sheet changes nothing about the show.
         if let together { model.sendsTogetherOverride = together }
         // #4502: the DAY of the press, taken once before the signature refresh's await, so the ticks, the send
@@ -1665,11 +1644,11 @@ enum ProspectMutations {
         }
     }
 
-    static func sendReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+    static func sendReply(_ item: QueueItem, _ recipientId: String, shows: some ShowResolver, context: ModelContext, feedback: ActionFeedback,
                           sender: MailSender = liveSender(),
                           markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,
                           onNeedsReconnect: @escaping () -> Void) {
-        guard let model = model(for: item, in: prospects, feedback: feedback),
+        guard let model = shows.show(for: item, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         markSending(recipientId)
         Task {
@@ -1691,12 +1670,12 @@ enum ProspectMutations {
     // the day this send happens on. That mattered the moment nudge eligibility started depending on
     // whether the show is still ahead: the only way to test it was a fixture dated in the future, which
     // is a literal date that ages into the past and takes the test with it.
-    static func sendFollowUp(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
+    static func sendFollowUp(_ naturalKey: String, _ recipientId: String, shows: some ShowResolver,
                              context: ModelContext, feedback: ActionFeedback,
                              sender: MailSender = liveSender(), body: String? = nil,
                              now: Date = Date(),
                              markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
-        guard let model = model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback),
+        guard let model = shows.show(forKey: naturalKey, org: nil, feedback: feedback),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         let org = model.groupName
         markSending(recipientId)

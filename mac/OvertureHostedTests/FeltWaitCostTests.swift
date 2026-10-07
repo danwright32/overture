@@ -197,7 +197,7 @@ struct FeltWaitCostTests {
     private func warmTheList(_ ctx: ModelContext, keys: [String], rows: Int, in hosting: NSView) -> Bool {
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         ProspectMutations.dismissAll([keys[keys.count - 1]], reason: .notAFit, dateLabel: "1 Aug",
-                                     prospects: all, context: ctx, feedback: ActionFeedback())
+                                     shows: all, context: ctx, feedback: ActionFeedback())
         return pumpUntilCardsBuilt(rows - 1, from: 0, in: hosting, seconds: 90)
     }
 
@@ -230,7 +230,7 @@ struct FeltWaitCostTests {
             let settledCards = QueueRenderPass.WorkTally.current?.queueItems ?? 0
             let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
             ProspectMutations.dismissAll([keys[0]], reason: .notAFit, dateLabel: "1 Aug",
-                                         prospects: rows, context: ctx, feedback: ActionFeedback())
+                                         shows: rows, context: ctx, feedback: ActionFeedback())
             // Two fewer than the corpus: the warm-up dismissed one and this press dismisses another, and
             // both leave the queue's own scope.
             rebuiltAfterThePress = pumpUntilCardsBuilt(38, from: settledRows, in: hosting, seconds: 20)
@@ -400,7 +400,7 @@ struct FeltWaitCostTests {
             //    saveOrWarn committing it.
             let pressed = Date()
             ProspectMutations.dismissAll([keys[0]], reason: .notAFit, dateLabel: "1 Aug",
-                                         prospects: rows, context: ctx, feedback: ActionFeedback())
+                                         shows: rows, context: ctx, feedback: ActionFeedback())
             writeSeconds = Date().timeIntervalSince(pressed)
 
             // 2. EVERYTHING AFTER: the query invalidating, the rebuild, and SwiftUI rendering the result.
