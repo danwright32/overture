@@ -48,7 +48,10 @@ struct NativeExtractorEndToEndTests {
         let listing = try await extractor.extract()
 
         #expect(listing.verdict == .upcomingListings)
-        #expect(listing.events.count == 2)
+        // #4522: REQUIRED before the index reads below. An `#expect` records the miss and carries on, and
+        // `events[0]` on an empty listing then traps and takes the whole test process down with it, which is
+        // what restarted the shifted suite three times and left neighbouring tests reading as failed.
+        try #require(listing.events.count == 2)
 
         let glimmerglass = listing.events[0]
         #expect(glimmerglass.title == "Fellow Travelers")
@@ -72,7 +75,7 @@ struct NativeExtractorEndToEndTests {
         let listing = try await venueTixExtractor().extract()
 
         #expect(listing.verdict == .upcomingListings)
-        #expect(listing.events.count == 2)
+        try #require(listing.events.count == 2)   // #4522: before indexing, for the reason given above
 
         let luigi = listing.events[0]
         #expect(luigi.title == "Luigi: The Musical")
@@ -89,13 +92,17 @@ struct NativeExtractorEndToEndTests {
     // keeps passing nil and every Green Room 42 card stays linkless while the adapter's own test is green.
     @Test func venueTixEventsReachTheListingCarryingTheirOwnPageLink() async throws {
         let listing = try await venueTixExtractor().extract()
-        #expect(listing.events[0].sourceUrl == "https://thegreenroom42.venuetix.com/showdetails/s1/a1")
+        let first = try #require(listing.events.first)   // #4522: an empty listing fails here, never traps
+        #expect(first.sourceUrl == "https://thegreenroom42.venuetix.com/showdetails/s1/a1")
     }
 
     // The join reaches the SAME boundary the agent path does: every mapped event survives the ingest guard,
     // so these bytes go on to become prospects rather than being silently dropped downstream.
     @Test func mappedEventsSurviveTheIngestGuard() async throws {
-        for event in try await venueTixExtractor().extract().events {
+        let events = try await venueTixExtractor().extract().events
+        // #4522: an empty listing would pass the loop below having examined nothing (L98).
+        try #require(events.count == 2)
+        for event in events {
             #expect(ExtractedEventGuard.isUsable(event), "\(event.title) should survive the boundary guard")
         }
     }
