@@ -41,8 +41,7 @@ struct AMovedCardIsNeverAnimatedAcrossItsNeighboursTests {
     }
 
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     // One night of three. The target leads on fit with no genre read; the genre correction rescoring it

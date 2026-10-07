@@ -30,8 +30,7 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
     private static let rows = 30
 
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     private func seed(_ ctx: ModelContext) throws -> [Prospect] {

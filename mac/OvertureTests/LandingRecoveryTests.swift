@@ -30,7 +30,7 @@ final class LandingRecoveryTests {
     }
 
     private func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 30 + n, to: started)!)
+        ScoutTestClock.day(30 + n, after: started)
     }
 
     @discardableResult
@@ -172,7 +172,7 @@ final class LandingRecoveryTests {
         #expect(try titles(c) == ["Recital a 0", "Recital a 1"])
 
         // A month later: night(0) has passed, night(1) is that very day.
-        let monthLater = Calendar(identifier: .gregorian).date(byAdding: .day, value: 31, to: started)!
+        let monthLater = EasternDate.calendar.date(byAdding: .day, value: 31, to: started)!
         let recovered = await recover(ctx, f, at: monthLater)
         guard case .landed? = recovered else {
             Issue.record(Comment(rawValue: "the replay gave \(String(describing: recovered))"))

@@ -50,8 +50,7 @@ struct AScoutRunDerivesTheQueueOnceTests {
     // From the real clock, because the queue reads the real clock: past dates would put every show outside
     // the lead time window and the queue would derive over nothing (L130).
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     private func seed(_ ctx: ModelContext) {

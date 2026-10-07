@@ -31,8 +31,7 @@ private final class ReadCount: @unchecked Sendable {
 @Suite("A scout reads the show table a fixed number of times, however many sources land (#4275)")
 struct ScoutLandingReadsOnceTests {
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: 20 + n, to: Date())!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(20 + n, after: Date())
     }
 
     private static func events(for id: String) -> [ExtractedEvent] {
