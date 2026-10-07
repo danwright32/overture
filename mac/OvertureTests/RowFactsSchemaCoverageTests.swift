@@ -162,6 +162,11 @@ struct RowFactsHoldNoModelTests {
     /// Every path under `value` at which a `PersistentModel` sits.
     static func models(in value: Any, path: String, depth: Int = 0) -> [String] {
         if value is any PersistentModel { return [path] }
+        // #4357 step 5: a store identifier is a VALUE naming its row, the opposite of a live model, but an
+        // unsaved row's TEMPORARY identifier carries its model's TYPE inside it, which reads as a model to the
+        // test above. Measured: every identity a pass over unsaved rows published was reported at
+        // `showID.id.backing.temporaryIdentifier._modelType`. So the walk stops at an identifier.
+        if value is PersistentIdentifier { return [] }
         guard depth < 16 else { return [] }
         var found: [String] = []
         for (index, child) in Mirror(reflecting: value).children.enumerated() {
@@ -250,6 +255,160 @@ struct RowFactsHoldNoModelTests {
             }
         }
         #expect(fields > 250, "too few fields were read for the scan to have covered the value types")
+        #expect(offenders.isEmpty, Comment(rawValue: offenders.joined(separator: "\n")))
+    }
+}
+
+// #4357 step 5 (plan v7 Phase 3): the same guard, extended from the retained row to what the pass PUBLISHES:
+// `QueueView.RenderData`, the cards in it (`QueueItem`) and the card store (`CardStore`).
+//
+// The same three checks as above, each where it can apply. `RenderData` and the card store are not `Sendable`
+// (the store is a class that builds a missed card while drawing), so the compiler says nothing about them and
+// the walk and the scan carry the whole of it there. The walk over a whole pass runs in `TermsOverFactsTests`
+// (`aPopulatedPassHoldsAModelOnlyWhereItIsStillAllowed`), because that is where the fixture lives in which
+// every pill and stage counts something.
+//
+// THREE MEMBERS STILL HOLD A MODEL, named below with the issue that takes each out, and nothing else may.
+// Each is a reason, not a convenience: the card store needs a value for every row in scope and only the
+// engine retains them (a store over facts built by today's pass would extract every row on every pass, which
+// the live store cost probe prices); the other two carry an `Inquiry`, which has no identity to resolve a
+// press through yet.
+@Suite("What the queue pass publishes holds no model (#4357)")
+@MainActor
+struct OutputsHoldNoModelTests {
+
+    /// The RenderData members still allowed a model, each with the issue that takes it out.
+    static let stillHoldingAModel: [String: String] = [
+        "cards": "#4358: today's pass hands the card store its models; the engine's pass hands it RowFacts",
+        "reachedOutList": "#4579 and #4371: its rows draw from the live show, contact and inquiry",
+        "inquiriesByRowID": "#4579: an inquiry has no identity to resolve a press through yet",
+    ]
+
+    @Test func thePublishedValueTypesAreSendable() {
+        RowFactsHoldNoModelTests.requireSendable(QueueItem.self)
+        RowFactsHoldNoModelTests.requireSendable(RecipientSnapshot.self)
+        RowFactsHoldNoModelTests.requireSendable(QueueScopeRow.self)
+        RowFactsHoldNoModelTests.requireSendable(ShowIdentity.self)
+        RowFactsHoldNoModelTests.requireSendable(ReachedOutSnapshot.self)
+    }
+
+    static func preamble() -> QueueModel.CardPreamble {
+        QueueModel.CardPreamble(linked: [:], inherited: [:],
+                                venueBrands: ProducerGate.VenueBrands(shows: [], overrides: .none),
+                                rowCounts: [:], calendarBySourceId: [:], overrides: .none, clients: .none,
+                                contradictedCancellations: [], sameShowGroups: [:], titlesByKey: [:],
+                                collapsedFronts: [:], collapsedHidden: [], laterLookalikesByKey: [:],
+                                nightsByKey: [:], now: Date(timeIntervalSince1970: 1_790_000_000), day: "2026-10-01")
+    }
+
+    /// A store over this row with every member set: one prebuilt card, the row's contacts, a requested key set
+    /// and a registry, so the walk below has something in each place a model could sit.
+    static func store<Row: ProspectFacts>(over row: Row, preamble pre: QueueModel.CardPreamble) -> QueueModel.CardStore {
+        QueueModel.CardStore(cards: [row.naturalKey: QueueModel.card(row, among: row.factContacts, preamble: pre)],
+                             shows: [row], contactsByKey: [row.naturalKey: row.factContacts], preamble: pre,
+                             requestedKeys: [row.naturalKey], registry: QueueModel.CardKeyRegistry())
+    }
+
+    @Test func aCardStoreOverFactsHoldsNoModelAndBuildsTheModelsCard() throws {
+        let container = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
+        let (show, contacts, _) = try FactsFixture.liveRow(variant: 1, in: container.mainContext)
+        // The fixture writes each string field with its own name, so both contacts would share the id "id",
+        // which the card's own grouping refuses (it traps on a duplicate key). Two distinct addresses instead.
+        for (index, contact) in contacts.enumerated() { contact.id = "contact\(index)@example.invalid" }
+        try container.mainContext.save()
+        let facts = RowFacts.extract(show)
+        let pre = Self.preamble()
+        let overFacts = Self.store(over: facts, preamble: pre)
+
+        // Positive control (L159): every stored member of the store holds something, and the sources reach the
+        // show and both its contacts, so a model in any of them would be in reach of the walk.
+        let empty = Mirror(reflecting: overFacts).children
+            .filter { !RowFactsHoldNoModelTests.isPopulated($0.value) }.compactMap(\.label)
+        #expect(empty.isEmpty, Comment(rawValue: "the store holds these members empty, so the walk sees nothing "
+            + "in them: " + empty.joined(separator: ", ")))
+        #expect(overFacts.contents.shows.count == 1 && overFacts.contents.contacts[show.naturalKey]?.count == 2,
+                "the store does not hold the show and both its contacts, so the walk reached less than it says")
+
+        let found = RowFactsHoldNoModelTests.models(in: overFacts, path: "CardStore")
+        #expect(found.isEmpty, Comment(rawValue: "a card store built over facts holds a live model at: "
+            + found.joined(separator: ", ")))
+
+        // The walk's own control, and what today's pass hands the store: built over the live show, it holds it.
+        let overModels = Self.store(over: show, preamble: pre)
+        #expect(!RowFactsHoldNoModelTests.models(in: overModels, path: "CardStore").isEmpty,
+                "the walk was handed a store holding the live show and did not report it")
+
+        // And a card the pass did not build comes out of a store over facts as it does out of one over models.
+        let row = QueueScopeRow(show, facts: RecipientFacts.of(show, contacts: show.factContacts))
+        let fromFacts = QueueModel.CardStore(cards: [:], shows: [facts], contactsByKey: [:], preamble: pre,
+                                             requestedKeys: []).card(for: row)
+        let fromModels = QueueModel.CardStore(cards: [:], shows: [show], contactsByKey: [:], preamble: pre,
+                                              requestedKeys: []).card(for: row)
+        #expect(fromFacts.showID == show.persistentModelID, "the missed card was not built from the show")
+        #expect(fromFacts.contacts.count == 2, "the missed card was built without the show's own contacts")
+        #expect(fromFacts == fromModels, Comment(rawValue: "a missed card over facts differs from one over the "
+            + "model in: " + QueueModel.differingFieldNames(fromFacts, fromModels).joined(separator: ", ")))
+        #expect(RowFactsHoldNoModelTests.models(in: fromFacts, path: "QueueItem").isEmpty,
+                "a card built over facts holds a live model")
+        withExtendedLifetime(container) {}
+    }
+
+    // The scan: a stored field whose DECLARED type names a model, on each published type, which sees a model
+    // field that happens to be empty at run time. A model name followed by a dot is a namespace
+    // (`Recipient.HoldReason` is an enum the card carries by value), not the model.
+    static let publishedTypes: [(file: String, declaration: String, owner: String)] = [
+        ("QueueView+Model.swift", "struct QueueItem:", "QueueItem"),
+        ("QueueView+Model.swift", "struct RecipientSnapshot:", "RecipientSnapshot"),
+        ("QueueView+Model.swift", "final class CardStore {", "CardStore"),
+        ("QueueView+Model.swift", "struct CardSourcesOf<", "CardSourcesOf"),
+        ("QueueScopeRow.swift", "struct QueueScopeRow:", "QueueScopeRow"),
+        ("QueueView.swift", "struct RenderData {", "RenderData"),
+    ]
+
+    @Test func noPublishedTypeDeclaresAFieldOfAModelType() throws {
+        let modelNames = AppSchema.models.map { String(describing: $0) }
+        let model = try Regex(#"\b("# + modelNames.joined(separator: "|") + #")\b(?!\.)"#)
+        let files = AppSourceWalk.appFiles().filter { file in Self.publishedTypes.contains { $0.file == file.name } }
+        #expect(Set(files.map(\.name)).count == 3, "the published types' source files were not all found")
+        var seen: [String: Int] = [:]
+        var offenders: [String] = []
+        for file in files {
+            var inside: (owner: String, indent: Int)?
+            for (line, code) in SwiftSource.scannableLines(in: file.text) {
+                let indent = code.prefix { $0 == " " }.count
+                let trimmed = code.trimmingCharacters(in: .whitespaces)
+                if inside == nil, let type = Self.publishedTypes.first(where: {
+                    $0.file == file.name && trimmed.hasPrefix($0.declaration)
+                }) {
+                    inside = (type.owner, indent)
+                    continue
+                }
+                guard let (owner, depth) = inside else { continue }
+                if trimmed == "}" && indent == depth { inside = nil; continue }
+                guard indent == depth + 4 else { continue }
+                var field = trimmed
+                for modifier in ["private(set) ", "private ", "fileprivate ", "nonisolated "] where field.hasPrefix(modifier) {
+                    field.removeFirst(modifier.count)
+                }
+                guard field.hasPrefix("let ") || field.hasPrefix("var "),
+                      let colon = field.firstIndex(of: ":") else { continue }
+                var declared = String(field[field.index(after: colon)...])
+                if let equals = declared.firstIndex(of: "=") { declared = String(declared[..<equals]) }
+                // A computed property is not storage.
+                if declared.contains("{") { continue }
+                let name = field.dropFirst(4).prefix { $0 != ":" }.trimmingCharacters(in: .whitespaces)
+                seen[owner, default: 0] += 1
+                guard declared.contains(model) else { continue }
+                if owner == "RenderData", Self.stillHoldingAModel[name] != nil { continue }
+                offenders.append("\(file.name):\(line) \(owner).\(name) is declared as\(declared)")
+            }
+        }
+        // Every type was found, and read deeply enough to have covered its fields (L98).
+        for type in Self.publishedTypes {
+            #expect(seen[type.owner, default: 0] >= 2, "too few fields of \(type.owner) were read to have covered it")
+        }
+        #expect(seen["QueueItem", default: 0] > 80 && seen["RenderData", default: 0] > 25,
+                "the scan read too few fields of the card or the pass to have covered them")
         #expect(offenders.isEmpty, Comment(rawValue: offenders.joined(separator: "\n")))
     }
 }

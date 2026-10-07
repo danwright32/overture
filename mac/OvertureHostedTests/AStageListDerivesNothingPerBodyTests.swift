@@ -109,7 +109,7 @@ final class AStageListDerivesNothingPerBodyTests {
         var reached: QueueView.RenderData?
         let built = QueueRenderPass.WorkTally.measure { reached = pass(t, stage: .reachedOut) }
         let served = try #require(reached)
-        let key = try #require(served.reachedOut.first?.prospect.naturalKey,
+        let key = try #require(served.reachedOut.first?.show.naturalKey,
                                "the fixture put no show on Reached out, so nothing below draws that list")
         #expect(built.stageListRows > 0 && built.sourceCalendarIndexBuilds > 0, Comment(rawValue:
             "building the Reached out pass examined \(built.stageListRows) list rows and built "

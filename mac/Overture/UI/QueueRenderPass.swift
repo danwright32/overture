@@ -514,7 +514,8 @@ enum QueueRenderPass {
             // #3507: the scope itself, so the render path reads the list this pass already derived rather
             // than deriving it again per row. Every caller that needs it during a render takes it from
             // here; only a user ACTION, which happens outside a pass, derives its own.
-            queueScope: inQueue.all,
+            // #4357 step 5: as identities, so what the pass publishes holds no model.
+            queueScope: inQueue.all.map { ShowIdentity($0) },
             // #3323: built once for the pass, from the WHOLE item set rather than the focused stage, so a
             // clash with a show in another stage still counts (#1246).
             selfBooking: QueueModel.selfBookingIndex(rows),
@@ -541,7 +542,9 @@ enum QueueRenderPass {
             prepRunning: i.prepSlotRunning,
             checkRunSince: i.checkRunSince,
             checkLookups: i.checkLookups,
-            reachedOut: reachedOut,
+            // #4357 step 5: the same list by identity. The models stay inside this function, where the
+            // terms above already read them.
+            reachedOut: reachedOut.map { ReachedOutSnapshot(show: $0.prospect, contact: $0.recipient, next: $0.next) },
             reachedOutKeys: reachedOutKeys,
             feedBreaks: feedBreaks,
             mergeSurvivorsDropped: mergeSurvivorsDropped,

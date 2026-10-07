@@ -3849,13 +3849,21 @@ enum QueueModel {
 
     // NOT `@MainActor`, and that is forced rather than chosen: `QueueModel.scope` is a nonisolated
     // synchronous function (it is a pure derivation over values, which is what makes its cost measurable
-    // at all), so a main-actor store could not be built from the very place the cards are built. It holds
-    // `Prospect` models and is only ever touched from the render path, exactly like `RenderData.queueScope`
-    // beside it.
+    // at all), so a main-actor store could not be built from the very place the cards are built. It is
+    // only ever touched from the render path.
+    //
+    // #4357 step 5 (plan v7 Phase 3): OVER FACTS, not over `Prospect`. What a missed card is built from is
+    // whatever rows the store was handed, through `CardSources`, so a store built over retained `RowFacts`
+    // holds no model at all (`OutputsHoldNoModelTests`), and the queue engine's pass (#4358) builds exactly
+    // that. TODAY'S PASS STILL HANDS IT THE MODELS, and that is measured rather than chosen: a store over
+    // facts built by the model pass would have to extract every row in scope on every pass, which the
+    // live store cost probe prices (`a store over facts, built by this pass`) at about a tenth of the
+    // narrowed pass, against the "no slower" rule this milestone holds every change to. The engine
+    // retains its facts across passes, so it pays nothing for the same store.
     final class CardStore {
         private var cards: [String: QueueItem]
-        private let showsByKey: [String: Prospect]
-        private let contactsByKey: [String: [Recipient]]
+        // The shows a card the pass did not prebuild is built FROM, and the contacts the pass read for each.
+        private let sources: any CardSources
         let preamble: CardPreamble
         // The keys the pass was ASKED to build, or nil for "every row", which is what a caller wanting
         // the whole set passes. A nil here can never produce an unexpected miss, because there was no
@@ -3869,13 +3877,17 @@ enum QueueModel {
         private(set) var expectedFirstFrameMisses = 0
         private(set) var unexpectedCardMisses = 0
 
-        init(cards: [String: QueueItem], shows: [Prospect], contactsByKey: [String: [Recipient]],
-             preamble: CardPreamble, requestedKeys: Set<String>?,
-             registry: CardKeyRegistry? = nil) {
+        /// Over any facts conformer: the live models today, the engine's retained `RowFacts` once it builds the
+        /// pass (#4358). `contactsByKey` is what the pass already read for each show; a show with none there
+        /// has its own read when its card is built.
+        init<Row: ProspectFacts>(cards: [String: QueueItem], shows: [Row], contactsByKey: [String: [Row.Contact]],
+                                 preamble: CardPreamble, requestedKeys: Set<String>?,
+                                 registry: CardKeyRegistry? = nil) {
             self.registry = registry
             self.cards = cards
-            self.showsByKey = Dictionary(shows.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
-            self.contactsByKey = contactsByKey
+            self.sources = CardSourcesOf(
+                shows: Dictionary(shows.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a }),
+                contacts: contactsByKey)
             self.preamble = preamble
             self.requestedKeys = requestedKeys
         }
@@ -3898,8 +3910,7 @@ enum QueueModel {
         }
 
         var contents: Contents {
-            Contents(cards: cards, shows: showsByKey.mapValues(\.persistentModelID),
-                     contacts: contactsByKey.mapValues { $0.map(\.persistentModelID) },
+            Contents(cards: cards, shows: sources.showIDs, contacts: sources.contactIDs,
                      requestedKeys: requestedKeys)
         }
 
@@ -3918,7 +3929,7 @@ enum QueueModel {
             } else {
                 expectedFirstFrameMisses += 1
             }
-            guard let show = showsByKey[row.id] else {
+            guard let built = sources.card(for: row.id, preamble: preamble) else {
                 // The row exists and its show does not, which no pass can produce: a row is built FROM a
                 // show. Counted as an unexpected miss whatever the key set said, because it is a fault in
                 // the build rather than a scroll arriving early, and the row still draws (L67).
@@ -3932,10 +3943,37 @@ enum QueueModel {
                                  tier: row.tier, fitReason: "", matchedClientName: nil,
                                  possibleMatchSource: nil, possibleMatchName: nil, status: row.status)
             }
-            let built = QueueModel.card(show, contacts: contactsByKey[row.id], preamble: preamble)
             cards[row.id] = built
             return built
         }
+    }
+
+    // #4357 step 5: what a card store builds a missed card FROM, whatever the rows are. One value holding the
+    // two maps the store used to hold as `Prospect` and `Recipient`, generic over the row so the engine's
+    // `RowFacts` fill it with no model, and existential in the store so `RenderData` keeps one card store type
+    // whichever pass built it. One box for the whole map rather than one per row, so building it costs what
+    // building the two dictionaries always cost.
+    protocol CardSources {
+        /// The card for this key, built through the one card body, or nil when no show holds the key.
+        func card(for key: String, preamble: CardPreamble) -> QueueItem?
+        /// Each key's show and contacts by store identifier, for a comparison by value (`Contents`).
+        var showIDs: [String: PersistentIdentifier] { get }
+        var contactIDs: [String: [PersistentIdentifier]] { get }
+    }
+
+    struct CardSourcesOf<Row: ProspectFacts>: CardSources {
+        let shows: [String: Row]
+        let contacts: [String: [Row.Contact]]
+
+        func card(for key: String, preamble: CardPreamble) -> QueueItem? {
+            guard let show = shows[key] else { return nil }
+            // The contacts the pass read, or the show's own when it read none, exactly as the model entry
+            // point (`card(_:contacts:preamble:)`) does: a model's `factContacts` IS its counted read.
+            return QueueModel.card(show, among: contacts[key] ?? show.factContacts, preamble: preamble)
+        }
+
+        var showIDs: [String: PersistentIdentifier] { shows.mapValues(\.persistentModelID) }
+        var contactIDs: [String: [PersistentIdentifier]] { contacts.mapValues { $0.map(\.persistentModelID) } }
     }
 
     // The SwiftData-to-value boundary, kept here so OrgAnswerLedger itself stays free of the store and
