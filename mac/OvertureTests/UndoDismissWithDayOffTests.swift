@@ -216,8 +216,8 @@ struct UndoDismissWithDayOffWiringTests {
     // is the whole point of #1473: the store goes with it, so the day off half of the undo can run.
     @Test func theWindowsUndoPassesTheStoreSoTheDayOffHalfCanRun() {
         let root = source("Overture/App/RootView.swift")
-        #expect(root.contains("QueueUndo.apply(entry, resolving:"))
-        #expect(root.contains("}, in: context)"))
+        // #4532: resolved through the live rows by identity, with the store passed in the same call.
+        #expect(root.contains("QueueUndo.apply(entry, resolving: allProspects, in: context)"))
     }
 
     // #1415: an undo restores a row into a stage Dan is usually not looking at, so a working Cmd+Z was
@@ -227,6 +227,8 @@ struct UndoDismissWithDayOffWiringTests {
     @Test func theWindowsUndoNamesWhatCameBackAndWhereOnBothPaths() {
         let root = source("Overture/App/RootView.swift")
         #expect(root.contains("ActionAck.undoRestored(org: entry.groupName, priorStatus: entry.priorStatus)"))
-        #expect(root.contains("ActionAck.undoSkipped(org: entry.groupName)"))
+        // #4532: the skipped path's sentence is chosen by `QueueUndo.nothingUndoneSentence`, which
+        // `QueueUndoApplyTests` proves says moved on, merged and re-keyed apart.
+        #expect(root.contains("feedback.acknowledge(QueueUndo.nothingUndoneSentence(for: entry, outcome: outcome))"))
     }
 }
