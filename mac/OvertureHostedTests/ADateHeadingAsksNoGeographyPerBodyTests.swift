@@ -49,7 +49,7 @@ final class ADateHeadingAsksNoGeographyPerBodyTests {
 
     // For the reason `AStageListDerivesNothingPerBodyTests.release` gives (#3874's signature, L86).
     private func release(_ window: NSWindow?) {
-        window?.close()
+        HostedPassCounting.unmountAndClose(window)
         let until = Date().addingTimeInterval(1)
         while Date() < until {
             autoreleasepool { _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }

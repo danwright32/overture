@@ -39,10 +39,70 @@ enum HostedPassCounting {
         window.close()
     }
 
+    // #4534: the same teardown for a harness hosted through `AnyView` when the caller holds only its
+    // WINDOW, which is all `Phase0cViewRig.host` hands back. Every `NSHostingView<AnyView>` directly in the
+    // window's content view is emptied before the window closes. A window holding none cannot be
+    // unmounted from here, and that is RECORDED rather than closed quietly, because a quiet close is the
+    // leftover this exists to prevent. Optional, because several suites keep the window in a variable a
+    // failed build leaves nil, and a nil window has nothing in any graph.
+    static func unmountAndClose(_ window: NSWindow?, sourceLocation: SourceLocation = #_sourceLocation) {
+        guard let window else { return }
+        let hostings = (window.contentView?.subviews ?? []).compactMap { $0 as? NSHostingView<AnyView> }
+        if hostings.isEmpty {
+            Issue.record(Comment(rawValue: "this window holds no AnyView hosting view, so its view could not "
+                + "be unmounted and stays in the SwiftUI graph after the close; hand the hosting view to "
+                + "unmountAndClose(_:replacingWith:in:) instead (#4534)"), sourceLocation: sourceLocation)
+        }
+        for hosting in hostings {
+            hosting.rootView = AnyView(EmptyView())
+            hosting.layoutSubtreeIfNeeded()
+            hosting.displayIfNeeded()
+        }
+        window.close()
+    }
+
+    // #4534: a hosted root that can be taken out of the graph WITHOUT erasing its type, for the suites
+    // that host the real type on purpose (`ABannerDerivesNothingOnAnySheetTests`, #4247's reason). The
+    // `if` is a static conditional, so while it is mounted SwiftUI still diffs the content structurally,
+    // which is the whole of what those suites protect. `RemovingOneSourceCostsOnePassTests` already hosts
+    // this shape by hand.
+    struct Mounted<Content: View>: View {
+        let content: Content
+        var mounted = true
+
+        var body: some View {
+            if mounted { content }
+        }
+    }
+
+    static func unmountAndClose<Content: View>(_ hosting: NSHostingView<Mounted<Content>>, in window: NSWindow) {
+        var empty = hosting.rootView
+        empty.mounted = false
+        unmountAndClose(hosting, replacingWith: empty, in: window)
+    }
+
+    // #4534: the ONE way a counting suite closes a window and leaves its view in the graph, for the two
+    // cases where that is the point or the only safe option: a positive control proving a closed window is
+    // still evaluated, and a RootView host whose teardown crashed the shared host
+    // (`ScoutLandingHostedProbeTests` records it, the #3874 shape). `CountingSuitesUnmountBeforeClosingTests`
+    // refuses a bare `close()` in a counting suite, so this name and its reason are what a reviewer reads.
+    // The reason must begin with a word (L675): an empty string or a bare issue number explains nothing.
+    static func closeLeavingMounted(_ window: NSWindow, because reason: String,
+                                    sourceLocation: SourceLocation = #_sourceLocation) {
+        if reason.first?.isLetter != true {
+            Issue.record(Comment(rawValue: "a window was closed with its view left in the graph and the reason "
+                + "given was \"\(reason)\", which does not begin with a word (#4534, L675)"),
+                         sourceLocation: sourceLocation)
+        }
+        window.close()
+    }
+
     // A CLOCK THAT NEVER MOVES, pinned at the moment the view is built, for a surface whose memo window
-    // must not be what a count measures (`QueueView.clock`, `SourcesView.clock`). Pinned to the real
-    // present rather than a chosen date, so every rule the pass judges by the instant (lead time, a stage,
-    // a run marker's age) answers as it would have a moment ago in the app.
+    // must not be what a count measures (`QueueView.clock`, `SourcesView.clock`, `ArchiveView.clock`).
+    // Pinned to the real present rather than a chosen date, so every rule the pass judges by the instant
+    // (lead time, a stage, a run marker's age) answers as it would have a moment ago in the app. Built ONCE
+    // per hosted view and held, never inside a body or a `RowsFromStore` closure, where every evaluation
+    // would pin a fresh instant and the clock would move after all.
     static func frozenClock() -> () -> Date {
         let pinned = Date()
         return { pinned }

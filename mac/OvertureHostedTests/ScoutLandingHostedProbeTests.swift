@@ -160,7 +160,10 @@ final class ScoutLandingHostedProbeTests {
         // firing into SwiftUI's observer after the test that armed it has ended.
         rig.ctx.autosaveEnabled = false
         if rig.ctx.hasChanges { rig.ctx.rollback() }
-        rig.window.close()
+        // #4534: RootView is left in the graph on purpose; `makeRig` records why and how the varying show
+        // count keeps a stray render from hiding a reason.
+        HostedPassCounting.closeLeavingMounted(rig.window, because: "tearing the hosted RootView down "
+            + "crashed the shared host on the next save (the #3874 shape, recorded in makeRig)")
     }
 
     // MARK: - Planting a row underneath the context
