@@ -16,9 +16,7 @@ struct LandingBatchTablesTests {
     }
 
     private static func night(_ n: Int) -> String {
-        let day = Calendar(identifier: .gregorian).date(byAdding: .day, value: n,
-                                                        to: EasternDate.date(from: today)!)!
-        return EasternDate.dayString(from: day)
+        ScoutTestClock.day(today, plus: n)
     }
 
     private func stored(_ ctx: ModelContext, _ title: String, _ night: String, url: String,

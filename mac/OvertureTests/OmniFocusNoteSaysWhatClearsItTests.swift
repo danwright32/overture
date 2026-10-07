@@ -26,7 +26,7 @@ struct OmniFocusNoteSaysWhatClearsItTests {
     // different case and the test goes on asserting about a state nobody chose (L130).
     private func showWithReply(handled: Date?, showDaysAgo: Int, in ctx: ModelContext,
                                now: Date) -> Prospect {
-        let showDay = EasternDate.dayString(from: now.addingTimeInterval(TimeInterval(-showDaysAgo) * 86_400))
+        let showDay = ScoutTestClock.day(-showDaysAgo, after: now)
         let p = Prospect(naturalKey: "aurora|\(showDay)|carnegie", groupName: "Aurora Strings",
                          discipline: "music", venue: "Carnegie Hall", performanceDate: showDay,
                          sourceListingURL: nil, priorRelationship: "none",

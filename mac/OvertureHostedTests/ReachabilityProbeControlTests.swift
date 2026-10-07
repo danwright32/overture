@@ -32,7 +32,7 @@ struct ReachabilityProbeControlTests {
     // `scripts/check-fixtures-do-not-age.sh` exists for exactly this class and would have named this
     // suite, and it is opt-in, so nothing ran it.
     private static var upcomingDate: String {
-        EasternDate.today(Date().addingTimeInterval(60 * 60 * 24 * 30))
+        ScoutTestClock.day(30, after: Date())
     }
 
     private func item(_ key: String, status: ReviewStatus = .new) -> QueueScopeRow {

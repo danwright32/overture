@@ -60,7 +60,7 @@ struct FollowUpsCostTests {
         // DERIVED from `now`, never a literal. A fixture whose meaning is its relationship to the clock
         // must pin both ends, or real time walks it into a different case and the test goes on asserting
         // about a case nobody chose (L130). A run still ahead is what `FollowUp.hasPerformed` requires.
-        let aheadOfUs = EasternDate.today(now.addingTimeInterval(60 * 60 * 24 * 60))
+        let aheadOfUs = ScoutTestClock.day(60, after: now)
         let p = Prospect(naturalKey: "control-show", groupName: "A Control Show", discipline: "choral",
                          venue: "A Control Room", performanceDate: aheadOfUs, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",

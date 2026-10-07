@@ -41,7 +41,7 @@ struct MarkerReadsDoNotScaleWithTheQueueTests {
         for day in 0..<dates {
             // Dated FROM the clock rather than pinned, so the shows stay inside the queue's own lead-time
             // window whatever year this runs in (L130).
-            let date = EasternDate.dayString(from: Date().addingTimeInterval(Double(20 + day) * 86_400))
+            let date = ScoutTestClock.day(20 + day, after: Date())
             for n in 0..<perDate {
                 let key = "row-\(day)-\(n)"
                 let p = Prospect(naturalKey: key, groupName: "Ensemble \(day)-\(n)", discipline: "music",

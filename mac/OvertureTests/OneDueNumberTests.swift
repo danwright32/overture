@@ -30,7 +30,7 @@ struct OneDueNumberTests {
     // different case than the one it was written for (L130, #2669).
     private let now = Date(timeIntervalSince1970: 1_780_000_000)
     private var today: String { EasternDate.today(now) }
-    private func day(_ offset: TimeInterval) -> String { EasternDate.today(now.addingTimeInterval(offset)) }
+    private func day(_ days: Int) -> String { ScoutTestClock.day(days, after: now) }
 
     private func makeContext() throws -> ModelContext {
         ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self]),
@@ -50,7 +50,7 @@ struct OneDueNumberTests {
     // An emailed pitch nobody answered, old enough that a nudge is owed, on a show still ahead.
     @discardableResult
     private func silentFollowUp(_ context: ModelContext, key: String = "silent") -> Prospect {
-        let p = show(key, "Boreal Quartet", on: day(30 * 86_400))
+        let p = show(key, "Boreal Quartet", on: day(30))
         p.sentAt = now.addingTimeInterval(-30 * 86_400)
         context.insert(p)
         let r = Recipient(id: "\(key)@example.com", email: "\(key)@example.com", name: "Nessa",
@@ -64,7 +64,7 @@ struct OneDueNumberTests {
     // A pitch on a show that has been and gone, waiting on Dan to say how it ended.
     @discardableResult
     private func afterTheShow(_ context: ModelContext, key: String = "passed") -> Prospect {
-        let p = show(key, "Lumen Dance", on: day(-5 * 86_400))
+        let p = show(key, "Lumen Dance", on: day(-5))
         p.sentAt = now.addingTimeInterval(-20 * 86_400)
         context.insert(p)
         let r = Recipient(id: "\(key)@example.com", email: "\(key)@example.com", name: "Rowan",
@@ -82,7 +82,7 @@ struct OneDueNumberTests {
     @discardableResult
     private func stalledReplyDraft(_ context: ModelContext, key: String = "stalled",
                                    email: String? = nil) -> Prospect {
-        let p = show(key, "Aurora Strings", on: day(30 * 86_400))
+        let p = show(key, "Aurora Strings", on: day(30))
         p.sentAt = now.addingTimeInterval(-2 * 86_400)
         context.insert(p)
         let address = email ?? "\(key)@example.com"
@@ -105,9 +105,9 @@ struct OneDueNumberTests {
     // `form` and `propose` are parameters for #4531's sibling below: a venue's one contact form pitched for
     // two shows is one id on both, and only one of them has a conversation proposed.
     private func conversationToConfirm(_ context: ModelContext, key: String = "confirm",
-                                       daysAhead: TimeInterval = 45, form: String? = nil,
+                                       daysAhead: Int = 45, form: String? = nil,
                                        propose: Bool = true) -> Prospect {
-        let p = show(key, "54 Sings Shuffle Along", on: day(daysAhead * 86_400))
+        let p = show(key, "54 Sings Shuffle Along", on: day(daysAhead))
         context.insert(p)
         let url = form ?? "https://\(key).example/contact"
         let r = Recipient(id: "form:\(url)", email: nil, name: "Corin", provenance: .act)
@@ -131,7 +131,7 @@ struct OneDueNumberTests {
     // #3890: somebody wrote back and nobody has answered, on a show still ahead.
     @discardableResult
     private func replyToAnswer(_ context: ModelContext, key: String = "wrote", email: String? = nil) -> Prospect {
-        let p = show(key, "Every Voice Choirs", on: day(20 * 86_400))
+        let p = show(key, "Every Voice Choirs", on: day(20))
         p.sentAt = now.addingTimeInterval(-4 * 86_400)
         context.insert(p)
         let address = email ?? "\(key)@example.com"

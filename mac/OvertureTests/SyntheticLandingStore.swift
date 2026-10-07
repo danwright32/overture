@@ -106,11 +106,11 @@ enum SyntheticLandingStore {
             for k in 0..<shows(for: index) {
                 let title = titles[(index * 5 + k) % titles.count]
                 var day = 7 + (k * 4 + index) % 150
-                var date = EasternDate.dayString(from: now.addingTimeInterval(TimeInterval(day) * 86_400))
+                var date = ScoutTestClock.day(day, after: now)
                 var key = Prospect.makeNaturalKey(groupName: title, performanceDate: date, venue: venue)
                 while !keys.insert(key).inserted {
                     day += 1
-                    date = EasternDate.dayString(from: now.addingTimeInterval(TimeInterval(day) * 86_400))
+                    date = ScoutTestClock.day(day, after: now)
                     key = Prospect.makeNaturalKey(groupName: title, performanceDate: date, venue: venue)
                 }
                 let fit = 1 + (index * 3 + k) % 10
@@ -220,7 +220,7 @@ enum SyntheticLandingStore {
                         LandingOracleCorpus.event(
                             "\(titles[(index + k) % titles.count]) (\(suffix) \(k + 1))", orgs[index],
                             venues[index % venues.count],
-                            EasternDate.dayString(from: now.addingTimeInterval(TimeInterval(20 + k) * 86_400)),
+                            ScoutTestClock.day(20 + k, after: now),
                             "https://\(slug(orgs[index])).example/\(suffix)-\(k + 1)")
                     },
                     note: nil)

@@ -142,8 +142,7 @@ struct TheRenderPassReadsNoMarkersTests {
             // window whatever year this runs in (L130).
             let p = Prospect(naturalKey: "row-\(n)", groupName: "Ensemble \(n)", discipline: "music",
                              venue: "Venue \(n)",
-                             performanceDate: EasternDate.dayString(
-                                 from: now.addingTimeInterval(Double(20 + n) * 86_400)),
+                             performanceDate: ScoutTestClock.day(20 + n, after: now),
                              sourceListingURL: nil, priorRelationship: "none", production: "self",
                              profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                              fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,

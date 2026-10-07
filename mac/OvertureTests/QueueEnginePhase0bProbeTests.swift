@@ -1268,7 +1268,7 @@ struct QueueEnginePhase0bProbeTests {
                 return passOut(i).rows
             }
             let baseOut = out(now)
-            let midnight1 = EasternDate.date(from: EasternDate.today(now.addingTimeInterval(86_400))) ?? now.addingTimeInterval(86_400)
+            let midnight1 = EasternDate.date(from: ScoutTestClock.day(1, after: now)) ?? now.addingTimeInterval(86_400)
             let midnight2 = midnight1.addingTimeInterval(86_400)
             var grid: [Date] = (1...48).map { now.addingTimeInterval(Double($0) * 3600) }
             grid += [midnight1.addingTimeInterval(-1), midnight1.addingTimeInterval(1),

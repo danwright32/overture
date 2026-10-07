@@ -234,7 +234,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
         let c = try container()
         let ctx = c.mainContext
         for n in 0..<23 {
-            let day = EasternDate.dayString(from: Date().addingTimeInterval(Double(n * 5) * 86_400))
+            let day = ScoutTestClock.day(n * 5, after: Date())
             ctx.insert(DayOff(startDate: day, endDate: day, note: "Away"))
         }
         ctx.insert(WeeklyDayOff(weekday: 4, note: "Rehearsal"))

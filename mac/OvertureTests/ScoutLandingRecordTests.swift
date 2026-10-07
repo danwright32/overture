@@ -25,7 +25,7 @@ final class ScoutLandingRecordTests {
     }
 
     private func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 30 + n, to: now)!)
+        ScoutTestClock.day(30 + n, after: now)
     }
 
     @discardableResult

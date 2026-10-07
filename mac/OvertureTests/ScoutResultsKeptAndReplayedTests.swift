@@ -39,7 +39,7 @@ final class ScoutResultsKeptAndReplayedTests {
     private var today: String { QueueModel.easternToday(now) }
 
     private func night(_ n: Int) -> String {
-        EasternDate.dayString(from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 30 + n, to: now)!)
+        ScoutTestClock.day(30 + n, after: now)
     }
 
     // An html source past its warmup, with a page read and waiting to land, and one stored show only it lists,
@@ -247,7 +247,7 @@ final class ScoutResultsKeptAndReplayedTests {
         #expect(try f.journals.list().isEmpty, "the copy was meant to be one no landing started")
 
         // Offered a month later: night(0) has passed by then, night(1) is that very day.
-        let later = Calendar(identifier: .gregorian).date(byAdding: .day, value: 31, to: now)!
+        let later = EasternDate.calendar.date(byAdding: .day, value: 31, to: now)!
         let offered = await ScoutExtractLanding.offerPending(
             clients: [], history: [], blocked: .empty, now: later, landings: LandingSingleFlight(sleep: { _ in }),
             pending: f.pending, journals: f.journals, movementLog: lines, into: ctx)
