@@ -24,8 +24,12 @@
 #
 #   * a target name ALONE (`OvertureTests`), because `-scheme`, `-testPlan` and `-target` take a name of
 #     exactly that shape as their value, and nothing here can tell which reading was meant;
-#   * a suite carrying a dot (`OvertureTests/RunSlotTests.swift`), which is a file rather than a scope and is
-#     mutate.sh's SCOPE NOT FOR THIS RUNNER to refuse, in its own words.
+#   * a suite carrying a dot (`OvertureTests/RunSlotTests.swift`), which is a FILE name rather than a scope,
+#     so the one form this refusal prints (the prefix added, nothing else) would be wrong for it: a suite's
+#     name need not match its file's. It still reaches xcodebuild as an unknown build action, and so does
+#     any other argument xcodebuild cannot parse; what makes every such case expensive is that the runner
+#     reads an xcodebuild USAGE error as a crash and follows it with the whole pure suite. That is the
+#     class, and it is recorded as its own finding rather than widened into this shape.
 
 # bare_test_scope <arg...>: prints the FIRST argument shaped like a test scope with its `-only-testing:`
 # prefix left off, and returns 0. Returns 1, printing nothing, when no argument has that shape.

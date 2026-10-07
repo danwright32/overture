@@ -44,7 +44,7 @@ assert_equals "a destination is not" "1|" "$(bare_of -destination platform=macOS
 assert_equals "a build setting is not" "1|" "$(bare_of OTHER_SWIFT_FLAGS=-DX)"
 assert_equals "an absolute path is not" "1|" "$(bare_of -resultBundlePath /tmp/OvertureTests/bundle)"
 assert_equals "a shell fixture path is not" "1|" "$(bare_of scripts/verify-and-merge-branch.test.sh)"
-assert_equals "a source file is not (another refusal owns files)" "1|" "$(bare_of OvertureTests/RunSlotTests.swift)"
+assert_equals "a source file name is not (no scope can be derived from it)" "1|" "$(bare_of OvertureTests/RunSlotTests.swift)"
 assert_equals "a target name with no suite is not (a -scheme or -testPlan value looks the same)" "1|" \
   "$(bare_of OvertureTests)"
 assert_equals "no arguments at all is not" "1|" "$(bare_of)"
