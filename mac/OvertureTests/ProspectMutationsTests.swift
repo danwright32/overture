@@ -40,7 +40,7 @@ struct ProspectMutationsTests {
         let p = makeProspect(ctx)
         let feedback = ActionFeedback()
         ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
-                                    prospects: [p], context: ctx, feedback: feedback)
+                                    shows: [p], context: ctx, feedback: feedback)
         #expect(p.status == .dismissed)
         #expect(p.showOutcomeRaw == ShowOutcome.notAFit.rawValue)
     }
@@ -54,7 +54,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.renameGroup(QueueItem(p), to: "  Aurora String Quartet  ",
-                                      prospects: [p], context: ctx, feedback: feedback)
+                                      shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.groupName == "Aurora String Quartet")          // trimmed
         #expect(p.groupNameOverriddenByDan == true)
@@ -68,7 +68,7 @@ struct ProspectMutationsTests {
         let p = makeProspect(ctx)
         let feedback = ActionFeedback()
 
-        ProspectMutations.renameGroup(QueueItem(p), to: "   ", prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.renameGroup(QueueItem(p), to: "   ", shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.groupName == "Aurora Strings")
         #expect(p.groupNameOverriddenByDan == false)
@@ -81,9 +81,9 @@ struct ProspectMutationsTests {
         let p = makeProspect(ctx)
         let feedback = ActionFeedback()
         ProspectMutations.renameGroup(QueueItem(p), to: "Aurora String Quartet",
-                                      prospects: [p], context: ctx, feedback: feedback)
+                                      shows: [p], context: ctx, feedback: feedback)
 
-        ProspectMutations.resetGroupName(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.resetGroupName(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.groupName == "Aurora Strings")
         #expect(p.groupNameOverriddenByDan == false)
@@ -100,7 +100,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.markContact(QueueItem(p), "r1", .declinedSoft, false,
-                                      prospects: [p], context: ctx, feedback: feedback)
+                                      shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.first?.resolution == .declinedSoft)
     }
@@ -117,7 +117,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.remindRecipientLater(QueueItem(p), "r1",
-                                               prospects: [p], context: ctx, feedback: feedback)
+                                               shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.first { $0.id == "r1" }?.conversationRemindedAt != nil)
         #expect(p.recipients.first { $0.id == "r2" }?.conversationRemindedAt == nil)
@@ -132,7 +132,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.confirmBooking(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.confirmBooking(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.outcome == .booked)
         #expect(p.outcomeSourceRaw == OutcomeSource.manual.rawValue)
@@ -145,7 +145,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@newcontact.example", name: "Jane Doe",
-                                                prospects: [p], context: ctx, feedback: feedback)
+                                                shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.map(\.id) == ["jane@newcontact.example"])
         #expect(p.recipients.first?.name == "Jane Doe")
@@ -163,7 +163,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@example.com", name: "Jane Doe",
-                                                prospects: [p], context: ctx, feedback: feedback)
+                                                shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.count == 1)
         #expect(feedback.message == "Jane Doe is already a recipient on Aurora Strings.")
@@ -181,7 +181,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@example.com", name: "Jane Doe",
-                                                prospects: [p], context: ctx, feedback: feedback)
+                                                shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.count == 1)
         #expect(p.recipients.first?.sendState == .sent)
@@ -200,7 +200,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.addRecipientManually(QueueItem(p), email: "jane@example.com", name: "Jane Doe",
-                                                prospects: [p], context: ctx, feedback: feedback)
+                                                shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.count == 1)
         #expect(p.recipients.first?.sendState == .pending)
@@ -217,7 +217,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.removeRecipientManually(QueueItem(p), "jane@example.com", "Jane Doe",
-                                                   prospects: [p], context: ctx, feedback: feedback)
+                                                   shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.isEmpty)
         #expect(feedback.message == "Removed Jane Doe from Aurora Strings.")
@@ -233,7 +233,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.removeRecipientManually(QueueItem(p), "jane@example.com", "Jane Doe",
-                                                   prospects: [p], context: ctx, feedback: feedback)
+                                                   shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.count == 1)
         #expect(p.recipients.first?.sendState == .suppressed)
@@ -255,7 +255,7 @@ struct ProspectMutationsTests {
         var marked: [String] = []
         var cleared: [String] = []
 
-        ProspectMutations.performSend("k", prospects: [p], context: ctx, feedback: feedback, sender: sender,
+        ProspectMutations.performSend("k", shows: [p], context: ctx, feedback: feedback, sender: sender,
                                       markSending: { marked.append($0) }, clearSending: { cleared.append($0) },
                                       onNeedsReconnect: {})
 
@@ -283,7 +283,7 @@ struct ProspectMutationsTests {
         let sender = RecordingSender()
         var sentReports: [(String, Bool)] = []
 
-        ProspectMutations.performSend("k", prospects: [p], context: ctx, feedback: ActionFeedback(), sender: sender,
+        ProspectMutations.performSend("k", shows: [p], context: ctx, feedback: ActionFeedback(), sender: sender,
                                       markSending: { _ in }, clearSending: { _ in },
                                       onNeedsReconnect: {},
                                       onSent: { id, fullySent in sentReports.append((id, fullySent)) })
@@ -311,7 +311,7 @@ struct ProspectMutationsTests {
         let sender = RecordingSender()
         var sentReports: [(String, Bool)] = []
 
-        ProspectMutations.performSend("k", prospects: [p], context: ctx, feedback: ActionFeedback(), sender: sender,
+        ProspectMutations.performSend("k", shows: [p], context: ctx, feedback: ActionFeedback(), sender: sender,
                                       markSending: { _ in }, clearSending: { _ in },
                                       onNeedsReconnect: {},
                                       onSent: { id, fullySent in sentReports.append((id, fullySent)) })
@@ -332,7 +332,7 @@ struct ProspectMutationsTests {
         var marked: [String] = []
         var cleared: [String] = []
 
-        ProspectMutations.sendReply(QueueItem(p), "r1", prospects: [p], context: ctx, feedback: feedback, sender: sender,
+        ProspectMutations.sendReply(QueueItem(p), "r1", shows: [p], context: ctx, feedback: feedback, sender: sender,
                                     markSending: { marked.append($0) }, clearSending: { cleared.append($0) },
                                     onNeedsReconnect: {})
 
@@ -359,7 +359,7 @@ struct ProspectMutationsTests {
 
         // #2645: a pinned day before the fixture's show, not the wall clock, so this cannot age into
         // "the show has already happened" and start failing for a reason it does not assert.
-        ProspectMutations.sendFollowUp("k", "r1", prospects: [p], context: ctx, feedback: feedback, sender: sender,
+        ProspectMutations.sendFollowUp("k", "r1", shows: [p], context: ctx, feedback: feedback, sender: sender,
                                        now: Date(timeIntervalSince1970: 3547225600),
                                        markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
 
@@ -394,7 +394,7 @@ struct ProspectMutationsTests {
         ctx.insert(held); ctx.insert(sent)
         try? ctx.save()
 
-        ProspectMutations.overrideGreeting(QueueItem(p), prospects: [p], context: ctx,
+        ProspectMutations.overrideGreeting(QueueItem(p), shows: [p], context: ctx,
                                            feedback: ActionFeedback())
 
         #expect(held.greetingOverriddenBody == "I photograph performing arts in New York.")
@@ -419,7 +419,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.overrideDraftLint(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.overrideDraftLint(QueueItem(p), shows: [p], context: ctx, feedback: feedback)
 
         #expect(blocked.lintOverriddenBody == "Hello,\n\nSee my work at https://smugmug.com/dan.")
         #expect(blocked.isSendablePending)
@@ -435,7 +435,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        await ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, prospects: [p], context: ctx,
+        await ProspectMutations.reprep(QueueItem(p), mode: .contactsOnly, shows: [p], context: ctx,
                                        feedback: feedback, startPrep: { _, _, _ in })
 
         #expect(p.reprepContactsRequested == true)
@@ -453,7 +453,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         let launched = LaunchedKeys()
-        await ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx, feedback: feedback,
+        await ProspectMutations.reprep(QueueItem(p), mode: .both, shows: [p], context: ctx, feedback: feedback,
                                        startPrep: { _, _, keys in launched.keys.append(keys) })
 
         #expect(launched.keys == [["only-me"]])   // launched exactly once, scoped to this show
@@ -491,9 +491,9 @@ struct ProspectMutationsTests {
                                                      launch: { counter.launches += 1 })
         }
 
-        await ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx,
+        await ProspectMutations.reprep(QueueItem(p), mode: .both, shows: [p], context: ctx,
                                        feedback: feedback, startPrep: seam)
-        await ProspectMutations.reprep(QueueItem(p), mode: .both, prospects: [p], context: ctx,
+        await ProspectMutations.reprep(QueueItem(p), mode: .both, shows: [p], context: ctx,
                                        feedback: feedback, startPrep: seam)
 
         #expect(counter.launches == 1)               // the in-flight marker blocked the second launch
@@ -512,7 +512,7 @@ struct ProspectMutationsTests {
         let feedback = ActionFeedback()
 
         let counter = LaunchCounter()
-        await ProspectMutations.reprep(QueueItem(p), mode: .draftOnly, prospects: [p], context: ctx,
+        await ProspectMutations.reprep(QueueItem(p), mode: .draftOnly, shows: [p], context: ctx,
                                        feedback: feedback, startPrep: { _, _, _ in counter.launches += 1 })
 
         #expect(counter.launches == 0)             // nothing to redraft, so no run
@@ -536,7 +536,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.bulkReprep(.both, prospects: [drafted, approvedSent, freshQueued, contacted],
+        ProspectMutations.bulkReprep(.both, shows: [drafted, approvedSent, freshQueued, contacted],
                                      context: ctx, feedback: feedback)
 
         #expect(drafted.reprepDraftRequested == true)
@@ -566,7 +566,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.bulkReprep(.both, prospects: [ready, alreadyPending, inCooldown],
+        ProspectMutations.bulkReprep(.both, shows: [ready, alreadyPending, inCooldown],
                                      context: ctx, feedback: feedback, now: now)
 
         #expect(ready.reprepDraftRequested == true)
@@ -585,7 +585,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.bulkReprep(.both, prospects: [inCooldown], context: ctx, feedback: feedback, now: now)
+        ProspectMutations.bulkReprep(.both, shows: [inCooldown], context: ctx, feedback: feedback, now: now)
 
         #expect(inCooldown.reprepDraftRequested == false)
         #expect(feedback.message != nil)
@@ -602,7 +602,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissVenueMatch(QueueItem(p), "r1", prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.dismissVenueMatch(QueueItem(p), "r1", shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.first?.looksLikeVenueDismissed == true)
     }
@@ -617,7 +617,7 @@ struct ProspectMutationsTests {
         try? ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissPressContactMatch(QueueItem(p), "r1", prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.dismissPressContactMatch(QueueItem(p), "r1", shows: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.first?.looksLikePressContactDismissed == true)
     }

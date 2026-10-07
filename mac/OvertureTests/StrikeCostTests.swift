@@ -98,7 +98,7 @@ struct StrikeCostTests {
 
         let item = QueueItem(p)
         ProspectMutations.removeInheritedAddress(item, email: "boxoffice@54below.example",
-                                                 prospects: [p], context: ctx,
+                                                 shows: [p], context: ctx,
                                                  feedback: ActionFeedback())
 
         let reader = ModelContext(box)
@@ -117,7 +117,7 @@ struct StrikeCostTests {
         try ctx.save()
 
         ProspectMutations.removeRecipientManually(QueueItem(p), "cast@example.com", "A Performer",
-                                                  prospects: [p], context: ctx,
+                                                  shows: [p], context: ctx,
                                                   feedback: ActionFeedback())
         #expect(!ctx.hasChanges, "the caller's save did not commit everything the strike wrote")
 

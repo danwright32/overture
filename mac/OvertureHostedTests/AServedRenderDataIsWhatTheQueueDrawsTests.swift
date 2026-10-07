@@ -56,16 +56,19 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
         let provider: (any QueueRenderDataProvider)?
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
+        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
+        // memo's two second window cannot be read as the queue deriving while a pass was served.
+        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
             RowsFromStore { (rows: [Prospect]) in
                 if let provider {
                     QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                              allProspects: rows, renderDataProvider: provider)
+                              allProspects: rows, renderDataProvider: provider, clock: clock)
                 } else {
                     // No provider named, exactly as every other hosted harness builds the queue.
                     QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                              allProspects: rows)
+                              allProspects: rows, clock: clock)
                 }
             }
             .modelContainer(container)
@@ -87,8 +90,8 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 800),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        defer { window.close() }
         let hosting = NSHostingView(rootView: AnyView(Harness(container: c, provider: provider)))
+        defer { HostedPassCounting.unmountAndClose(hosting, replacingWith: AnyView(EmptyView()), in: window) }
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(hosting)

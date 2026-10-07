@@ -158,7 +158,7 @@ struct ClosingAPitchOutFromTheRowTests {
         let now = sentAt.addingTimeInterval(10 * 86_400)
         #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) != nil)
 
-        let ok = ProspectMutations.recordOutcome(QueueItem(p), .booked, prospects: [p],
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .booked, shows: [p],
                                                  context: ctx, feedback: ActionFeedback())
         #expect(ok)
 
@@ -174,7 +174,7 @@ struct ClosingAPitchOutFromTheRowTests {
         let r = contact(p)
         let now = sentAt.addingTimeInterval(10 * 86_400)
 
-        let ok = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, shows: [p],
                                                  context: ctx, feedback: ActionFeedback())
 
         #expect(ok)
@@ -194,7 +194,7 @@ struct ClosingAPitchOutFromTheRowTests {
         let p = show(ctx)
         p.downbeatClientId = "C1"
         let r = contact(p)
-        ProspectMutations.recordOutcome(QueueItem(p), .booked, prospects: [p],
+        ProspectMutations.recordOutcome(QueueItem(p), .booked, shows: [p],
                                         context: ctx, feedback: ActionFeedback())
 
         let booking = OvertureBooking(id: "B1", clientId: "C1", clientDisplayName: "Every Voice Choirs",
@@ -216,7 +216,7 @@ struct ClosingAPitchOutFromTheRowTests {
         let r = contact(p)
         let feedback = ActionFeedback()
 
-        ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+        ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, shows: [p],
                                         context: ctx, feedback: feedback)
 
         #expect(feedback.message == "Every Voice Choirs closed out: never heard back.")
@@ -229,7 +229,7 @@ struct ClosingAPitchOutFromTheRowTests {
         let p = show(ctx)
         let r = contact(p)
 
-        let ok = ProspectMutations.recordOutcome(QueueItem(p), .booked, prospects: [],
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .booked, shows: [],
                                                  context: ctx, feedback: ActionFeedback())
 
         #expect(!ok)

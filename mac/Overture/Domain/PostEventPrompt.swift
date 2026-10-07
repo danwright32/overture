@@ -199,10 +199,13 @@ enum PostEventPrompt {
             // Dan to act on; two rows asked him the same question twice.
             due.append(contentsOf: SendGroup.oneRowPerGroup(here) { $0.recipient })
         }
+        // #4531: two prompts of one kind on one night by `DueWork.showThenContact`, never arrival order.
         return due.sorted {
             let ra = urgencyRank($0.prompt.kind), rb = urgencyRank($1.prompt.kind)
             if ra != rb { return ra < rb }
-            return ($0.prospect.performanceDate ?? "9999") < ($1.prospect.performanceDate ?? "9999")
+            let (da, db) = ($0.prospect.performanceDate ?? "9999", $1.prospect.performanceDate ?? "9999")
+            if da != db { return da < db }
+            return DueWork.showThenContact($0.prospect, $0.recipient, $1.prospect, $1.recipient)
         }
     }
 

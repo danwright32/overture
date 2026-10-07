@@ -144,7 +144,7 @@ struct FunnelCaptureTests {
         let p = show(ctx)
 
         ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
-                                    prospects: [p], context: ctx, feedback: ActionFeedback())
+                                    shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.showOutcome == .notAFit)
         #expect(p.dismissedAt != nil)
@@ -156,11 +156,11 @@ struct FunnelCaptureTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         ProspectMutations.setStatus(QueueItem(p), .dismissed, .dateConflict,
-                                    prospects: [p], context: ctx, feedback: ActionFeedback())
+                                    shows: [p], context: ctx, feedback: ActionFeedback())
         let exited = try #require(p.dismissedAt)
 
         ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
-                                    prospects: [p], context: ctx, feedback: ActionFeedback())
+                                    shows: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.dismissedAt == exited)
     }
@@ -171,7 +171,7 @@ struct FunnelCaptureTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
-                                    prospects: [p], context: ctx, feedback: ActionFeedback())
+                                    shows: [p], context: ctx, feedback: ActionFeedback())
 
         DismissedProspects.restore(p)
 

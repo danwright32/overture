@@ -168,3 +168,111 @@ struct OneRowPerGroupTests {
         #expect(PostEventPrompt.dueRecipients(from: [p], now: now).count == 2)
     }
 }
+
+// #4567: a send group in ONE order, whatever order the show's contacts arrive in.
+//
+// A contact's `id` is its address, and one show can hold two contacts on one address inside one send
+// group. `SendGroup.peers` sorted by `id` alone, so those two kept the order the relationship handed them
+// over in, which SwiftData does not hold stable (L343, L419). `ReplyIdentity.answering` takes the first
+// peer on the writer's address, so which contact a reply row names could move between launches on
+// unchanged data, and `SendGroup.isRepresentative` compared `id`s, so BOTH twins stood for the group.
+// `Recipient.inSendOrder` ended on the same tie, and the send sheet and a separately sent show's first
+// email read it.
+//
+// WHAT THIS RUNS. One show, one email to four contacts, two of them on one address, read through 20
+// seeded permutations of the contacts and compared by the store's identifier. The seed is fixed, so a
+// red run reproduces exactly (L339). Every name and address is invented (L155, L222).
+@MainActor
+@Suite("A send group holds one order whatever order its contacts arrive in (#4567)")
+struct SendGroupTotalOrderTests {
+    private let container: ModelContainer
+    private let context: ModelContext
+    private let seed: UInt64 = 4567
+    private let permutationCount = 20
+    private let twin = "ann@org.example"
+
+    init() throws {
+        container = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
+        context = container.mainContext
+    }
+
+    // The twins are planted in the middle, so neither end of the planted order is already the sorted one,
+    // and their address sorts lowest, so they are the two the group's representative is chosen between.
+    private func planted() throws -> (show: Prospect, contacts: [Recipient]) {
+        let p = Prospect(naturalKey: "twin show", groupName: "Quarry Singers", discipline: "choral",
+                         venue: "Quarry Hall", performanceDate: "2027-07-01", sourceListingURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .contacted)
+        context.insert(p)
+        let people = [("zed@org.example", "Zed"), (twin, "Tess"), (twin, "Toby"), ("kim@org.example", "Kim")]
+        p.setRecipients(people.map { address, name in
+            let r = Recipient(id: address, email: address, name: name, provenance: .act)
+            r.sendGroupId = "g"
+            r.sendState = .sent
+            r.gmailThreadId = "t"
+            // The twin address wrote back, recorded on every peer as detection does (#2113).
+            r.replied = true
+            r.replyFromAddress = twin
+            return r
+        })
+        // Saved, so every identifier the order falls back to is a permanent one.
+        try context.save()
+        return (p, p.recipients)
+    }
+
+    private func permutations(of contacts: [Recipient]) -> [[Recipient]] {
+        var generator = SeededGenerator(seed: seed)
+        return (0..<permutationCount).map { _ in contacts.shuffled(using: &generator) }
+    }
+
+    // The positive control: the group holds the tie this exists to break, and the shuffle moves it, so a
+    // green below is about the tie rather than about a group with none (L159).
+    @Test func theGroupHoldsTwoContactsOnOneAddressAndTheShuffleMovesThem() throws {
+        let (_, contacts) = try planted()
+        let twins = contacts.filter { $0.id == twin }
+        #expect(twins.count == 2)
+        #expect(Set(twins.map(\.persistentModelID)).count == 2)
+        let twinOrders = Set(permutations(of: contacts).map { order in
+            order.filter { $0.id == twin }.map(\.persistentModelID)
+        })
+        #expect(twinOrders.count == 2, "the shuffle never swapped the twins, so nothing below is tested")
+    }
+
+    @Test func peersAreInOneOrderWhateverOrderTheContactsArriveIn() throws {
+        let (_, contacts) = try planted()
+        let anchor = try #require(contacts.first { $0.id == "kim@org.example" })
+        let orders = Set(permutations(of: contacts).map { order in
+            SendGroup.peers(of: anchor, among: order).map(\.persistentModelID)
+        })
+        #expect(orders.count == 1,
+                "peers came back in \(orders.count) orders over \(permutationCount) permutations of seed \(seed)")
+    }
+
+    @Test func theReplyRowNamesOneContactWhateverOrderTheContactsArriveIn() throws {
+        let (_, contacts) = try planted()
+        let anchor = try #require(contacts.first { $0.id == "kim@org.example" })
+        let named = Set(permutations(of: contacts).map { order in
+            ReplyIdentity.answering(for: anchor, among: order).persistentModelID
+        })
+        #expect(named.count == 1,
+                "the reply row named \(named.count) contacts over \(permutationCount) permutations of seed \(seed)")
+        #expect(contacts.first { $0.persistentModelID == named.first }?.id == twin)
+    }
+
+    @Test func exactlyOneContactStandsForTheGroup() throws {
+        let (show, contacts) = try planted()
+        let standing = contacts.filter { SendGroup.isRepresentative($0, in: show) }
+        #expect(standing.count == 1, "\(standing.count) contacts stand for one email")
+    }
+
+    @Test func theSendOrderIsOneOrderWhateverOrderTheContactsArriveIn() throws {
+        let (_, contacts) = try planted()
+        let orders = Set(permutations(of: contacts).map { order in
+            Recipient.inSendOrder(order).map(\.persistentModelID)
+        })
+        #expect(orders.count == 1,
+                "the send order came back in \(orders.count) orders over \(permutationCount) permutations of seed \(seed)")
+    }
+}

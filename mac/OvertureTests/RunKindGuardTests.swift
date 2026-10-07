@@ -71,10 +71,15 @@ struct StaleMarkerNeverClaimsAPrepRunTests {
         FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     }
 
+    // #4522: the marker's modification time IS the heartbeat `isRunning` reads, so it is set to the instant
+    // the test pins. This helper used to take `startedAt` and ignore it, leaving the file stamped with the
+    // real time: a `now` pinned in May 2026 then read a marker written in its own future as beating, and
+    // the run counted as live only because the suite runs later than its fixture (L130).
     private func liveRunMarker(at url: URL, startedAt: Date) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: url)
+        try FileManager.default.setAttributes([.modificationDate: startedAt], ofItemAtPath: url.path)
     }
 
     // THE #1809 CASE, through the function every surface actually calls: a Prep run is live, and a check

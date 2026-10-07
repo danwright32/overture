@@ -109,7 +109,7 @@ struct PrepManuallyTakesARouteTests {
 
         ProspectMutations.prepManually(item(p), email: "instagram.com/kestrelquartet", name: nil,
                                        subject: "Photographing your show", body: "Hello, ...",
-                                       prospects: [p], context: ctx, feedback: feedback)
+                                       shows: [p], context: ctx, feedback: feedback)
 
         let contact = try #require(p.recipients.first)
         // Stored on the SAME field the reachability check writes for a form-only or social-only contact,
@@ -127,7 +127,7 @@ struct PrepManuallyTakesARouteTests {
         let ctx = try context()
         let p = show(ctx)
         ProspectMutations.prepManually(item(p), email: "kestrelquartet.example/contact", name: nil,
-                                       subject: "s", body: "b", prospects: [p], context: ctx,
+                                       subject: "s", body: "b", shows: [p], context: ctx,
                                        feedback: ActionFeedback())
         p.status = .approved
         #expect(SendService.nextPendingRecipient(for: p, today: ScoutTestClock.beforeAllFixtures) == nil)
@@ -140,7 +140,7 @@ struct PrepManuallyTakesARouteTests {
         let ctx = try context()
         let p = show(ctx)
         ProspectMutations.prepManually(item(p), email: "instagram.com/kestrelquartet", name: nil,
-                                       subject: "s", body: "b", prospects: [p], context: ctx,
+                                       subject: "s", body: "b", shows: [p], context: ctx,
                                        feedback: ActionFeedback())
         #expect(p.reachabilityResultFromRecipients == .socialOnly)
         #expect(FormPitch.state(of: p) != .unavailable,
@@ -152,7 +152,7 @@ struct PrepManuallyTakesARouteTests {
         let ctx = try context()
         let p = show(ctx)
         ProspectMutations.prepManually(item(p), email: "booking@kestrelquartet.example", name: "Wren",
-                                       subject: "s", body: "b", prospects: [p], context: ctx,
+                                       subject: "s", body: "b", shows: [p], context: ctx,
                                        feedback: ActionFeedback())
         let contact = try #require(p.recipients.first)
         #expect(contact.email == "booking@kestrelquartet.example")

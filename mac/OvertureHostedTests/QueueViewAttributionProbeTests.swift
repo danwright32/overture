@@ -686,7 +686,7 @@ struct QueueViewAttributionProbeTests {
         // Warm the host once, untimed and unsampled, exactly as 0c.8 does.
         let warm = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
         _ = Phase0cView.settle(warm, bodyMustRun: true) {}
-        warm.close()
+        HostedPassCounting.unmountAndClose(warm)
         _ = registry.takeKeys()
 
         // MARK: the window height sweep, unsampled: the only reading that moves realised rows alone.
@@ -702,7 +702,7 @@ struct QueueViewAttributionProbeTests {
                         return made
                     }
                 })
-                w?.close()
+                HostedPassCounting.unmountAndClose(w)
             }
             let cpu = rs.filter(\.settled.completed).map(\.settled.cpuMs)
             let realised = ViewAttributionProbe.medianInt(rs.map(\.counts.realised))
@@ -725,14 +725,14 @@ struct QueueViewAttributionProbeTests {
                     return made
                 }
             }
-            w?.close()
+            HostedPassCounting.unmountAndClose(w)
             return r
         }
 
         // One window for the per-change kinds, drawn and settled before anything is sampled.
         let feed = Phase0cServedFeed(a)
         let window = Phase0cViewRig.host(container, rows: t.rows, feed: feed, size: size)
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(window) }
         _ = Phase0cView.settle(window, bodyMustRun: true) {}
         let drawnOnA = registry.takeKeys()
 
@@ -794,7 +794,7 @@ struct QueueViewAttributionProbeTests {
             let reachedFeed = Phase0cServedFeed(reachedA)
             let reachedWindow = Phase0cViewRig.host(container, rows: t.rows, feed: reachedFeed, size: size,
                                                     link: link)
-            defer { reachedWindow.close() }
+            defer { HostedPassCounting.unmountAndClose(reachedWindow) }
             _ = Phase0cView.settle(reachedWindow, bodyMustRun: true) {}
             let listed = QueueRenderCounter.stageListBodyCount(QueueRenderCounter.reachedOutList)
             _ = Phase0cView.settle(reachedWindow, bodyMustRun: true) {

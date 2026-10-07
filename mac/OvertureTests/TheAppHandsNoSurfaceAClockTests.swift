@@ -17,10 +17,13 @@ import Foundation
 // window in production, and every hosted test would stay green. So the call sites are read from the
 // app's own source, every one of them rather than a list, and none may pass `clock:`; and each surface's
 // default is asserted to be the wall clock, which is what a call site passing nothing gets.
+//
+// #4534: the Archive's scope memo is the third surface with the same window over the same seam, so it is
+// held to the same two rules.
 @Suite("The app hands neither the queue nor the Sources sheet a clock (#4516)")
 struct TheAppHandsNoSurfaceAClockTests {
 
-    static let surfaces = ["QueueView", "SourcesView"]
+    static let surfaces = ["QueueView", "SourcesView", "ArchiveView"]
 
     // Every argument list the code passes to `<name>(`, balanced by parentheses, with comments stripped
     // first so a sentence about a call is not one. A word boundary in front, so `XQueueView(` is not read
@@ -70,7 +73,8 @@ struct TheAppHandsNoSurfaceAClockTests {
 
     @Test func eachSurfaceDefaultsToTheWallClock() {
         for (surface, path) in [("QueueView", "Overture/UI/QueueView.swift"),
-                                ("SourcesView", "Overture/UI/SourcesView.swift")] {
+                                ("SourcesView", "Overture/UI/SourcesView.swift"),
+                                ("ArchiveView", "Overture/UI/ArchiveView.swift")] {
             let source = SourceGuardHelper.source(path)
             #expect(!source.isEmpty, "\(path) could not be read, so nothing below was measured")
             #expect(SourceGuardHelper.containsCode("var clock: () -> Date = Date.init", in: source),

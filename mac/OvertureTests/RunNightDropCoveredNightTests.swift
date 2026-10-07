@@ -147,7 +147,7 @@ struct RunNightDropCoveredNightTests {
         try ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissForReason(QueueItem(run), .pitchingOtherShows, prospects: [run],
+        ProspectMutations.dismissForReason(QueueItem(run), .pitchingOtherShows, shows: [run],
                                            context: ctx, feedback: feedback,
                                            offer: DayOffOfferRequest(), now: now)
 
@@ -218,7 +218,7 @@ struct RunNightDropCoveredNightTests {
         try ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, prospects: [run], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, shows: [run], context: ctx,
                                            feedback: feedback, offer: DayOffOfferRequest(), now: now)
 
         #expect(run.status == .dismissed)
@@ -237,7 +237,7 @@ struct RunNightDropCoveredNightTests {
         try ctx.save()
         let feedback = ActionFeedback()
 
-        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, prospects: [run], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, shows: [run], context: ctx,
                                            feedback: feedback, offer: DayOffOfferRequest(), now: now)
 
         let said = feedback.message ?? "no message at all"
@@ -256,7 +256,7 @@ struct RunNightDropCoveredNightTests {
         try ctx.save()
         let undo = QueueUndoStack()
 
-        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, prospects: [run], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(run), .dateConflict, shows: [run], context: ctx,
                                            feedback: ActionFeedback(), offer: DayOffOfferRequest(),
                                            undo: undo, now: now)
         #expect(run.status == .dismissed)
@@ -279,7 +279,7 @@ struct RunNightDropCoveredNightTests {
         try ctx.save()
         let undo = QueueUndoStack()
 
-        ProspectMutations.dismissForReason(QueueItem(run), .tooSoon, prospects: [run], context: ctx,
+        ProspectMutations.dismissForReason(QueueItem(run), .tooSoon, shows: [run], context: ctx,
                                            feedback: ActionFeedback(), offer: DayOffOfferRequest(),
                                            undo: undo, now: now)
         #expect(run.runNights == ["2026-09-12", "2026-09-13"])
@@ -304,7 +304,7 @@ struct RunNightDropCoveredNightTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.dismissAll([run.naturalKey, other.naturalKey], reason: .pitchingOtherShows,
-                                     dateLabel: "Aug 28", prospects: [run, other], context: ctx,
+                                     dateLabel: "Aug 28", shows: [run, other], context: ctx,
                                      feedback: feedback, now: now)
 
         #expect(other.status == .dismissed)

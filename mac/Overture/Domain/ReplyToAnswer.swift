@@ -69,7 +69,21 @@ enum ReplyToAnswer {
             }
         }
         due.append(contentsOf: inquiries.filter(\.hasUnhandledReply).map { .inquiry($0) })
-        return due.sorted { ($0.arrivedAt ?? .distantPast) < ($1.arrivedAt ?? .distantPast) }
+        return due.sorted(by: waitedLonger)
+    }
+
+    // #4531: whoever has waited longest first. At one instant a show comes before an inquiry, as on the
+    // Reached out list; two shows by `DueWork.showThenContact`; two inquiries by the event's natural key and
+    // then the store's identifier, since two people can write about one event. Never arrival order (L419).
+    static func waitedLonger<Row: ProspectFacts>(_ a: Conversation<Row>, _ b: Conversation<Row>) -> Bool {
+        let (ta, tb) = (a.arrivedAt ?? .distantPast, b.arrivedAt ?? .distantPast)
+        if ta != tb { return ta < tb }
+        switch (a, b) {
+        case let (.show(p, r), .show(q, s)): return DueWork.showThenContact(p, r, q, s)
+        case (.show, .inquiry): return true
+        case (.inquiry, .show): return false
+        case let (.inquiry(i), .inquiry(j)): return QueueModel.inquiryKeyThenIdentifier(i, j)
+        }
     }
 }
 
