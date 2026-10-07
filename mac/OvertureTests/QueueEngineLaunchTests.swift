@@ -199,13 +199,14 @@ final class QueueEngineLaunchFirstReadTests {
         #expect(LaunchRig.report(engine)?.shows == 5)
     }
 
-    // D6: a short read is a failure, never a smaller queue.
-    @Test func aShortReadIsAFailureNotAShorterQueue() throws {
+    // D6: a short read is a failure, never a smaller queue, in any table the read covers, a small one included.
+    @Test(arguments: [FactStore.Table.shows, .watchedSources, .allowedSeedTowns])
+    func aShortReadIsAFailureNotAShorterQueue(_ table: FactStore.Table) throws {
         let store = try EngineStore(shows: 4, seed: 404)
         let turns = EngineTurns()
         let clock = EngineTestClock()
         var setup = LaunchRig.inTurn()
-        setup.read = VerifierReads.short
+        setup.read = VerifierReads.short(table)
         let engine = LaunchRig.engine(store, turns, launch: setup, clock: clock)
         engine.start()
         turns.run()
