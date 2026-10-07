@@ -378,7 +378,9 @@ the measurement it came from lives here. Read the entry before the rule decides 
   landing saves whatever is pending in the main context before it applies anything (the entry flush, once in its
   read phase and once holding the store), and records how many of those flushes had something to save on its
   landing record (`LandingRun.entryFlushSaves`). This is that number's reader: of the landings STARTED in the
-  last 14 days (`--days N`), how many saved first, once or twice. It reads a COPY of the store (`--store PATH`,
+  last 14 days (`--days N`), how many saved first, once or twice. Since #4536 the lead paste records one as
+  well (entry point `leadPaste`, sequence 0, since it stamps no source), so the rate covers runScout, the
+  calendar results ingest and the paste, and the recovery's replays, which land through the ingest. It reads a COPY of the store (`--store PATH`,
   the live Release store by default), never the store itself. The count is optional, and that is its marker: a
   landing record carrying none (written before #4338, or made by the recovery for a landing that never reached its
   first save) is left out of the rate and counted as its own group, never read as a landing that saved nothing.

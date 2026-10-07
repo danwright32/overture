@@ -33,9 +33,11 @@ struct QueueUndoBatchTests {
         return p
     }
 
-    private func row(_ key: String, from priorStatus: ReviewStatus = .new,
+    // #4532: a row names the show it acted on by store identity. One with no show names none, which is
+    // what the entry-only tests (titles, counts) need and what a gone row is.
+    private func row(_ key: String, of show: Prospect? = nil, from priorStatus: ReviewStatus = .new,
                      reason: String = "too_soon") -> QueueUndoEntry.Row {
-        QueueUndoEntry.Row(naturalKey: key, groupName: "Org \(key)",
+        QueueUndoEntry.Row(showID: show?.persistentModelID, naturalKey: key, groupName: "Org \(key)",
                            priorStatus: priorStatus, priorShowOutcomeRaw: nil, priorShowOutcomeAt: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
                            resultingStatus: .dismissed, resultingShowOutcomeRaw: reason)
     }
@@ -72,9 +74,9 @@ struct QueueUndoBatchTests {
         let a = dismissedShow(ctx, "a")
         let b = dismissedShow(ctx, "b")
         let entry = try #require(QueueUndoEntry.batch(actionLabel: "Dismiss", label: "2 shows on Jul 24",
-                                                      rows: [row("a"), row("b")]))
+                                                      rows: [row("a", of: a), row("b", of: b)]))
 
-        let outcome = QueueUndo.apply(entry, resolving: { key in [a, b].first { $0.naturalKey == key } },
+        let outcome = QueueUndo.apply(entry, resolving: [a, b],
                                       in: ctx)
 
         #expect(outcome.restored == 2)
@@ -94,9 +96,9 @@ struct QueueUndoBatchTests {
         b.status = .contacted             // a send moved it since the dismissal
         try ctx.save()
         let entry = try #require(QueueUndoEntry.batch(actionLabel: "Dismiss", label: "2 shows on Jul 24",
-                                                      rows: [row("a"), row("b")]))
+                                                      rows: [row("a", of: a), row("b", of: b)]))
 
-        let outcome = QueueUndo.apply(entry, resolving: { key in [a, b].first { $0.naturalKey == key } },
+        let outcome = QueueUndo.apply(entry, resolving: [a, b],
                                       in: ctx)
 
         #expect(outcome.restored == 1)
@@ -112,12 +114,14 @@ struct QueueUndoBatchTests {
         let ctx = try context()
         let a = dismissedShow(ctx, "a")
         let entry = try #require(QueueUndoEntry.batch(actionLabel: "Dismiss", label: "2 shows on Jul 24",
-                                                      rows: [row("a"), row("gone")]))
+                                                      rows: [row("a", of: a), row("gone")]))
 
-        let outcome = QueueUndo.apply(entry, resolving: { key in key == "a" ? a : nil }, in: ctx)
+        let outcome = QueueUndo.apply(entry, resolving: [a], in: ctx)
 
         #expect(outcome.restored == 1)
         #expect(outcome.total == 2)
+        // #4532: the row naming no stored show is refused as gone, never matched by its key.
+        #expect(outcome.refusals == [.gone])
     }
 
     // Every row having moved on is the whole entry going stale, and the caller has to be able to tell that
@@ -126,9 +130,9 @@ struct QueueUndoBatchTests {
         let ctx = try context()
         let a = dismissedShow(ctx, "a", reason: "not_interested")   // re-labelled since
         let entry = try #require(QueueUndoEntry.batch(actionLabel: "Dismiss", label: "1 show on Jul 24",
-                                                      rows: [row("a")]))
+                                                      rows: [row("a", of: a)]))
 
-        let outcome = QueueUndo.apply(entry, resolving: { _ in a }, in: ctx)
+        let outcome = QueueUndo.apply(entry, resolving: [a], in: ctx)
 
         #expect(outcome.restored == 0)
         #expect(outcome.didAnything == false)
@@ -140,7 +144,7 @@ struct QueueUndoBatchTests {
     @Test func asingleRowEntryIsUnchanged() throws {
         let ctx = try context()
         let a = dismissedShow(ctx, "a")
-        let entry = QueueUndoEntry(naturalKey: "a", groupName: "Org a", actionLabel: "Dismiss",
+        let entry = QueueUndoEntry(showID: a.persistentModelID, naturalKey: "a", groupName: "Org a", actionLabel: "Dismiss",
                                    priorStatus: .queued, priorShowOutcomeRaw: nil, priorShowOutcomeAt: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
                                    resultingStatus: .dismissed, resultingShowOutcomeRaw: "too_soon")
 

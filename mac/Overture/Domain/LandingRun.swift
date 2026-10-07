@@ -21,6 +21,13 @@ import SwiftData
 // when its synchronous landing block STARTS (after the entry flush and the last await, so the read phase
 // stays clean), with `landedAt` nil, carried to disk by the landing's first save, and stamps `landedAt` in
 // its closing save. A row with `landedAt` nil is a landing that started and did not finish.
+// #4536: the lead paste records one too, under an identity of its own ("paste-" and a UUID) and sequence 0, since
+// it stamps no source and keeps no journal, so `scripts/landing-flush-rate.sh` counts its entry flushes with the rest.
+// So three entry points record rows now, runScout, the calendar results ingest and the paste. A paste row is never an
+// interrupted landing to the recovery, whatever its `landedAt`: the recovery finds landings by their JOURNALS
+// (`LandingJournals.list`) and only then looks a row up by the journal's identity and sequence (`record`), and no
+// journal names a "paste-" identity. Sequence 0, which A7's rows carry too, is below every minted sequence, so
+// `highestSequence` is unmoved by it.
 @Model
 final class LandingRun {
     var runIdentity: String
