@@ -565,7 +565,7 @@ struct RootView: View {
     }
 
     private func bulkReprep(_ mode: ReprepMode) {
-        ProspectMutations.bulkReprep(mode, prospects: allProspects, context: context, feedback: feedback)
+        ProspectMutations.bulkReprep(mode, shows: allProspects, context: context, feedback: feedback)
     }
 
     // #355: glanceable freshness, reusing the same coarse relative-time formatter PrepStatus and

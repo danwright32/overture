@@ -54,17 +54,77 @@ struct AControlThatFindsNothingSaysSoTests {
             """)
 
         // UNMEASURED is its own outcome (L98): a file with nothing left to find and a scan that read the
-        // wrong file leave the same empty list, so the actions must be SEEN going through the helper.
-        let throughTheHelper = code.filter {
-            $0.code.contains("model(for: item, in: prospects, feedback: feedback)")
-                || $0.code.contains("model(forKey: naturalKey, org: nil, in: prospects, feedback: feedback)")
+        // wrong file leave the same empty list, so the actions must be SEEN going through the resolver.
+        let throughTheResolver = code.filter {
+            $0.code.contains("shows.show(for: item, feedback: feedback)")
+                || $0.code.contains("shows.show(forKey: naturalKey, org: nil, feedback: feedback)")
         }.count
-        #expect(throughTheHelper > 40, """
-            Only \(throughTheHelper) actions resolve their show through the shared helper, so this guard \
+        #expect(throughTheResolver > 40, """
+            Only \(throughTheResolver) actions resolve their show through the resolver, so this guard \
             is reading something other than the actions it exists for.
             """)
-        let helper = try #require(SourceGuardHelper.bodyOfFunction(named: "model", in: source))
-        #expect(helper.contains("prospects.show(for: item, feedback: feedback)"),
-                "the shared helper no longer resolves through ShowIdentity, so the actions behind it do not")
+        // And the resolver's own answer is the one rule: through the card's identity, never its key.
+        let resolver = SourceGuardHelper.source("Overture/Domain/ShowIdentity.swift")
+        let answer = try #require(SourceGuardHelper.bodyOfFunction(named: "show", in: resolver),
+                                  "ShowResolver.show(for:feedback:) was not found, so nothing was measured")
+        #expect(answer.contains("ShowIdentity(item)") && answer.contains("resolve(in: self)"),
+                "ShowResolver.show(for:) no longer resolves the card through ShowIdentity")
+    }
+
+    // #4357 slice I2, the PARAMETER half. A lookup can only be written against what an action is handed,
+    // and an action handed `[Prospect]` is handed the thing the old key lookup walked, with nothing at the
+    // signature saying how it may be searched. Every action takes `shows: some ShowResolver` instead, which
+    // offers resolution by identity, and the row factory takes `ShowsInHand`, which is read on a press. So
+    // a parameter of the array shape coming back is refused here, whatever it is named.
+    //
+    // A local or a return value of `[Prospect]` is not a parameter and is not matched: `siblings` and
+    // `bulkReprepEligible` RETURN rows they resolved, and that is their whole job.
+    private static func declaresAnArrayOfShows(_ code: String) -> Bool {
+        let trimmed = code.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("let ") || trimmed.hasPrefix("var ") { return false }
+        // A label, an optional internal name, a colon, then the array: alone, or returned by a closure.
+        // Anchored at the start of a parameter, which is the line's start or just after `(` or `,`.
+        let parameter = #"(?:^|[(,])\s*(?:_\s+)?[A-Za-z]\w*(?:\s+[A-Za-z]\w*)?\s*:\s*(?:@escaping\s*)?(?:\(\)\s*->\s*)?\[Prospect\]"#
+        return code.range(of: parameter, options: .regularExpression) != nil
+    }
+
+    @Test func noRowActionIsHandedAnArrayOfShows() {
+        var offenders: [String] = []
+        var resolverParameters = 0
+        for file in ["Overture/UI/ProspectMutations.swift", "Overture/UI/ProspectRowFactory.swift"] {
+            let source = SourceGuardHelper.source(file)
+            #expect(!source.isEmpty, "Could not read \(file), so nothing was measured.")
+            let code = SwiftSource.scannableLines(in: source, skipping: [])
+            offenders += code.filter { Self.declaresAnArrayOfShows($0.code) }
+                .map { "\(file) line \($0.line)  \($0.code.trimmingCharacters(in: .whitespaces))" }
+            resolverParameters += code.filter {
+                $0.code.contains("shows: some ShowResolver") || $0.code.contains("shows: ShowsInHand")
+            }.count
+        }
+        #expect(offenders.isEmpty, """
+            A row action is handed an array of shows. An array can be searched by key, which after a merge \
+            finds a survivor Dan did not press (#4357 slice I2, B3). Take `shows: some ShowResolver` and \
+            resolve the card through it.
+            \(offenders.joined(separator: "\n"))
+            """)
+        // UNMEASURED (L98): the parameters this scan exists for must be SEEN, or a scan of the wrong file,
+        // or a renamed label, would read as a clean pass.
+        #expect(resolverParameters > 50, """
+            Only \(resolverParameters) actions take `shows: some ShowResolver`, so this scan is reading \
+            something other than the actions it exists for.
+            """)
+    }
+
+    // The scan's own pattern, seen to separate the shapes it must from the ones it must not. A pattern that
+    // never matched anything would pass the file scan above on every tree (L1, L104).
+    @Test func theParameterPatternTellsAParameterFromALocalOrAReturn() {
+        #expect(Self.declaresAnArrayOfShows("    static func a(_ item: QueueItem, prospects: [Prospect], context: ModelContext) {"))
+        #expect(Self.declaresAnArrayOfShows("                          rows: [Prospect], context: ModelContext,"))
+        #expect(Self.declaresAnArrayOfShows("    static func b(_ shows: [Prospect], now: Date) -> [Prospect] {"))
+        #expect(Self.declaresAnArrayOfShows("    static func c(in shows: [Prospect]) -> Int {"))
+        #expect(Self.declaresAnArrayOfShows("    static func row(_ item: QueueItem, prospects: @escaping () -> [Prospect], x: Int) {"))
+        #expect(!Self.declaresAnArrayOfShows("    private static func siblings(of item: QueueItem, in shows: some ShowResolver) -> [Prospect] {"))
+        #expect(!Self.declaresAnArrayOfShows("        let every: [Prospect] = shows.everyShow"))
+        #expect(!Self.declaresAnArrayOfShows("    static func d(_ item: QueueItem, shows: some ShowResolver, context: ModelContext) {"))
     }
 }

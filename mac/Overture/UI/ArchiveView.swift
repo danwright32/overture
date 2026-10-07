@@ -357,10 +357,10 @@ struct ArchiveView: View {
              context: ModelContext, feedback: ActionFeedback,
              dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
         let item = cards.card(for: scopeRow)
-        // #3690: a closure, so the array is read on a press rather than captured per row.
+        // #3690: through `ShowsInHand`, so the array is read on a press rather than captured per row.
         // #4357 slice G1: the day and instant the cards were built at, not the wall clock read while drawing.
         return ProspectRowFactory.row(item, today: cards.preamble.day, now: cards.preamble.now,
-                              prospects: { prospects }, context: context, feedback: feedback,
+                              shows: ShowsInHand { prospects }, context: context, feedback: feedback,
                               dayOffOffer: dayOffOffer,
                               // #1770: read once from the cache here rather than by each card it builds.
                               gmailConnected: GmailConnection.shared.isConnected,
@@ -399,14 +399,14 @@ struct ArchiveView: View {
 
     private func performSend(_ naturalKey: String) {
         pendingConfirm = nil
-        ProspectMutations.performSend(naturalKey, prospects: prospects, context: context, feedback: feedback,
+        ProspectMutations.performSend(naturalKey, shows: prospects, context: context, feedback: feedback,
                                       markSending: { outboundSending[$0] = Date() },
                                       clearSending: { outboundSending[$0] = nil },
                                       onNeedsReconnect: { showReconnect = true })
     }
 
     private func sendReply(_ item: QueueItem, _ recipientId: String) {
-        ProspectMutations.sendReply(item, recipientId, prospects: prospects, context: context, feedback: feedback,
+        ProspectMutations.sendReply(item, recipientId, shows: prospects, context: context, feedback: feedback,
                                     markSending: { replySending[$0] = Date() },
                                     clearSending: { replySending[$0] = nil },
                                     onNeedsReconnect: { showReconnect = true })

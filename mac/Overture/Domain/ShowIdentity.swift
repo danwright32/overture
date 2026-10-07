@@ -162,6 +162,10 @@ protocol ShowResolver {
     /// The identity this resolver holds for each natural key asked about, for the callers that hold only
     /// a key (a reply, a nudge, a send confirmed from a sheet, a collapsed card's members, a night's rows).
     @MainActor func identities(forKeys keys: Set<String>) -> [String: ShowIdentity]
+    /// Every row this resolver holds, for the actions that act on all of them and resolve none: the bulk
+    /// re-prep, and the two reads that need a show's OTHER rows (the manual prep prefill's past addresses,
+    /// and an organisation's do not contact mark). Never a way to find one show: that is `liveShow`.
+    @MainActor var everyShow: [Prospect] { get }
 }
 
 extension ShowResolver {
@@ -234,4 +238,31 @@ extension Array: ShowResolver where Element == Prospect {
         }
         return out
     }
+
+    @MainActor
+    var everyShow: [Prospect] { self }
+}
+
+// What a surface hands the row factory: the rows a press resolves against, read only WHEN a press
+// happens (#3690). Handed an array, a surface had to derive it before the press, and QueueView handed the
+// render pass's own copy, model references frozen when the pass ran, so a merge left every action writing
+// to a row the store had thrown away. Handed the LIVE list, `QueueModel.queueScope` (a whole store filter
+// and a stable sort) would run once per drawn row. Read on the press, it runs zero times per row and is
+// live by construction.
+//
+// DELIBERATELY NOT A `ShowResolver` ITSELF. A conformance would re-read the rows on every requirement it
+// answers, and one press asks several: a keep on a collapsed card resolves its own row and then one per
+// member, so a five night run would run the whole store filter seven times on a click (L383, L471). The
+// read is a METHOD instead, named for when it happens, so its cost shows at the call site and each press
+// pays it once. The queue engine (#4358) answers by identifier from its own members and replaces this.
+struct ShowsInHand {
+    private let read: () -> [Prospect]
+
+    init(_ read: @escaping () -> [Prospect]) {
+        self.read = read
+    }
+
+    /// The rows as they are at this press. Call once per press and hand the result to the action.
+    @MainActor
+    func onPress() -> [Prospect] { read() }
 }

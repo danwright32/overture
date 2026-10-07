@@ -199,7 +199,7 @@ struct OneChangeDerivesTheQueueOnceTests {
 
         let all = try prospects(h.context)
         let target = try #require(all.first { $0.naturalKey == "row-5" })
-        ProspectMutations.dismissForReason(QueueItem(target), .notAFit, prospects: all, context: h.context,
+        ProspectMutations.dismissForReason(QueueItem(target), .notAFit, shows: all, context: h.context,
                                            feedback: h.feedback, offer: h.offer, undo: h.undo)
         let why = await settle(h.hosting)
 
@@ -225,7 +225,7 @@ struct OneChangeDerivesTheQueueOnceTests {
 
         let all = try prospects(h.context)
         let target = try #require(all.first { $0.naturalKey == "row-9" })
-        ProspectMutations.correctClassification(QueueItem(target), discipline: .theater, prospects: all,
+        ProspectMutations.correctClassification(QueueItem(target), discipline: .theater, shows: all,
                                                 context: h.context, feedback: h.feedback)
         let why = await settle(h.hosting)
 
@@ -252,7 +252,7 @@ struct OneChangeDerivesTheQueueOnceTests {
         #expect(keys.count == Self.showsPerNight, Comment(rawValue: "the fixture's night holds "
                 + "\(keys.count) shows, not the \(Self.showsPerNight) it was built with"))
         _ = ProspectMutations.dismissAll(keys, reason: .notAFit, dateLabel: night, nightDate: night,
-                                         prospects: all, context: h.context, feedback: h.feedback,
+                                         shows: all, context: h.context, feedback: h.feedback,
                                          undo: h.undo)
         let why = await settle(h.hosting)
 
@@ -365,7 +365,7 @@ struct OneChangeDerivesTheQueueOnceTests {
 
         let all = try prospects(h.context)
         let first = try #require(all.first { $0.naturalKey == "row-5" })
-        ProspectMutations.dismissForReason(QueueItem(first), .notAFit, prospects: all, context: h.context,
+        ProspectMutations.dismissForReason(QueueItem(first), .notAFit, shows: all, context: h.context,
                                            feedback: h.feedback, offer: h.offer, undo: h.undo)
         let settled = await settle(h.hosting)
         #expect(settled.count == 1, Comment(rawValue:
