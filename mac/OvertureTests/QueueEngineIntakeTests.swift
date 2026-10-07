@@ -4,12 +4,13 @@ import Testing
 
 // #4358 (slice E1a): the queue engine's core, tested. One file on purpose: every new file adds four to six
 // entries to the generated project file, and those entries, not the code, are what pushed this branch's review
-// diff past what the lessons review can read.
+// diff past what the lessons review can read. The gate, the clock and the change-kind matrix (slice E1b) are
+// in `QueueEnginePassTests.swift` and build on what is declared here.
 //
 // What every test here builds on: a seeded store holding every table the engine keeps, a schedule the test
-// runs turn by turn, and the Mirror walk that finds every structure the engine keys by identity. Every name and
-// address is invented (L155, L222) and every date is pinned (L130). The store is seeded (L339), so a failure
-// names a seed that reproduces it.
+// runs turn by turn, a clock it moves by hand, a derivation that only counts, and the Mirror walk that finds
+// every structure the engine keys by identity. Every name and address is invented (L155, L222) and every date
+// is pinned (L130). The store is seeded (L339), so a failure names a seed that reproduces it.
 //
 // Every assertion about the engine's facts is made against a fresh read of the store through a context of its
 // own, never against the engine's own records (L70).
@@ -127,14 +128,116 @@ final class EngineTurns {
     }
 }
 
-/// Engines built the way every test builds them: the store's main context, a private save counter, a pinned
-/// clock and the hand run schedule; started, with the start's turns run.
+/// A clock the test moves by hand, whose sleeps end only when it has moved far enough (L524).
+final class EngineTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var instant: Date
+    private var sleepers: [Int: (until: Date, resume: CheckedContinuation<Void, Error>)] = [:]
+    private var nextSleeper = 0
+
+    init(_ start: Date = EngineStore.baseNow) {
+        instant = start
+    }
+
+    var now: Date { lock.withLock { instant } }
+
+    var waiting: Int { lock.withLock { sleepers.count } }
+
+    var clock: QueueEngineClock {
+        QueueEngineClock(now: { [self] in now }, sleep: { [self] interval in try await nap(interval) })
+    }
+
+    func advance(by seconds: TimeInterval) {
+        let due: [CheckedContinuation<Void, Error>] = lock.withLock {
+            instant = instant.addingTimeInterval(seconds)
+            let ready = sleepers.filter { $0.value.until <= instant }
+            for key in ready.keys { sleepers.removeValue(forKey: key) }
+            return ready.values.map { $0.resume }
+        }
+        for resume in due { resume.resume() }
+    }
+
+    private func nap(_ interval: TimeInterval) async throws {
+        let key = lock.withLock {
+            nextSleeper += 1
+            return nextSleeper
+        }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (resume: CheckedContinuation<Void, Error>) in
+                let cancelled: Bool = lock.withLock {
+                    if Task.isCancelled { return true }
+                    sleepers[key] = (instant.addingTimeInterval(interval), resume)
+                    return false
+                }
+                if cancelled { resume.resume(throwing: CancellationError()) }
+            }
+        } onCancel: {
+            let resume = lock.withLock { sleepers.removeValue(forKey: key)?.resume }
+            resume?.resume(throwing: CancellationError())
+        }
+    }
+}
+
+/// Derivations a test hands the engine. None is a queue term: each answers only what the test asks about.
+enum EngineDerivations {
+    /// How many rows of each kind the facts hold, and the minute when asked.
+    struct Counts: Equatable {
+        var shows = 0
+        var contacts = 0
+        var inquiries = 0
+        var smallRows = 0
+        var minute = 0
+    }
+
+    static func counts(nextChange: Date? = nil, readsTheMinute: Bool = false,
+                       builtCardKeys: Set<String> = []) -> QueueEngineDerivation<Counts> {
+        QueueEngineDerivation(
+            derive: { input in
+                let f = input.facts
+                return Counts(shows: f.shows.count, contacts: f.shows.values.reduce(0) { $0 + $1.factContacts.count },
+                              inquiries: f.inquiries.count,
+                              smallRows: f.orgAnswers.count + f.watchedSources.count + f.refusedAddresses.count
+                                  + f.promotedProducers.count + f.demotedHouses.count + f.excludedTowns.count
+                                  + f.allowedSeedTowns.count,
+                              minute: readsTheMinute ? Int(input.now.timeIntervalSince1970 / 60) : 0)
+            },
+            differingFields: { a, b in
+                var out: [String] = []
+                if a.shows != b.shows { out.append("shows") }
+                if a.contacts != b.contacts { out.append("contacts") }
+                if a.inquiries != b.inquiries { out.append("inquiries") }
+                if a.smallRows != b.smallRows { out.append("smallRows") }
+                if a.minute != b.minute { out.append("minute") }
+                return out
+            },
+            nextChange: { _ in nextChange },
+            builtCardKeys: { _ in builtCardKeys })
+    }
+}
+
+/// The engine every test builds unless it asks for another derivation.
+typealias CountsEngine = QueueEngine<EngineDerivations.Counts>
+
+/// Engines built the way every test builds them: the store's main context, a private save counter, the hand
+/// run schedule, the hand moved clock, and notification centres of the test's own, never the app's.
 @MainActor
 enum EngineHarness {
+    static func engine<Value>(_ store: EngineStore, _ derivation: QueueEngineDerivation<Value>,
+                              turns: EngineTurns, clock: EngineTestClock = EngineTestClock(),
+                              events: QueueEngineSystemEvents = QueueEngineSystemEvents(workspace: NotificationCenter(),
+                                                                                        system: NotificationCenter()),
+                              saves: StoreSaveCount = StoreSaveCount(),
+                              refused: @escaping @MainActor (Int, Int) -> Void = { published, incoming in
+                                  Issue.record("a generation \(incoming) was refused over \(published)")
+                              }) -> QueueEngine<Value> {
+        QueueEngine(context: store.context, derivation: derivation, saves: saves, clock: clock.clock, events: events,
+                    schedule: turns.schedule, refused: refused)
+    }
+
+    /// A counting engine, started, with the start's turns run.
     static func started(_ store: EngineStore, _ turns: EngineTurns,
-                        saves: StoreSaveCount = StoreSaveCount()) -> QueueEngine {
-        let engine = QueueEngine(context: store.context, saves: saves, now: { EngineStore.baseNow },
-                                 schedule: turns.schedule)
+                        saves: StoreSaveCount = StoreSaveCount()) -> CountsEngine {
+        let engine = engine(store, EngineDerivations.counts(), turns: turns, saves: saves)
         engine.start()
         turns.run()
         return engine
@@ -186,14 +289,21 @@ enum EngineIdentityWalk {
     }
 
     /// Every identifier a leaf holds: a dictionary's keys and values, a set's or array's elements.
-    static func identities(in leaf: Any) -> Set<PersistentIdentifier> {
+    static func identities(in leaf: Any) -> Set<PersistentIdentifier> { contents(of: leaf).ids }
+
+    /// Every identifier and every string (a natural key) a leaf holds.
+    static func contents(of leaf: Any) -> (ids: Set<PersistentIdentifier>, strings: Set<String>) {
         var ids: Set<PersistentIdentifier> = []
+        var strings: Set<String> = []
         for child in Mirror(reflecting: unwrapped(leaf)).children {
             let entry = Mirror(reflecting: child.value)
             let items = entry.displayStyle == .tuple ? entry.children.map(\.value) : [child.value]
-            for item in items { if let id = item as? PersistentIdentifier { ids.insert(id) } }
+            for item in items {
+                if let id = item as? PersistentIdentifier { ids.insert(id) }
+                if let string = item as? String { strings.insert(string) }
+            }
         }
-        return ids
+        return (ids, strings)
     }
 
     private static func unwrapped(_ value: Any) -> Any {
@@ -379,7 +489,7 @@ struct FactStoreTablesTests {
 //
 // Then one test per delete kind (a show and its contacts, a lone contact, an inquiry, a small table row): after
 // the delete is saved and the turn has run, every identity-keyed structure the walk finds is free of the
-// deleted identities, and the facts equal a fresh read of the store. The walk, not the list, decides where to
+// deleted identities and natural keys, and the facts equal a fresh read of the store. The walk, not the list, decides where to
 // look, so a structure the list forgot is searched too (L70).
 @Suite("Every identity keyed structure in the queue engine is resolved (#4358)")
 @MainActor
@@ -389,7 +499,7 @@ struct EngineIdentityKeyedStateTests {
         let store = try EngineStore(shows: 3, seed: 1)
         let engine = EngineHarness.started(store, EngineTurns())
         let (leaves, paths) = EngineIdentityWalk.walk(engine)
-        let registered = Set(QueueEngine.identityKeyedState.map(\.path))
+        let registered = Set(CountsEngine.identityKeyedState.map(\.path))
         // The positive control: the walk reaches the facts, so an empty finding is a reading, not a blind walk.
         #expect(leaves.contains { $0.path == "facts.shows" } && leaves.count > 10,
                 "the walk found \(leaves.count) structures, so it did not reach the engine's state")
@@ -401,7 +511,7 @@ struct EngineIdentityKeyedStateTests {
                 """)
         let stale = registered.subtracting(paths).sorted()
         #expect(stale.isEmpty, "identityKeyedState names structures the engine does not hold: \(stale.joined(separator: ", "))")
-        #expect(registered.count == QueueEngine.identityKeyedState.count, "a structure is registered twice")
+        #expect(registered.count == CountsEngine.identityKeyedState.count, "a structure is registered twice")
     }
 
     // The detector itself, on shapes it must catch and must leave alone.
@@ -416,22 +526,34 @@ struct EngineIdentityKeyedStateTests {
         #expect(!EngineIdentityWalk.isIdentityKeyed([Date.distantPast: 1]))
     }
 
-    /// Every identity the engine still holds anywhere the walk reaches.
-    private func held(by engine: QueueEngine) -> Set<PersistentIdentifier> {
-        EngineIdentityWalk.walk(engine).leaves.reduce(into: []) { $0.formUnion(EngineIdentityWalk.identities(in: $1.value)) }
+    /// Every identity and natural key the engine still holds anywhere the walk reaches.
+    private func held(by engine: CountsEngine) -> (ids: Set<PersistentIdentifier>, strings: Set<String>) {
+        var ids: Set<PersistentIdentifier> = []
+        var strings: Set<String> = []
+        for leaf in EngineIdentityWalk.walk(engine).leaves {
+            let found = EngineIdentityWalk.contents(of: leaf.value)
+            ids.formUnion(found.ids)
+            strings.formUnion(found.strings)
+        }
+        return (ids, strings)
     }
 
-    /// Runs `delete`, saves, runs the turn, and asserts nothing the engine holds names `ids`.
-    private func expectGone(_ ids: Set<PersistentIdentifier>, store: EngineStore, turns: EngineTurns,
-                            engine: QueueEngine, _ delete: () -> Void) throws {
+    /// Runs `delete`, saves, runs the turn, and asserts nothing the engine holds names `ids` or `keys`.
+    private func expectGone(_ ids: Set<PersistentIdentifier>, keys: Set<String> = [], store: EngineStore,
+                            turns: EngineTurns, engine: CountsEngine, _ delete: () -> Void) throws {
+        let before = held(by: engine)
         // The positive control: the engine held every one of them before the delete, so absence afterwards is
         // the resolve step's doing and not a structure that never had them (L159).
-        #expect(ids.isSubset(of: held(by: engine)), "the engine did not hold the rows before they were deleted")
+        #expect(ids.isSubset(of: before.ids), "the engine did not hold the rows before they were deleted")
+        #expect(keys.isSubset(of: before.strings), "the engine did not hold the keys before they were deleted")
         delete()
         try store.context.save()
         turns.run()
-        let left = ids.intersection(held(by: engine))
+        let after = held(by: engine)
+        let left = ids.intersection(after.ids)
+        let leftKeys = keys.intersection(after.strings)
         #expect(left.isEmpty, "\(left.count) deleted identities are still held after the resolve step")
+        #expect(leftKeys.isEmpty, "\(leftKeys.count) deleted natural keys are still held after the resolve step")
         #expect(try engine.facts == store.freshFacts(), "the facts differ from a fresh read after the delete")
     }
 
@@ -441,8 +563,13 @@ struct EngineIdentityKeyedStateTests {
         try store.context.save()
         let turns = EngineTurns()
         let engine = EngineHarness.started(store, turns)
+        // The surface keys the show by its natural key too, so the delete must reach those keys as well.
+        engine.setViewInputs(QueueEngineViewInputs(focusedKeys: [show.naturalKey], requestedCardKeys: [show.naturalKey]))
+        turns.run()
         let ids = Set([show.persistentModelID] + show.recipients.map(\.persistentModelID))
-        try expectGone(ids, store: store, turns: turns, engine: engine) { store.context.delete(show) }
+        try expectGone(ids, keys: [show.naturalKey], store: store, turns: turns, engine: engine) {
+            store.context.delete(show)
+        }
     }
 
     @Test func aContactDeletedOnItsOwnLeavesNothingBehind() throws {
@@ -544,15 +671,17 @@ final class QueueEngineIntakeTests {
     }
 
     // A whole night dismissed in one turn: forty trackers fire and one save names forty rows, and the engine
-    // takes them in with ONE turn, which is the whole point of the flag.
-    @Test func aNightDismissedInOneTurnIsTakenInByOneTurn() throws {
+    // takes them in with ONE turn and derives ONE pass, which is the whole point of the flag.
+    @Test func aNightDismissedInOneTurnIsTakenInByOneTurnAndOnePass() throws {
         let store = try EngineStore(shows: 60, seed: 34)
         let turns = EngineTurns()
         let engine = EngineHarness.started(store, turns)
+        let passes = engine.counters.passes
         for show in try store.shows().prefix(40) { show.status = .dismissed }
         try store.context.save()
         #expect(turns.queued.count == 1, "forty changes in one turn asked for \(turns.queued.count) turns")
         #expect(turns.run() == 1)
+        #expect(engine.counters.passes == passes + 1)
         #expect(try engine.facts == store.freshFacts())
     }
 
@@ -791,8 +920,10 @@ final class QueueEngineCostProbeTests {
             container.mainContext.autosaveEnabled = false
             let context = container.mainContext
             let turns = EngineTurns()
-            func engine() -> QueueEngine {
-                QueueEngine(context: context, saves: StoreSaveCount(), now: { EngineStore.baseNow },
+            func engine() -> CountsEngine {
+                QueueEngine(context: context, derivation: EngineDerivations.counts(), saves: StoreSaveCount(),
+                            clock: EngineTestClock().clock,
+                            events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                             schedule: turns.schedule)
             }
             // The full read, which is the start and the foreign save path (the launch fill is #4358 E3's).
