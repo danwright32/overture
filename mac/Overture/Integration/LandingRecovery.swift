@@ -232,24 +232,29 @@ enum LandingRecovery {
         return parts.joined(separator: " ")
     }
 
-    // MARK: - the replay's match history
+    // MARK: - the replay's inputs
 
-    // What the idle tick hands a replay to match its shows against. A read of the show table that fails is a
-    // refusal of its own, said with the interrupted landing's time, and nothing is replayed: the journal and the
-    // kept copy stay for the next idle minute, rather than the copy being landed against an empty history and
-    // retired (L215).
-    enum ReplayShows {
-        case read([Prospect])
+    // What the idle tick hands a replay to land with: the client list, the match history and the blocked
+    // calendar, read by `LandingInputs`, the builder every landing path reads through (#4526: this used to be
+    // a second copy of it, with the whole show table read on the main thread). A read of the show table that
+    // fails is a refusal of its own, said with the interrupted landing's time, and nothing is replayed: the
+    // journal and the kept copy stay for the next idle minute, rather than the copy being landed against an
+    // empty history and retired (L215).
+    enum ReplayInputs {
+        case read(LandingInputs.Inputs)
         case refused(Recovered)
     }
 
-    static func showsForReplay(_ waiting: Interrupted, fetch: () throws -> [Prospect]) -> ReplayShows {
-        do {
-            return .read(try fetch())
-        } catch {
+    static func inputsForReplay(
+        _ waiting: Interrupted,
+        read: () async -> Swift.Result<LandingInputs.Inputs, LandingInputs.ShowTableUnreadable>) async -> ReplayInputs {
+        switch await read() {
+        case .success(let inputs):
+            return .read(inputs)
+        case .failure(let unreadable):
             return .refused(.notFinished(startedAt: waiting.startedAt,
                                          why: "the shows Overture already has could not be read ("
-                                             + HandoffDecodeFailure.describe(error) + ")"))
+                                             + unreadable.description + ")"))
         }
     }
 

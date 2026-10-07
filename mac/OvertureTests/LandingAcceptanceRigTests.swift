@@ -604,20 +604,19 @@ final class LandingAcceptanceRigTests {
         let found = try LandingRecovery.survey(journals: world.journals, pending: world.pending, in: ctx)
         let actionable = found.filter { if case .stoppedRetrying = $0.finding { return false }; return true }
         guard !actionable.isEmpty else { return "nothing to recover" }
-        let replays = actionable.contains { $0.finding == .replay }
-        let loaded = replays ? DownbeatBridge.loadWithHealth(from: world.exportURL, now: Date()) : nil
-        var existing: [Prospect] = []
-        if replays, let waiting = actionable.first(where: { $0.finding == .replay }) {
-            switch LandingRecovery.showsForReplay(waiting, fetch: { try ctx.fetch(FetchDescriptor<Prospect>()) }) {
-            case .read(let shows): existing = shows
+        var inputs: LandingInputs.Inputs?
+        if let waiting = actionable.first(where: { $0.finding == .replay }) {
+            switch await LandingRecovery.inputsForReplay(waiting, read: {
+                await LandingInputs.readRefusingUnreadableShowTable(exportURL: world.exportURL,
+                                                                    historyURL: world.historyURL, into: ctx)
+            }) {
+            case .read(let read): inputs = read
             case .refused: return "the show table could not be read"
             }
         }
         let recovered = await LandingRecovery.recoverNext(
-            journals: world.journals, pending: world.pending, clients: loaded?.clients ?? [],
-            history: replays ? LocalHistory.forMatching(existing: existing, importedFrom: world.historyURL) : [],
-            blocked: loaded.map { ScoutService.blockedCalendar(export: ($0.bookings, $0.blockedDates, $0.health),
-                                                               context: ctx) } ?? .empty,
+            journals: world.journals, pending: world.pending, clients: inputs?.clients ?? [],
+            history: inputs?.history ?? [], blocked: inputs?.blocked ?? .empty,
             landings: world.flight, sweep: { false }, alreadyLanded: .bypassedForMeasurement, surveyed: found,
             into: ctx)
         return recovered.map { "\($0)" } ?? "nothing pending"
