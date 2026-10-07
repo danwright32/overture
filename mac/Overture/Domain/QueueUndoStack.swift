@@ -328,7 +328,7 @@ enum QueueUndo {
         return apply(entry, found: entry.rows.map { _ in found }, in: context, export: export).didAnything
     }
 
-    // What `nothingUndone` says when an undo put nothing back (#1415, #4532). A one-show entry the
+    // What `nothingUndoneSentence` says when an undo put nothing back (#1415, #4532). A one-show entry the
     // identity could not find says WHY, in the refusal's own words; one that was found and had moved on
     // keeps the sentence it always had. A night is counted rather than named, as it always was.
     static func nothingUndoneSentence(for entry: QueueUndoEntry, outcome: Outcome) -> String {
