@@ -398,28 +398,49 @@ struct ExternalRebuildProbeTests {
         }
     }
 
-    // One arm: a fresh store and window, settled on the CONDITION of being quiet, one discarded redraw (the
-    // reason is at the line), settled again, held past the memo's window in real time (the one wait here
-    // that is about time on purpose, ended by the memo's own expiry rule rather than a duration), then the
-    // redraw that is measured.
-    private func rowsAfterARedrawPastTheWindow(clock: @escaping () -> Date) async throws
-        -> (rows: Int, settled: Bool) {
+    // A clock a test MOVES, so one fixture can hold the memo's window shut and then step past it without
+    // waiting in real time. `frozenClock()` is the same thing with no step.
+    final class SteppedClock {
+        var now = Date()
+        @MainActor func step(pastTheMemoWindowBy extra: Double) {
+            now = now.addingTimeInterval(ScopeMemo<Int>.staleAfterSeconds + extra)
+        }
+    }
+
+    // A fresh store and window holding the Archive under `RedrawHarness`, and the moves every arm here
+    // makes: how many rows the MOUNT derived (from before `host()` until quiet, nil when it never went
+    // quiet), and one redraw from above.
+    private func withMountedArchive<T>(
+        clock: @escaping () -> Date,
+        _ body: (_ mount: Int?, _ redraw: @MainActor () -> Int) async throws -> T
+    ) async throws -> T {
         let c = try container()
         seed(ModelContext(c))
         let tick = RedrawTick()
-        let (window, hosting) = host(HostedPassCounting.Mounted(content: RedrawHarness(
-            container: c, tick: tick, clock: clock, feedback: ActionFeedback(),
-            dayOffOffer: DayOffOfferRequest())))
+        var mounted: (window: NSWindow, hosting: NSHostingView<HostedPassCounting.Mounted<RedrawHarness>>)?
+        // `host()` lays the window out, which is where the first derivation usually lands, so it is
+        // measured too: a mount count taken only from the settle would miss it and read low.
+        let duringHost = QueueRenderPass.WorkTally.measure {
+            mounted = host(HostedPassCounting.Mounted(content: RedrawHarness(
+                container: c, tick: tick, clock: clock, feedback: ActionFeedback(),
+                dayOffOffer: DayOffOfferRequest())))
+        }.queueRows
+        let (window, hosting) = try #require(mounted, "the Archive was never hosted")
         defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
-        func settle() -> Bool {
+        // Rows derived until a quiet reading, settled on that CONDITION rather than a duration, or nil when
+        // the deadline passed first.
+        func rowsUntilQuiet() -> Int? {
+            var rows = 0
             let settleBy = Date().addingTimeInterval(30)
             while Date() < settleBy {
                 hosting.layoutSubtreeIfNeeded()
                 hosting.displayIfNeeded()
-                if rowsProvokedBy({}, seconds: 0.3) == 0 { return true }
+                let reading = rowsProvokedBy({}, seconds: 0.3)
+                if reading == 0 { return rows }
+                rows += reading
             }
-            return false
+            return nil
         }
         func redraw() -> Int {
             rowsProvokedBy {
@@ -428,18 +449,66 @@ struct ExternalRebuildProbeTests {
                 hosting.displayIfNeeded()
             }
         }
-        // ONE REDRAW FIRST, discarded, and it is not ceremony. The memo's key carries the card keys the
-        // last frame drew, compared EXACTLY, so the first redraw after the list has drawn derives the whole
-        // store on any clock: the rows draw nothing new, so the set it hands the memo differs from the
-        // first frame's. Measured 2026-10-06, 120 of 120 rows on the frozen arm before this line existed.
-        // That is a defect of its own (the queue has the subset rule `cardKeysForMemo` for it and the
-        // Archive does not), recorded for an issue rather than fixed here. After this redraw the key holds
-        // still, so the redraw measured below differs from it only in WHEN it arrives.
-        let drew = settle()
-        _ = redraw()
-        let settled = drew && settle()
-        await HostedPassCounting.waitPastTheRenderMemoWindow(since: Date())
-        return (redraw(), settled)
+        let mount = rowsUntilQuiet().map { $0 + duringHost }
+        return try await body(mount, redraw)
+    }
+
+    // One arm: settled, held past the memo's window in real time (the one wait here that is about time on
+    // purpose, ended by the memo's own expiry rule rather than a duration), then the redraw that is
+    // measured.
+    //
+    // #4570: there used to be ONE DISCARDED REDRAW before the wait, because the first redraw after the list
+    // drew derived the whole store on any clock (120 of 120 rows on the frozen arm, measured 2026-10-06).
+    // The Archive's first build ran before any row drew, so it prebuilt no card, and the memo keyed on the
+    // card keys saw the first redraw ask for a different set. `ScopeMemo.cardKeys(serving:under:)` now counts the
+    // cards that first frame built on demand as tracked, so the discard is gone and the redraw measured here
+    // is the first one after the mount.
+    private func rowsAfterARedrawPastTheWindow(clock: @escaping () -> Date) async throws
+        -> (rows: Int, settled: Bool) {
+        try await withMountedArchive(clock: clock) { mount, redraw in
+            await HostedPassCounting.waitPastTheRenderMemoWindow(since: Date())
+            return (redraw(), mount != nil)
+        }
+    }
+
+    // #4570: opening the Archive derives the store ONCE, and the first redraw from above derives nothing.
+    //
+    // RootView redraws above the sheet within moments of mounting it, so this is every Archive open: before
+    // the fix the mount derived the store and that first redraw derived it AGAIN, about 277 ms on the live
+    // store (`ArchiveView.makeScope`'s own figure), because the first build had been asked for no cards and
+    // the first frame then asked for the visible rows' cards.
+    //
+    // A STEPPED CLOCK, held still for the measured redraw, so the memo's two second window cannot be what
+    // decides it however slow the runner is (#4534), then moved past that window for the POSITIVE CONTROL:
+    // the same redraw, in the same fixture, must then derive the whole store, so the zero cannot mean the
+    // redraw never reached the memo (L159).
+    @Test func openingTheArchiveDerivesTheStoreOnce() async throws {
+        guard !ScreenSession.isLocked else {
+            ScreenSession.reportUnmeasured("ExternalRebuildProbeTests.openingTheArchiveDerivesTheStoreOnce")
+            return
+        }
+        let clock = SteppedClock()
+        let (mount, firstRedraw, pastTheWindow) = try await withMountedArchive(clock: { clock.now }) {
+            mount, redraw in
+            let first = redraw()
+            clock.step(pastTheMemoWindowBy: 1)
+            return (mount, first, redraw())
+        }
+        print("archive-open: mount \(mount.map(String.init) ?? "never quiet") rows, first redraw "
+              + "\(firstRedraw) rows, redraw past the window \(pastTheWindow) rows, of \(Self.seededRows) (#4570)")
+
+        #expect(mount == Self.seededRows, Comment(rawValue:
+            "mounting the Archive derived \(mount.map(String.init) ?? "rows without ever going quiet") of "
+            + "\(Self.seededRows) rows, and one derivation of the store is \(Self.seededRows) (#4570)"))
+        #expect(pastTheWindow >= Self.seededRows, Comment(rawValue:
+            "a redraw with the clock moved past the memo's window derived \(pastTheWindow) rows of "
+            + "\(Self.seededRows), so a redraw in this fixture does not reach the memo and the zero below "
+            + "proves nothing (L159)"))
+        #expect(firstRedraw == 0, Comment(rawValue:
+            "the first redraw from above after the Archive mounted derived \(firstRedraw) rows of "
+            + "\(Self.seededRows) with no data change and the clock held still, so every Archive open "
+            + "derives the whole store twice: the first build prebuilt no card and the first frame's cards "
+            + "were not counted as tracked (#4570)"))
     }
 
     // WHICH PART of the screen reacts to focus, so the safe fix can be aimed rather than guessed.

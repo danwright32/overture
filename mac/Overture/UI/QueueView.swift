@@ -586,9 +586,10 @@ struct QueueView: View {
         // built OUTSIDE it, so a field only that card read would never mark the answer stale. So an
         // answer is reused only when every row the last frame drew was prebuilt by the build that made
         // it; one row it did not prebuild (a scroll, a row revealed by a removal) is a rebuild, exactly
-        // as it always was.
-        let prebuilt = renderMemo.held?.cards.requestedKeys
-        let cardKeysForMemo = prebuilt.map { requested.isSubset(of: $0) ? $0 : requested } ?? requested
+        // as it always was. #4570: the one exception is the FIRST frame after a build asked for no card,
+        // whose on-demand cards are built again inside the build's tracking and adopted. The rule lives
+        // on the memo, shared with the Archive (`ScopeMemo.cardKeys(serving:under:)`).
+        let cardKeysForMemo = renderMemo.cardKeys(serving: requested, under: key)
         // A save through ANY context is a change too, which `ScopeMemo` itself enforces (`savesIn`).
         return renderMemo.value(fingerprint: key, cardKeys: cardKeysForMemo, now: now,
                                 savesIn: context.container,

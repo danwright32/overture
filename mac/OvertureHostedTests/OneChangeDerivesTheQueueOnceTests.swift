@@ -307,6 +307,44 @@ struct OneChangeDerivesTheQueueOnceTests {
             + "whole-store pass (#4106)"))
     }
 
+    // #4570: bringing the queue up over a store that already holds its shows derives it ONCE, the first
+    // redraw from above included.
+    //
+    // The queue's first build runs before any row has drawn, so it is asked for no card and every row the
+    // first frame draws is built on demand. Until #4570 the first redraw after that frame then asked for
+    // those cards, which the held answer had not prebuilt, and derived the whole store again (measured on
+    // this harness 2026-10-07: one derivation inside `host`, then one more on the first redraw, reason
+    // `nothing this view reads`). The Archive paid the same on every open; both now go through
+    // `ScopeMemo.cardKeys(serving:under:)`, which adopts the first frame's cards.
+    //
+    // Counted from BEFORE `host`, because the mount derivation lands inside it and `settle` only counts
+    // from where it starts. Every other test here seeds after hosting, which is a save arriving under a
+    // mounted queue; this is the launch, where the store is already full.
+    @Test func openingTheQueueOverAFullStoreDerivesItOnce() async throws {
+        let c = try container()
+        seed(c.mainContext)
+        let derivationsBefore = QueueRenderCounter.derivations
+        let h = host(c)
+        defer { tearDown(h) }
+        var why = await settle(h.hosting)
+        let evaluationsBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.queueBodySurface)
+        h.tick.value += 1
+        why += await settle(h.hosting)
+        let evaluations = QueueRenderCounter.renderCount(for: QueueRenderCounter.queueBodySurface)
+            - evaluationsBefore
+        let derivations = QueueRenderCounter.derivations - derivationsBefore
+
+        // THE POSITIVE CONTROL. The redraw must really have reached the queue's body, or the count below
+        // could not have grown for the reason it is about (L159).
+        #expect(evaluations >= 1, Comment(rawValue:
+            "a redraw above the queue evaluated its body \(evaluations) times, so this fixture never "
+            + "exercised the first redraw and the count below would prove nothing"))
+        #expect(derivations == 1, Comment(rawValue:
+            "opening the queue over a full store and redrawing once derived it \(derivations) times "
+            + "(after the mount: \(why.joined(separator: " | "))). One is the mount; a second is the first "
+            + "frame's cards bought with another whole-store pass instead of adopted (#4570)"))
+    }
+
     // A TOWN renamed in place, unsaved. The queue resolves Dan's town refusals OUTSIDE the memo's build,
     // so the build's own tracking never read `town` and cannot be marked stale by it; the body still
     // re-evaluates (it read the name), and only the town names in the key stop that evaluation being
