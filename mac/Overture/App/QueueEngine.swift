@@ -618,13 +618,9 @@ final class QueueEngine<Value: Sendable> {
         let previous = output
         guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: mintGeneration(), now: now,
                                         reasons: reasons)) else {
-            // Refused, which a minted number cannot be: it is newer than every output published, minted or not
-            // (`publish` moves the counter past an unminted one). Were it ever refused, nothing on screen changed,
-            // so this is no pass and no floor change (L78), and the clock runs on from the output that IS on
-            // screen so the floor is never left without a timer (L51).
-            if let onScreen = output {
-                armDeadline(QueueEngineDeadline.next(now: now, termNextChange: derivation.nextChange(onScreen.value)))
-            }
+            // Unreachable while every publisher mints: a minted number is newer than everything published, minted
+            // or not. `publish` has already reported the refusal (a Debug stop), and an output never applied is no
+            // pass (L78).
             return
         }
         counters.passes += 1

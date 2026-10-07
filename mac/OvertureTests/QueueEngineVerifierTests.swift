@@ -32,11 +32,14 @@ enum VerifierReads {
         throw CocoaError(.fileReadUnknown)
     }
 
-    /// The real read, with a count saying one show more than the fetch returned.
-    static let short: @Sendable (ModelContainer) throws -> QueueEngineFreshRead = { container in
-        let real = try QueueEngineFreshRead.read(container)
-        return QueueEngineFreshRead(facts: real.facts, counted: [.shows: real.facts.shows.count + 1,
-                                                                 .inquiries: real.facts.inquiries.count])
+    /// The real read, with a count saying `table` holds one row more than the fetch returned.
+    static func short(_ table: FactStore.Table) -> @Sendable (ModelContainer) throws -> QueueEngineFreshRead {
+        { container in
+            let real = try QueueEngineFreshRead.read(container)
+            var counted = real.counted
+            counted[table, default: 0] += 1
+            return QueueEngineFreshRead(facts: real.facts, counted: counted)
+        }
     }
 
     /// The real read, but a save is counted DURING every one of them, so each straddles a save.
@@ -239,11 +242,13 @@ final class QueueEngineVerifierOutcomeTests {
         #expect(engine.faults.isEmpty, "a failed read faulted a row (L215)")
     }
 
-    @Test func aShortReadIsUnmeasuredAndFaultsNothing() async throws {
+    // In any table the read covers: a small table's short read faults nothing either (found by the lessons review).
+    @Test(arguments: [FactStore.Table.shows, .watchedSources, .allowedSeedTowns])
+    func aShortReadIsUnmeasuredAndFaultsNothing(_ table: FactStore.Table) async throws {
         let store = try EngineStore(shows: 2, seed: 59)
         let turns = EngineTurns()
         let engine = VerifierRig.engine(store, turns,
-                                        setup: QueueEngineVerifierSetup(triggers: .byHand, read: VerifierReads.short))
+                                        setup: QueueEngineVerifierSetup(triggers: .byHand, read: VerifierReads.short(table)))
         engine.verifyNow()
         await VerifierRig.finished(engine, beyond: 0, "the verification whose read comes back short")
         #expect(engine.verifierCounts.unmeasured[.shortRead] == 1)
