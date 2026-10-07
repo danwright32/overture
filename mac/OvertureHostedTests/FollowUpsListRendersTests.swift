@@ -23,7 +23,10 @@ import SwiftData
 @MainActor
 @Suite("The Follow-ups sheet draws its list (#3437)")
 struct FollowUpsListRendersTests {
-    private let now = Date(timeIntervalSince1970: 1_780_000_000)   // 2026-06-27
+    // #4522: 2026-06-27 at noon Eastern, seventeen days after the seeded show. It read 1_780_000_000, which
+    // is 2026-05-28 and BEFORE the show, under a comment naming the 27th; nothing noticed while the value
+    // reached nothing. `theWorkDueIsTheShowThatHasBeenAndGone` now holds the relationship.
+    private let now = Date(timeIntervalSince1970: 1_782_576_000)
 
     private func container() throws -> ModelContainer {
         try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, WatchedSource.self])
@@ -96,10 +99,26 @@ struct FollowUpsListRendersTests {
     // the app is a harness measuring something else.
     private func sheet(_ container: ModelContainer) -> some View {
         RowsFromStore { (rows: [Prospect]) in
-            FollowUpsView(prospects: rows, inquiries: [], gmailConnectedOverride: true, replyRunAliveOverride: false)
+            // #4522: `now` reaches the sheet. It was declared above and handed to nothing, so "a show that
+            // has been and gone" was true only because the suite runs after 2026-06-10.
+            FollowUpsView(prospects: rows, inquiries: [], gmailConnectedOverride: true, replyRunAliveOverride: false,
+                          nowOverride: now)
         }
         .modelContainer(container)
         .environment(ActionFeedback())
+    }
+
+    // #4522: the premise the test below rests on, asserted rather than assumed (L130, L159). The seeded show
+    // is meant to be one that has been and gone, so the work due at `now` is its After the show row. A `now`
+    // before the show would still draw a list (a silent follow-up is due too) while asserting about a
+    // different case than the one this suite names.
+    @Test func theWorkDueIsTheShowThatHasBeenAndGone() throws {
+        let c = try container()
+        let show = seedDueWork(in: ModelContext(c))
+
+        let rows = DueWork.rows(prospects: [show], inquiries: [], now: now, replyRunAlive: false)
+        #expect(rows.afterTheShow.map(\.prospect.naturalKey) == [show.naturalKey],
+                "the seeded show is not After the show at the pinned instant, so the list below is drawn for some other reason")
     }
 
     // The state this suite exists for: there IS work due, so the sheet lays out a scrolling list.

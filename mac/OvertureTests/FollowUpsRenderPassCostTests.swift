@@ -229,6 +229,19 @@ struct FollowUpsRenderPassIsPureTests {
         }
     }
 
+    // #4522: the sheet judges at the instant it is handed, everywhere it judges. `nowOverride` is the seam a
+    // hosted test pins; a judgement left on `Date()` beside it would compare a pinned show date against one
+    // clock and the classify run's heartbeat against another. A source guard because the heartbeat reads
+    // the real Application Support marker, which no test may touch (L2), so it has no behavioural seam.
+    @Test func theSheetJudgesEverythingAtTheInstantItIsHanded() {
+        let view = SourceGuardHelper.source("Overture/UI/FollowUpsView.swift")
+        #expect(!view.isEmpty)
+        #expect(view.contains("now: nowOverride ?? Date(),"),
+                "the pass is no longer handed the sheet's one instant")
+        #expect(!view.contains("isRunning(now: Date())"),
+                "the classify run's heartbeat is judged at the live clock while the rest of the sheet is pinned")
+    }
+
     // The counting is not optional. If the rows could be reached around the corpus, a new sweep would be
     // invisible to the measurement above and the guard would quietly stop guarding.
     @Test func theRowsCanOnlyBeReachedThroughTheCountedAccessor() {
