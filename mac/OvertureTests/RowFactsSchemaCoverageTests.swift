@@ -268,11 +268,12 @@ struct RowFactsHoldNoModelTests {
 // (`aPopulatedPassHoldsAModelOnlyWhereItIsStillAllowed`), because that is where the fixture lives in which
 // every pill and stage counts something.
 //
-// THREE MEMBERS STILL HOLD A MODEL, named below with the issue that takes each out, and nothing else may.
+// TWO MEMBERS STILL HOLD A MODEL, named below with the issue that takes each out, and nothing else may.
 // Each is a reason, not a convenience: the card store needs a value for every row in scope and only the
 // engine retains them (a store over facts built by today's pass would extract every row on every pass, which
-// the live store cost probe prices); the other two carry an `Inquiry`, which has no identity to resolve a
-// press through yet.
+// the live store cost probe prices); the Reached out list's show rows draw from the live show and contact
+// until #4371 gives them value snapshots. Its inquiry rows, and the inquiry block's lookup, hold
+// `InquiryIdentity` values since #4579, so that exemption is narrowed to the show rows.
 @Suite("What the queue pass publishes holds no model (#4357)")
 @MainActor
 struct OutputsHoldNoModelTests {
@@ -280,8 +281,15 @@ struct OutputsHoldNoModelTests {
     /// The RenderData members still allowed a model, each with the issue that takes it out.
     static let stillHoldingAModel: [String: String] = [
         "cards": "#4358: today's pass hands the card store its models; the engine's pass hands it RowFacts",
-        "reachedOutList": "#4579 and #4371: its rows draw from the live show, contact and inquiry",
-        "inquiriesByRowID": "#4579: an inquiry has no identity to resolve a press through yet",
+        "reachedOutList": "#4371: its SHOW rows draw from the live show and contact (its inquiry rows hold an "
+            + "identity since #4579)",
+    ]
+
+    /// #4579: an exemption NARROWED to part of its member. A model found in that member is allowed only on a
+    /// path through this segment, so the Reached out list may still hold its show rows' models and no other.
+    /// The segment is the enum case's own label, which is how Mirror names an associated value.
+    static let allowedOnlyThrough: [String: String] = [
+        "reachedOutList": ".prospect.",
     ]
 
     @Test func thePublishedValueTypesAreSendable() {
