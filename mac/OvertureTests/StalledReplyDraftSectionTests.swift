@@ -38,7 +38,7 @@ struct StalledReplyDraftSectionTests {
     private func showWithAStalledReplyDraft(_ context: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "aurora", groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall",
-                         performanceDate: EasternDate.today(now.addingTimeInterval(30 * 86_400)),
+                         performanceDate: ScoutTestClock.day(30, after: now),
                          sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
@@ -65,7 +65,7 @@ struct StalledReplyDraftSectionTests {
     private func showWithAConversationToConfirm(_ context: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "shuffle", groupName: "54 Sings Shuffle Along", discipline: "music",
                          venue: "54 Below",
-                         performanceDate: EasternDate.today(now.addingTimeInterval(45 * 86_400)),
+                         performanceDate: ScoutTestClock.day(45, after: now),
                          sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",

@@ -71,7 +71,7 @@ struct FollowUpsRenderPassCostTests {
             // Ahead of the pinned `now`, which is what `FollowUp.hasPerformed` requires of a show still
             // waiting on a nudge. A date behind it would put every row in the post-event rule instead and
             // leave the silent one measuring nothing (L165).
-            let performance = EasternDate.today(Self.now.addingTimeInterval(60 * 60 * 24 * Double(30 + n % 60)))
+            let performance = ScoutTestClock.day(30 + n % 60, after: Self.now)
             let p = Prospect(naturalKey: "row-\(n)", groupName: "Ensemble \(n % 90)", discipline: "music",
                              venue: venues[n % venues.count], performanceDate: performance,
                              sourceListingURL: nil, priorRelationship: "none",

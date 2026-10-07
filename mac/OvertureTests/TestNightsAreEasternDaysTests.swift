@@ -18,8 +18,9 @@ import Foundation
 // to its Eastern day and steps from noon there in `EasternDate.calendar`. The first half of this suite
 // proves it inside the hour that failed, against a calendar whose zone is set to UTC EXPLICITLY, so the
 // proof says the same thing on this Mac as on a runner (L504). The second half refuses the chained host
-// calendar step anywhere in the test tree, so a thirty first copy of that shape cannot arrive (L30); its
-// one blind spot is written beside the detector.
+// calendar step anywhere in the test tree, so a thirty first copy of that shape cannot arrive (L30), and the
+// same fold's second shape: whole days added as seconds to an instant that is then named as an Eastern day,
+// which had 23 more sites. Each detector's blind spot is written beside it.
 @Suite("A test's nights are Eastern days, whatever zone the host is in (#4569)")
 struct TestNightsAreEasternDaysTests {
 
@@ -87,8 +88,9 @@ struct TestNightsAreEasternDaysTests {
         "Calendar.autoupdatingCurrent.date(byAdding:",
     ]
 
-    // The line each host calendar step starts on.
-    static func hostCalendarDaySteps(in source: String) -> [Int] {
+    // The code with every comment, string content and whitespace character removed, beside the line each
+    // remaining character came from, so a match can still be reported where a person will find it.
+    static func collapsedCode(_ source: String) -> (chars: [Character], lines: [Int]) {
         let code = SwiftSource.tokenize(source).codeLines
         var chars: [Character] = []
         var lines: [Int] = []
@@ -98,14 +100,88 @@ struct TestNightsAreEasternDaysTests {
                 lines.append(line)
             }
         }
+        return (chars, lines)
+    }
+
+    // Every offset at which `pattern` starts.
+    static func starts(of pattern: String, in chars: [Character]) -> [Int] {
+        let pattern = Array(pattern)
+        guard !pattern.isEmpty, pattern.count <= chars.count else { return [] }
+        return (0...(chars.count - pattern.count)).filter { start in
+            chars[start] == pattern[0] && Array(chars[start..<(start + pattern.count)]) == pattern
+        }
+    }
+
+    // The line each host calendar step starts on.
+    static func hostCalendarDaySteps(in source: String) -> [Int] {
+        let (chars, lines) = collapsedCode(source)
+        return hostCalendarSteps.flatMap { starts(of: $0, in: chars) }.map { lines[$0] }.sorted()
+    }
+
+    // The second shape of the same fold: whole days added as SECONDS to an instant that is then named as an
+    // Eastern day. 86,400 seconds is a day only between clock changes; across one, an instant within an hour
+    // of midnight lands on the neighbouring day, so two nights fold onto one or a day is skipped. Unlike the
+    // host calendar it does not depend on the machine's zone, but on a wall clock instant it fails for an hour
+    // every night once the span crosses a change, and on a pinned one it silently names the wrong day:
+    // `SyntheticLandingStore` sat at exactly 00:00 EDT and so folded every night from its thirtieth on.
+    //
+    // Matched as a day constant inside the ARGUMENT of a call that names an Eastern day, so seconds
+    // arithmetic of any other kind (a one second nudge, an instant that is never named as a day) is left
+    // alone. WHAT IT CANNOT SEE (L400): an instant computed earlier and passed in by name, or a helper taking
+    // seconds whose callers multiply by a day (`OneDueNumberTests.day(_:)` was that shape and is converted).
+    static let easternDayCalls = [
+        "EasternDate.dayString(from:", "EasternDate.today(", "QueueModel.easternToday(", "BookingMatch.dayString(from:",
+    ]
+
+    // Seconds in a day, as this repo writes it, after whitespace is removed. Computed, because a Regex is
+    // not Sendable and a stored static one does not compile under Swift 6.
+    static var dayInSeconds: Regex<Substring> { #/86_?400|60\*60\*24|24\*60\*60|24\*3_?600|3_?600\*24/# }
+
+    // The line each Eastern day call starts on whose argument adds whole days as seconds.
+    static func secondsDaySteps(in source: String) -> [Int] {
+        let (chars, lines) = collapsedCode(source)
         var found: [Int] = []
-        for pattern in hostCalendarSteps.map(Array.init) where pattern.count <= chars.count {
-            for start in 0...(chars.count - pattern.count)
-            where chars[start] == pattern[0] && Array(chars[start..<(start + pattern.count)]) == pattern {
-                found.append(lines[start])
+        for call in easternDayCalls {
+            for start in starts(of: call, in: chars) {
+                // The argument runs to the parenthesis that closes the call's own.
+                var depth = 1
+                var end = start + call.count
+                while end < chars.count, depth > 0 {
+                    if chars[end] == "(" { depth += 1 } else if chars[end] == ")" { depth -= 1 }
+                    end += 1
+                }
+                let argument = String(chars[(start + call.count)..<end])
+                if argument.contains(dayInSeconds) { found.append(lines[start]) }
             }
         }
         return found.sorted()
+    }
+
+    @Test func theSecondsDetectorFindsDaysAddedAsSecondsInsideAnEasternDay() {
+        let found = Self.secondsDaySteps(in: """
+        enum Fixture {
+            static func one(_ now: Date) -> String { EasternDate.today(now.addingTimeInterval(30 * 86_400)) }
+            static func two(_ n: Int) -> String {
+                EasternDate.dayString(from: Date()
+                    .addingTimeInterval(Double(20 + n) * 86400))
+            }
+            static func three(_ now: Date) -> String { QueueModel.easternToday(now.addingTimeInterval(60 * 60 * 24 * 7)) }
+        }
+        """)
+        #expect(found == [2, 4, 7])
+    }
+
+    @Test func theSecondsDetectorPassesOtherSecondsArithmetic() {
+        let found = Self.secondsDaySteps(in: """
+        enum Fixture {
+            // EasternDate.today(now.addingTimeInterval(30 * 86_400)) is what this replaced.
+            static let quoted = "EasternDate.today(now.addingTimeInterval(86_400))"
+            static func nudge(_ now: Date) -> String { EasternDate.today(now.addingTimeInterval(-1)) }
+            static func sent(_ now: Date) -> Date { now.addingTimeInterval(-2 * 86_400) }
+            static func night(_ n: Int, _ now: Date) -> String { ScoutTestClock.day(n, after: now) }
+        }
+        """)
+        #expect(found.isEmpty, "flagged lines \(found)")
     }
 
     @Test func theDetectorFindsEveryShapeOfTheHostCalendarStep() {
@@ -162,6 +238,22 @@ struct TestNightsAreEasternDaysTests {
             night (#4569). Use ScoutTestClock.day(_:after:) for a night dated from a clock, \
             ScoutTestClock.day(_:plus:) for one dated from an Eastern day string, or \
             EasternDate.calendar for any other step.
+            \(offenders.joined(separator: "\n"))
+            """))
+    }
+
+    @Test func noTestNamesAnEasternDayAfterAddingDaysAsSeconds() {
+        let files = AppSourceWalk.files(underAll: Self.roots.map(RepoRoot.mac.appendingPathComponent),
+                                        floor: 100)
+        var offenders: [String] = []
+        for file in files {
+            for line in Self.secondsDaySteps(in: file.text) { offenders.append("\(file.name):\(line)") }
+        }
+        #expect(offenders.isEmpty, Comment(rawValue: """
+            These test lines add whole days as SECONDS to an instant and then name it as an Eastern day. \
+            86,400 seconds is a day only between clock changes, so across one an instant near midnight lands \
+            on the neighbouring day and two nights fold onto one (#4569). Use ScoutTestClock.day(_:after:) \
+            for a night dated from an instant, or ScoutTestClock.day(_:plus:) for one dated from a day string.
             \(offenders.joined(separator: "\n"))
             """))
     }

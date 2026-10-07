@@ -150,7 +150,7 @@ final class Phase0cLapsWorld {
 
     // MARK: fixture pieces
 
-    func day(_ offset: Int) -> String { EasternDate.today(Self.base.addingTimeInterval(Double(offset) * 86_400)) }
+    func day(_ offset: Int) -> String { ScoutTestClock.day(offset, after: Self.base) }
 
     func booking(_ k: Int) -> OvertureBooking {
         let start = Int.random(in: -3...80, using: &rng)
@@ -810,7 +810,7 @@ final class QueueEnginePhase0cLapsProbeTests {
 
     @Test func aRetirementRestoreThatFailsToSaveThrows() throws {
         let world = try Phase0cLapsWorld(size: 60, seed: 11, dir: try sandboxes.make(named: "phase0c7-restore-retire"))
-        let day = try #require((0...400).lazy.map { QueueModel.easternToday(world.now.addingTimeInterval(Double($0) * 86_400)) }
+        let day = try #require((0...400).lazy.map { ScoutTestClock.day($0, after: world.now) }
             .first { let d = Phase0cLapOracle.retireDryRun(context: world.context, today: $0)
                      return !d.wentBy.isEmpty || !d.passedKept.isEmpty },
             "no day in 400 where a retirement dismisses anything, so the restore is never reached")
@@ -1084,7 +1084,7 @@ final class QueueEnginePhase0cLapsProbeTests {
         var indexMismatch = 0, mirrorMismatch = 0, mirrorChecked = 0, most = 0
         var queries: [Double] = []
         for k in 0..<50 {
-            let day = QueueModel.easternToday(now.addingTimeInterval(Double(k) * 86_400))
+            let day = ScoutTestClock.day(k, after: now)
             var c: (wentBy: Set<Phase0cPID>, passedKept: Set<Phase0cPID>) = ([], [])
             queries.append(Phase0cTickLaps.median3 { c = index.candidates(today: day) })
             let dry = Phase0cLapOracle.retireDryRun(context: ctx, today: day)
@@ -1185,8 +1185,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             sample("date move", {
                 p.runNights = []
                 p.runEndDate = nil
-                p.performanceDate = QueueModel.easternToday(
-                    (EasternDate.date(from: p.performanceDate!) ?? now).addingTimeInterval(7 * 86_400 + 43_200))
+                p.performanceDate = ScoutTestClock.day(7, after: EasternDate.date(from: p.performanceDate!) ?? now)
             }, rowsTouched: [p], putBack: {
                 p.runNights = nights
                 p.runEndDate = end
@@ -1239,7 +1238,7 @@ final class QueueEnginePhase0cLapsProbeTests {
             bookingLost.append(x); bookingBack.append(y)
         }
         func shift(_ day: String) -> String {
-            QueueModel.easternToday((EasternDate.date(from: day) ?? now).addingTimeInterval(7 * 86_400 + 43_200))
+            ScoutTestClock.day(7, after: EasternDate.date(from: day) ?? now)
         }
         for (pid, f) in facts {
             var moved = f
