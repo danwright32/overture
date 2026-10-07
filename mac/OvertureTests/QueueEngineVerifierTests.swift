@@ -574,6 +574,14 @@ final class QueueEngineVerifierTriggerTests {
         await VerifierRig.finished(mismatching, beyond: 0, "the mismatching verification")
         let read = CardDivergenceLog.read(at: log.url)
         #expect(read.records.map(\.kind) == [.factMismatch])
+        // #4583: the line says which build wrote it and which output it judged, so plan v7 section 15's gate can
+        // count only the branch's own records. The build's value depends on how the suite was compiled, so this
+        // asserts that a stamp is there; `TheDivergenceLogStampsItsBuildTests` asserts what each one is.
+        let written = try #require(read.records.first)
+        #expect(written.stamp != .unstamped, "the engine's finding reached the file unstamped")
+        let judged = try #require(mismatching.output?.generation)
+        #expect(written.generation == judged, "the mismatch names generation \(String(describing: written.generation))")
+        #expect(mismatching.verifierFindings.first?.generation == judged)
         let text = try String(contentsOf: log.url, encoding: .utf8)
         #expect(!text.contains(show.naturalKey) && !text.contains(show.groupName), "the record names the show")
     }
@@ -603,6 +611,8 @@ final class QueueEngineVerifierTriggerTests {
         }
         let foreign = { CardDivergenceLog.read(at: log.url).records.filter { $0.kind == .foreignSave } }
         #expect(foreign().map(\.suppressedRepeats) == [0], "the burst's second record was not held back")
+        // #4583: a foreign save names the output on screen when it was written, which a later turn may replace.
+        #expect(foreign().first?.generation != nil, "a foreign save named no output")
         clock.advance(by: 600)
         engine.sourceFired("gmailConnected")
         turns.run()

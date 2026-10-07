@@ -19,7 +19,9 @@ import Foundation
 // to be discovered. Dan's call, 2026-09-08, choosing this over a record that names the show.
 //
 // It carries NO show identity and NO contact value. Only the NAMES of the fields that differed, how many
-// cards the pass had built, and which stage was on screen.
+// cards the pass had built, and which stage was on screen. #4583 added which build wrote the line (a closed
+// enum and the app's own commit, held to a whole commit) and the queue engine generation it is about (a number
+// the engine minted), none of which is anybody's data.
 //
 // The names are constants of this app. Everything else that could go in a record is somebody's: a
 // contact's name, address, greeting or draft body obviously, and the show's own key nearly as much,
@@ -59,13 +61,28 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
     let kind: Kind
     let source: Source?
     // How many repeats of this record's (kind, source) its cooldown held back since the previous record of
-    // that pair was written. Zero for a card divergence, which has no cooldown.
-    let suppressedRepeats: Int
+    // that pair was written. Zero for a card divergence, which has no cooldown. Settable only here, so the
+    // cooled append sets it on a COPY rather than rebuilding the record from the fields it knows, which would
+    // drop every field added after it (L510).
+    private(set) var suppressedRepeats: Int
+    // #4583 (plan v7 D7 and D8, L179): WHICH BUILD wrote this line, so plan v7 section 15's merge gate can count
+    // only the records stamped with the branch's commit (`CardDivergenceLog.Read.byCommit`). Set by nobody but
+    // the log's one write (`CardDivergenceLog.write`), from the record the installer already keeps beside the
+    // log (`installed-build.json`, `BuildFreshness`), never by a caller (L593). `build` says what kind of build
+    // that was and `commit` its revision, nil whenever the build could not name one. BOTH ABSENT on every line
+    // written before this shipped, which reads as `.unstamped` and never as the build reading it (L1013).
+    private(set) var build: Build?
+    private(set) var commit: String?
+    // #4583 (plan v7 D7): the queue engine output this is about. The one a verification compared for a
+    // mismatch, the one on screen for the engine's other kinds, nil where no engine output applies (the card
+    // check, which the engine does not run, and a drained count, which spans a whole window). Given by the
+    // writer, the only one who knows it.
+    let generation: Int?
 
     var identity: String { "\(session)#\(sequence)" }
 
     init(session: String, sequence: Int, at: Date, fields: [String], cardsBuilt: Int, stage: String?,
-         kind: Kind = .cardDivergence, source: Source? = nil, suppressedRepeats: Int = 0) {
+         kind: Kind = .cardDivergence, source: Source? = nil, suppressedRepeats: Int = 0, generation: Int? = nil) {
         self.session = session
         self.sequence = sequence
         self.at = at
@@ -75,6 +92,49 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         self.kind = kind
         self.source = source
         self.suppressedRepeats = suppressedRepeats
+        self.build = nil
+        self.commit = nil
+        self.generation = generation
+    }
+
+    // #4583: what kind of build wrote a line. Closed, on `Kind`'s precedent, so it has room for no value.
+    enum Build: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
+        /// The installed copy, whose commit the installer recorded beside the log.
+        case installed
+        /// A build run from source (Debug). An installed record is about another copy, so it names no commit.
+        case runFromSource
+        /// An installed copy with no readable installer record, or one whose commit is not a whole commit.
+        case notRecorded
+        // Written by nobody: what a later build's spelling decodes to (L255).
+        case unrecognised
+    }
+
+    // #4583: what the gate asks of a line, as ONE value, so "written before stamping" and "stamped by a build
+    // that could not name its commit" cannot be read as each other (L622).
+    enum Stamp: Equatable, Sendable {
+        case unstamped
+        case commit(String)
+        case commitUnknown(Build)
+    }
+
+    var stamp: Stamp {
+        guard let build else { return .unstamped }
+        guard let commit else { return .commitUnknown(build) }
+        return .commit(commit)
+    }
+
+    // The log's write stamps a COPY, carrying every other field as it was (L510).
+    func stamped(_ by: CardDivergenceLog.BuildStamp) -> CardDivergenceRecord {
+        var copy = self
+        copy.build = by.build
+        copy.commit = by.commit
+        return copy
+    }
+
+    func carrying(suppressedRepeats count: Int) -> CardDivergenceRecord {
+        var copy = self
+        copy.suppressedRepeats = count
+        return copy
     }
 
     // #4354: the kinds this log holds. `.cardDivergence` is written by `QueueView.recordCardCheck`.
@@ -135,7 +195,8 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case session, sequence, at, fields, cardsBuilt, stage, kind, source, suppressedRepeats
+        case session, sequence, at, fields, cardsBuilt, stage, kind, source, suppressedRepeats, build, commit,
+             generation
     }
 
     // Decoded by hand so an ABSENT kind is a card divergence and an UNKNOWN one is `.unrecognised`:
@@ -152,6 +213,11 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
             .map { Kind(rawValue: $0) ?? .unrecognised } ?? .cardDivergence
         source = try c.decodeIfPresent(String.self, forKey: .source).map { Source(rawValue: $0) ?? .unrecognised }
         suppressedRepeats = try c.decodeIfPresent(Int.self, forKey: .suppressedRepeats) ?? 0
+        // #4583: absent on every older line, which is what `.unstamped` means. A commit is carried as it was
+        // written rather than re-judged, so a rewrite never changes what a line said (L1013).
+        build = try c.decodeIfPresent(String.self, forKey: .build).map { Build(rawValue: $0) ?? .unrecognised }
+        commit = try c.decodeIfPresent(String.self, forKey: .commit)
+        generation = try c.decodeIfPresent(Int.self, forKey: .generation)
     }
 
     // #4354: what compaction and the archive prune count as "the same kind of record". The FIELDS alone
@@ -166,7 +232,7 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
     var compactionKey: CompactionKey { CompactionKey(kind: kind, source: source, fields: fields) }
 
     // A kind or source this build could not name, which only a later build writes.
-    var isFromALaterBuild: Bool { kind == .unrecognised || source == .unrecognised }
+    var isFromALaterBuild: Bool { kind == .unrecognised || source == .unrecognised || build == .unrecognised }
 }
 
 // The file, and the rules for reading, capping and appending it. Modelled on `FreezeLog` deliberately:
@@ -235,6 +301,71 @@ enum CardDivergenceLog {
         var unreadable: [String] = []
         var fileWasAbsent: Bool = false
         var unreadableLines: Int { unreadable.count }
+
+        // #4583: plan v7 section 15's merge gate counts mismatch records "stamped with the branch's commit", so
+        // a record an older build wrote is never a finding against the new one. Every record lands in exactly
+        // one of the four, and the other three are COUNTED rather than dropped, so a gate that matched nothing
+        // can say why instead of reading as clean (L98, L517). Nil for a query that is not a whole commit: an
+        // abbreviated one matches no stamp, and a refusal is what tells the gate it asked wrongly (L320).
+        // Its reader is the gate, which arrives with the cutover (#4358, slice E4); the unreadable lines are
+        // the gate's to report beside this, from `unreadableLines`.
+        func byCommit(_ commit: String) -> ByCommit? {
+            guard let asked = CardDivergenceLog.BuildStamp.wholeCommit(commit) else { return nil }
+            var out = ByCommit()
+            for record in records {
+                switch record.stamp {
+                case .unstamped: out.unstamped += 1
+                case .commitUnknown: out.commitUnknown += 1
+                case .commit(let written):
+                    if written.lowercased() == asked { out.written.append(record) } else { out.otherCommits += 1 }
+                }
+            }
+            return out
+        }
+    }
+
+    struct ByCommit: Equatable, Sendable {
+        /// The records the asked commit wrote.
+        var written: [CardDivergenceRecord] = []
+        /// Records another commit wrote.
+        var otherCommits = 0
+        /// Records a build wrote that could not name its commit (run from source, or no installer record).
+        var commitUnknown = 0
+        /// Records written before the stamp existed (#4583).
+        var unstamped = 0
+    }
+
+    // #4583: what the log's one write stamps on every line. Derived from the installer's record beside the log,
+    // which is the app's only record of its own commit (`BuildFreshness`, the freshness panel's source), never
+    // from a second one. A build run from source outranks that record, on `BuildFreshness.verdict`'s rule
+    // (#2077): the record describes the installed copy, which a Debug process is not.
+    struct BuildStamp: Equatable, Sendable {
+        let build: CardDivergenceRecord.Build
+        let commit: String?
+
+        static func of(installed: InstalledBuild?, isRunFromSource: Bool) -> BuildStamp {
+            if isRunFromSource { return BuildStamp(build: .runFromSource, commit: nil) }
+            guard let commit = installed.flatMap({ wholeCommit($0.commit) }) else {
+                return BuildStamp(build: .notRecorded, commit: nil)
+            }
+            return BuildStamp(build: .installed, commit: commit)
+        }
+
+        /// Read at every write rather than once per process: the installer quits every running copy before it
+        /// rewrites the record (`mac/build-install.sh`), so whatever the record says while this process runs is
+        /// this process's build, and a write is rare enough that one small read is nothing beside it.
+        static func beside(logAt url: URL, isRunFromSource: Bool) -> BuildStamp {
+            of(installed: BuildFreshness.installedRecord(in: url.deletingLastPathComponent()),
+               isRunFromSource: isRunFromSource)
+        }
+
+        /// A whole commit, forty hexadecimal digits, lowercased, or nil. The record's only free String takes
+        /// nothing else, so it has no room for a name (C7, `PrivacyOfTheCardDivergenceLogTests`).
+        static func wholeCommit(_ text: String) -> String? {
+            let lowered = text.lowercased()
+            guard lowered.count == 40, lowered.allSatisfy({ $0.isHexDigit && $0.isASCII }) else { return nil }
+            return lowered
+        }
     }
 
     static func read(_ text: String) -> Read {
@@ -505,16 +636,21 @@ enum CardDivergenceLog {
     //
     // #4354: REFUSES a kind that has a cooldown, so a writer of one cannot skip it by calling the plain
     // form (L621). Those go through `append(_:to:through:)`.
+    //
+    // #4583: `isRunFromSource` is the one input the stamp cannot read from the folder, defaulting to the real
+    // answer on `BuildFreshnessPanel`'s precedent, so a test can stamp as the installed copy it is not.
     @discardableResult
-    static func append(_ record: CardDivergenceRecord, to url: URL) -> Bool {
+    static func append(_ record: CardDivergenceRecord, to url: URL,
+                       isRunFromSource: Bool = StoreLocation.isDebugBuild) -> Bool {
         guard record.kind.cooldown == 0 else { return false }
-        return write(record, to: url)
+        return write(record, to: url, isRunFromSource: isRunFromSource)
     }
 
     // #4354: the cooled form. Writes the record, carrying the repeats its window held back, or counts it as
     // a repeat and writes nothing. Returns whether a line was written.
     @discardableResult
-    static func append(_ record: CardDivergenceRecord, to url: URL, through cooldown: inout Cooldown) -> Bool {
+    static func append(_ record: CardDivergenceRecord, to url: URL, through cooldown: inout Cooldown,
+                       isRunFromSource: Bool = StoreLocation.isDebugBuild) -> Bool {
         // Admitted on a copy and committed only once the line is written: a failed write that still opened
         // the window would suppress every repeat for its length and lose the count it carried (L368).
         var proposed = cooldown
@@ -523,11 +659,8 @@ enum CardDivergenceLog {
             cooldown = proposed
             return false
         case .write(let suppressedRepeats):
-            let carried = CardDivergenceRecord(session: record.session, sequence: record.sequence, at: record.at,
-                                               fields: record.fields, cardsBuilt: record.cardsBuilt,
-                                               stage: record.stage, kind: record.kind, source: record.source,
-                                               suppressedRepeats: suppressedRepeats)
-            guard write(carried, to: url) else { return false }
+            guard write(record.carrying(suppressedRepeats: suppressedRepeats), to: url,
+                        isRunFromSource: isRunFromSource) else { return false }
             cooldown = proposed
             return true
         }
@@ -537,14 +670,19 @@ enum CardDivergenceLog {
     // (kind, source) carrying the count and no field. NOT through the cooldown: the window it belonged to has
     // ended, and admitting it would open a new one and zero the very count it exists to carry (L710).
     @discardableResult
-    static func appendDrained(_ held: Cooldown.Held, session: String, sequence: Int, at now: Date, to url: URL) -> Bool {
+    static func appendDrained(_ held: Cooldown.Held, session: String, sequence: Int, at now: Date, to url: URL,
+                              isRunFromSource: Bool = StoreLocation.isDebugBuild) -> Bool {
         write(CardDivergenceRecord(session: session, sequence: sequence, at: now, fields: [], cardsBuilt: 0, stage: nil,
                                    kind: held.kind, source: held.source, suppressedRepeats: held.suppressedRepeats),
-              to: url)
+              to: url, isRunFromSource: isRunFromSource)
     }
 
-    private static func write(_ record: CardDivergenceRecord, to url: URL) -> Bool {
-        guard let line = line(for: record) else { return false }
+    // #4583: THE ONE PLACE a new line enters the live file, so it is where the build is stamped (L593): every
+    // writer reaches it, and none can skip it. A compaction or an archive REWRITES lines through `line(for:)`
+    // and never comes here, so a rewritten record keeps the stamp it was written with, absent included.
+    private static func write(_ record: CardDivergenceRecord, to url: URL, isRunFromSource: Bool) -> Bool {
+        let stamped = record.stamped(BuildStamp.beside(logAt: url, isRunFromSource: isRunFromSource))
+        guard let line = line(for: stamped) else { return false }
         return appending(line + "\n", to: url)
     }
 

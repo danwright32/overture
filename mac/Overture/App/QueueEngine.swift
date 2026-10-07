@@ -950,15 +950,15 @@ final class QueueEngine<Value: Sendable> {
                 log.defaults.set(now, forKey: CardDivergenceLog.verifierLastMatchedKey)
             }
             armUnverifiedTimer()
-        case .factMismatch(let rows, _):
+        case .factMismatch(let rows, let judged):
             verifierCounts.factMismatches += 1
-            writeFinding(.factMismatch, fields: rows.values.flatMap { $0 }, at: now)
+            writeFinding(.factMismatch, fields: rows.values.flatMap { $0 }, at: now, judged: judged)
             faults.admit(rows, origin: .verifier, at: now)
             armUnverifiedTimer()
             scheduleTurn()
-        case .outputMismatch(let fields, _):
+        case .outputMismatch(let fields, let judged):
             verifierCounts.outputMismatches += 1
-            writeFinding(.outputMismatch, fields: fields, at: now)
+            writeFinding(.outputMismatch, fields: fields, at: now, judged: judged)
             // The facts agree, so a pass over them is the heal and carries no stale object (D7).
             outputHealFields = fields
             armUnverifiedTimer()
@@ -1020,11 +1020,13 @@ final class QueueEngine<Value: Sendable> {
     private static var unverifiedSeconds: TimeInterval { QueueEngineVerifier.unverifiedTooLongSeconds }
 
     /// One record into the divergence log, through its cooldown (D8), and into `verifierFindings`. Field NAMES
-    /// only, never a show (C7, L222).
-    private func writeFinding(_ kind: CardDivergenceRecord.Kind, fields: [String], at now: Date) {
+    /// only, never a show (C7, L222). #4583: it names the output it is about, `judged` for a verification's
+    /// verdict and the one on screen otherwise; the log's write stamps the build.
+    private func writeFinding(_ kind: CardDivergenceRecord.Kind, fields: [String], at now: Date, judged: Int? = nil) {
         findingSequence += 1
         let record = CardDivergenceRecord(session: session, sequence: findingSequence, at: now,
-                                          fields: Array(Set(fields)).sorted(), cardsBuilt: 0, stage: nil, kind: kind)
+                                          fields: Array(Set(fields)).sorted(), cardsBuilt: 0, stage: nil, kind: kind,
+                                          generation: judged ?? output?.generation)
         verifierFindings.append(record)
         if verifierFindings.count > Self.findingsKept { verifierFindings.removeFirst() }
         if let log = verifierSetup.log { CardDivergenceLog.append(record, to: log.url, through: &cooldown) }
