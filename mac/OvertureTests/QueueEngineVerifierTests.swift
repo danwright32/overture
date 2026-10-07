@@ -578,6 +578,14 @@ final class QueueEngineVerifierTriggerTests {
         #expect(healed != nil && capped.isEmpty)
     }
 
+    // Only the worker's own refusal is a wedged thread; its deadline is a timeout; anything else measured nothing
+    // but a failed read (L11, found by the lessons review).
+    @Test func onlyTheWorkersRefusalIsAWedge() {
+        #expect(QueueEngineVerifier.unmeasured(by: BlockingWorkError.busy) == .wedged)
+        #expect(QueueEngineVerifier.unmeasured(by: BlockingWorkError.timedOut(seconds: 30)) == .timedOut)
+        #expect(QueueEngineVerifier.unmeasured(by: CocoaError(.fileReadUnknown)) == .readFailed)
+    }
+
     // A run that judged an output older than the one now on screen asks for another, so the newest output is not
     // left unverified until some later one arrives (L710); one that could not say asks too; one that judged the
     // output on screen, or measured nothing, does not.

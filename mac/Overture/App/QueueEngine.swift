@@ -923,11 +923,8 @@ final class QueueEngine<Value: Sendable> {
                     QueueEngineVerifier.verify(container: container, saves: saves, read: read, ring: { run.snapshots },
                                                derivation: derivation, cancelled: { run.isCancelled })
                 }
-            } catch BlockingWorkError.timedOut {
-                result = .unmeasured(.timedOut)
             } catch {
-                // `BlockingWorkError.busy`: a verification the deadline gave up on has still not returned.
-                result = .unmeasured(.wedged)
+                result = .unmeasured(QueueEngineVerifier.unmeasured(by: error))
             }
             guard let self, self.verification === run else { return }
             self.verification = nil

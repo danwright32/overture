@@ -128,6 +128,17 @@ enum QueueEngineVerifier {
         return .superseded
     }
 
+    /// What the verifier's thread throwing `error` measured: its deadline passing is `timedOut`, its refusal while
+    /// an abandoned run is still going is `wedged`, and anything else is a failure to read, never a wedged thread
+    /// nothing measured (L11). The work itself throws nothing; a failed read is its own outcome inside it.
+    static func unmeasured(by error: any Error) -> QueueEngineVerification.Unmeasured {
+        switch error as? BlockingWorkError {
+        case .timedOut: return .timedOut
+        case .busy: return .wedged
+        case nil: return .readFailed
+        }
+    }
+
     /// Whether another verification should follow `result`: one that could not say (superseded or cancelled),
     /// and one that judged an output older than the one now on screen, which would otherwise go unverified until
     /// some later output asked (L710). An unmeasured run is left to the next output's own trigger.
