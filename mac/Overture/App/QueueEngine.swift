@@ -808,6 +808,7 @@ final class QueueEngine<Value: Sendable> {
             tried.insert(id)
         }
         resolveIdentities(resolution)
+        faults.attempted(tried, at: now)
         guard !tried.isEmpty else {
             armRecoveryTimer()
             return changed

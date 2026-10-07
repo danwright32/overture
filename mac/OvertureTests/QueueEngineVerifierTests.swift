@@ -616,6 +616,30 @@ final class QueueEngineVerifierTriggerTests {
         #expect(faults.due(at: t0 + 3600, touched: []) == [id], "the row is not due when the cap frees a round")
     }
 
+    // An open round's attempts are spaced, so a burst of unrelated turns cannot spend the round at once; and the
+    // next wake is never sooner than that spacing, so a row due but waiting on Dan's edit cannot run turns back to
+    // back (found by the lessons review: a zero second timer re-arming itself, L110, L704).
+    @Test func attemptsAreSpacedAndTheNextWakeIsNeverImmediate() throws {
+        let store = try EngineStore(shows: 2, seed: 79)
+        let id = try #require(try store.shows().first).persistentModelID
+        let t0 = EngineStore.baseNow
+        var faults = QueueEngineFaults()
+        faults.admit([id: []], origin: .verifier, at: t0)
+        faults.attempted([id], at: t0)
+        let failedOnce = faults.failed(id, at: t0)
+        #expect(failedOnce == nil)
+        #expect(faults.due(at: t0 + 5, touched: [id]).isEmpty, "a second attempt came five seconds after the first")
+        #expect(faults.due(at: t0 + QueueEngineFaults.attemptSpacingSeconds, touched: []) == [id])
+        // A round that gave up and whose retry is long past, while the row waits on an edit: not an instant wake.
+        var waiting = QueueEngineFaults()
+        waiting.admit([id: []], origin: .foreignSave, at: t0)
+        for _ in 0..<QueueEngineFaults.attemptsPerRound { _ = waiting.failed(id, at: t0) }
+        let late = t0 + 1000
+        #expect(waiting.due(at: late, touched: []) == [id])
+        #expect(waiting.nextTry(at: late) == late + QueueEngineFaults.attemptSpacingSeconds,
+                "a due row's next wake is immediate, so turns would run back to back")
+    }
+
     // The field names a mismatch carries, read by Mirror over two real extractions.
     @Test func aMismatchNamesTheTableAndMember() throws {
         let store = try EngineStore(shows: 2, seed: 76)

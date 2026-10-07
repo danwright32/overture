@@ -282,6 +282,9 @@ struct QueueEngineFaults: Equatable, Sendable {
         var rounds: [Date] = []
         /// When the last round gave up, or nil while one is open or none has run.
         var gaveUpAt: Date?
+        /// When recovery last tried the row, so an open round's attempts are spaced rather than spent by a burst
+        /// of unrelated turns.
+        var lastAttemptAt: Date?
         /// Whether recovery has found the row waiting on an unsaved edit, so the wait is counted once per fault
         /// rather than once per turn (L344).
         var waitedForEdit = false
@@ -317,7 +320,10 @@ struct QueueEngineFaults: Equatable, Sendable {
     /// up that a save has touched since or whose retry interval has passed, while the hour's cap allows.
     func due(at now: Date, touched: Set<PersistentIdentifier>) -> [PersistentIdentifier] {
         entries.compactMap { id, entry in
-            guard let gaveUp = entry.gaveUpAt else { return id }
+            guard let gaveUp = entry.gaveUpAt else {
+                guard let last = entry.lastAttemptAt else { return id }
+                return now.timeIntervalSince(last) >= Self.attemptSpacingSeconds ? id : nil
+            }
             guard touched.contains(id) || now.timeIntervalSince(gaveUp) >= Self.retrySeconds else { return nil }
             let lastHour = entry.rounds.filter { now.timeIntervalSince($0) < 3600 }
             return lastHour.count < Self.roundsPerHour ? id : nil
@@ -344,16 +350,27 @@ struct QueueEngineFaults: Equatable, Sendable {
 
     /// When the next try at any row comes due: soon while a round is open, else the retry interval after its
     /// give-up, held back to when the hour's cap frees a round. Nil when nothing is faulted.
+    /// Never sooner than the attempt spacing: a row that is due and was not tried (it holds Dan's unsaved edit) is
+    /// woken for again at that pace, not at once, which would run turns back to back until he saves (L110, L704);
+    /// the save that clears the edit asks for its own turn sooner.
     func nextTry(at now: Date) -> Date? {
-        entries.values.map { entry -> Date in
-            guard let gaveUp = entry.gaveUpAt else { return now.addingTimeInterval(Self.attemptSpacingSeconds) }
+        let soonest = now.addingTimeInterval(Self.attemptSpacingSeconds)
+        return entries.values.map { entry -> Date in
+            guard let gaveUp = entry.gaveUpAt else {
+                return max((entry.lastAttemptAt ?? now).addingTimeInterval(Self.attemptSpacingSeconds), soonest)
+            }
             var at = gaveUp.addingTimeInterval(Self.retrySeconds)
             let lastHour = entry.rounds.filter { now.timeIntervalSince($0) < 3600 }.sorted()
             if lastHour.count >= Self.roundsPerHour, let oldest = lastHour.first {
                 at = max(at, oldest.addingTimeInterval(3600))
             }
-            return max(at, now)
+            return max(at, soonest)
         }.min()
+    }
+
+    /// Recovery tried these rows now, whatever the outcome.
+    mutating func attempted(_ ids: Set<PersistentIdentifier>, at now: Date) {
+        for id in ids { entries[id]?.lastAttemptAt = now }
     }
 
     /// Recovery found the row holding an unsaved edit. True the first time for this fault, which is the one
