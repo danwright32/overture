@@ -128,8 +128,8 @@ struct ExternalRebuildProbeTests {
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
-        let (window, hosting) = host(view)
-        defer { window.close() }
+        let (window, hosting) = host(HostedPassCounting.Mounted(content: view))
+        defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
         // SETTLE. Reported as well as asserted: a zero here means the first pass completed inside
         // `host()`, and a full count means it landed in this window instead, which is the reading that
@@ -454,11 +454,11 @@ struct ExternalRebuildProbeTests {
         let ctx = ModelContext(c)
         seed(ctx)
         let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-        let (window, _) = host(build(rows)
+        let (window, hosting) = host(HostedPassCounting.Mounted(content: build(rows)
             .modelContainer(c)
             .environment(ActionFeedback())
-            .environment(DayOffOfferRequest()))
-        defer { window.close() }
+            .environment(DayOffOfferRequest())))
+        defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
         func quieten() -> Bool {
             let by = Date().addingTimeInterval(30)
@@ -583,8 +583,8 @@ struct ExternalRebuildProbeTests {
         let ctx = ModelContext(c)
         seed(ctx)
         let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-        let (window, _) = host(QueueHarness(container: c))
-        defer { window.close() }
+        let (window, hosting) = host(HostedPassCounting.Mounted(content: QueueHarness(container: c)))
+        defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
         // WARM: a throwaway write on a row this test never asserts about, pumped until the list has
         // actually built. Asserted, because everything below is meaningless if it did not.
@@ -673,8 +673,8 @@ struct ExternalRebuildProbeTests {
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
-        let (window, _) = host(view)
-        defer { window.close() }
+        let (window, hosting) = host(HostedPassCounting.Mounted(content: view))
+        defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
         let settle = QueueRenderPass.WorkTally.measure {
             let deadline = Date().addingTimeInterval(20)

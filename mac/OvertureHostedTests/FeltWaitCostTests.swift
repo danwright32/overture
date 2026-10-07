@@ -218,7 +218,7 @@ struct FeltWaitCostTests {
         let keys = seed(ctx, rows: 40)
 
         let (window, hosting) = host(queueView(c))
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(window) }
 
         var rebuiltAfterThePress = false
         var warmed = false
@@ -324,7 +324,7 @@ struct FeltWaitCostTests {
         let ctx = ModelContext(c)
         let keys = seed(ctx, rows: 40)
         let (window, hosting) = host(queueView(c))
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(window) }
 
         var rowsAfterTheWrite = 0
         var warmed = false
@@ -380,7 +380,7 @@ struct FeltWaitCostTests {
         let keys = seed(ctx, rows: Self.corpusSize)
 
         let (window, hosting) = host(queueView(c))
-        defer { window.close() }
+        defer { HostedPassCounting.unmountAndClose(window) }
 
         var writeSeconds = 0.0
         var afterSeconds = 0.0

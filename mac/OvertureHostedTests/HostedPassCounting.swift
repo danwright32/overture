@@ -47,7 +47,10 @@ enum HostedPassCounting {
     // failed build leaves nil, and a nil window has nothing in any graph.
     static func unmountAndClose(_ window: NSWindow?, sourceLocation: SourceLocation = #_sourceLocation) {
         guard let window else { return }
-        let hostings = (window.contentView?.subviews ?? []).compactMap { $0 as? NSHostingView<AnyView> }
+        // #4571: the content view ITSELF as well as its subviews, because some harnesses install the hosting
+        // view as the window's content view (`HandedRowsStayLiveTests`) rather than adding it beneath one.
+        let views = [window.contentView].compactMap { $0 } + (window.contentView?.subviews ?? [])
+        let hostings = views.compactMap { $0 as? NSHostingView<AnyView> }
         if hostings.isEmpty {
             Issue.record(Comment(rawValue: "this window holds no AnyView hosting view, so its view could not "
                 + "be unmounted and stays in the SwiftUI graph after the close; hand the hosting view to "
