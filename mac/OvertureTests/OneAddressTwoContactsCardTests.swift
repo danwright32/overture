@@ -119,10 +119,12 @@ struct OneAddressTwoContactsCardTests {
 
     // MARK: - The guard
 
-    // Every `Dictionary(uniqueKeysWithValues:` call in a source text, as the text of its argument, found
-    // by balancing parentheses from the call rather than reading a fixed number of lines (L518).
+    // Every call taking `uniqueKeysWithValues:` in a source text, as the text of its argument, found by
+    // balancing parentheses from the label rather than reading a fixed number of lines (L518). The LABEL is
+    // what is matched, never `Dictionary(` before it, so every spelling of the initialiser is found:
+    // `Dictionary<K, V>(`, `[K: V](` and `.init(` trap exactly as `Dictionary(` does.
     static func uniquelyKeyedArguments(in text: String) -> [String] {
-        let opener = "Dictionary(uniqueKeysWithValues:"
+        let opener = "uniqueKeysWithValues:"
         var out: [String] = []
         var rest = text[...]
         while let start = rest.range(of: opener) {
@@ -186,6 +188,14 @@ struct OneAddressTwoContactsCardTests {
         #expect(found.count == 1)
         #expect(found.allSatisfy(Self.refuses))
 
+        // Every spelling of the initialiser is found, not only `Dictionary(`.
+        for spelling in ["Dictionary<String, Int>(uniqueKeysWithValues: recipients.map { ($0.id, 1) })",
+                         "[String: Int](uniqueKeysWithValues: recipients.map { ($0.id, 1) })",
+                         "let m: [String: Int] = .init(uniqueKeysWithValues: recipients.map { ($0.id, 1) })"] {
+            let arguments = Self.uniquelyKeyedArguments(in: spelling)
+            #expect(arguments.count == 1 && arguments.allSatisfy(Self.refuses), "\(spelling) was not judged")
+        }
+
         let byIdentity = "Dictionary(uniqueKeysWithValues: contacts.map { ($0.persistentModelID, $0) })"
         #expect(Self.uniquelyKeyedArguments(in: byIdentity).allSatisfy { !Self.refuses($0) })
 
@@ -214,7 +224,7 @@ struct OneAddressTwoContactsCardTests {
                 scanned += 1
                 if Self.keyedOnIdForAReason[Self.collapsed(argument)] != nil { reasonsUsed.insert(Self.collapsed(argument)) }
                 if Self.refuses(argument) {
-                    offenders.append("\(file.name): Dictionary(uniqueKeysWithValues:"
+                    offenders.append("\(file.name): uniqueKeysWithValues:"
                         + argument.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
                             .joined(separator: " ") + ")")
                 }
