@@ -32,8 +32,9 @@ struct QueueView: View {
     // rows, so the table was materialised twice on every store notification for a saving of nothing.
     //
     // Read from HERE only by the action handlers, which run on a press rather than during a render. The
-    // render path takes `data.queueScope`, which the pass derives once (`QueueRenderPass.make`), because
-    // this property walks the whole store on every access and one of its call sites is per row.
+    // render path takes what the pass derived once (`QueueRenderPass.make`), because this property walks
+    // the whole store on every access and one of its call sites is per row. (#4357 step 5: the pass
+    // publishes the scope as identities, `data.queueScope`, and no model.)
     // #4322: through `liveProspects`, never `allProspects` directly, because an action closure can outlive
     // the body that built it (see `LiveProspects`).
     private var prospects: [Prospect] { QueueModel.queueScope(liveProspects.rows) }
@@ -291,11 +292,13 @@ struct QueueView: View {
         // no array of them to ask. A surface that draws a row asks the store for that row's card, which
         // is what records the key and what counts a miss.
         let cards: QueueModel.CardStore
-        // #3507: the queue's own scope of Prospect models, derived once by the pass from the single
-        // whole-table query. Everything on the RENDER path that needs a model row reads it from here, so
-        // a per-row call site cannot re-derive it; a user ACTION, which runs outside a pass, uses
-        // QueueView's own `prospects` instead.
-        let queueScope: [Prospect]
+        // #3507: the queue's own scope, derived once by the pass from the single whole-table query, in the
+        // scope's own order. A user ACTION, which runs outside a pass, uses QueueView's own `prospects`.
+        // #4357 step 5 (plan v7 Phase 3): each show's IDENTITY rather than the model, so the pass publishes
+        // values a later pass, the engine's verifier or another thread can compare without reading the store
+        // again. Nothing on the render path reads a model from here; a press resolves its show through
+        // `ShowIdentity`, which is the one rule for finding the live row behind it.
+        let queueScope: [ShowIdentity]
         // #3323: the self-booking comparison set, indexed by night, built ONCE here rather than once per
         // card and once per date heading. Same reason as agentInputs below (#1771) and the same defect
         // #1772 already fixed on this exact feature: reading it per row rebuilt the whole queue per card,
@@ -328,7 +331,10 @@ struct QueueView: View {
         let checkLookups: Int?
         // Contacted RECIPIENTS Dan is still working, soonest-first. #652: one entry per recipient, so a
         // multi-contact show can appear more than once, each with its own contact and timing.
-        let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
+        // #4357 step 5: by IDENTITY (`ReachedOutSnapshot`: the show's identifier with its key as witness, the
+        // contact's identifier, and when to reach out), never the models. The pass keeps the model list for
+        // the terms it feeds inside `make`; what it publishes is values.
+        let reachedOut: [ReachedOutSnapshot]
         let reachedOutKeys: Set<String>
         // #4027 / #3383: one line per source whose rows all stopped matching in the same sweep. Derived in
         // the pass beside the stage membership the control depends on, never in the body.
@@ -1169,7 +1175,7 @@ struct QueueView: View {
         let counts = data.stageCounts
         // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
         // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
-        let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count
+        let reachedOutShows = Set(data.reachedOut.map(\.show.naturalKey)).count
         let message = StageEmptyState.message(for: stage, counts: counts, reachedOut: reachedOutShows)
         return VStack(spacing: OVSpacing.xs) {
             Text(message.title).font(OVType.dateHeading).foregroundStyle(OVColor.ink)

@@ -785,7 +785,9 @@ struct QueueViewAttributionProbeTests {
         // The change is a dismissal of one Reached out show, so the list really changes under the body.
         let reachedA = Phase0cViewRig.servedPass(t, now: now, stage: .reachedOut, registry: registry)
         var reachedKind = KindResult(name: "Reached out: one show closed and back")
-        if let closing = reachedA.reachedOut.first?.prospect {
+        // #4357 step 5: the pass publishes the show's identity, so the model is found among the fixture's rows.
+        if let first = reachedA.reachedOut.first?.show.showID,
+           let closing = t.rows.first(where: { $0.persistentModelID == first }) {
             let was = closing.status
             closing.status = .dismissed
             let reachedB = Phase0cViewRig.servedPass(t, now: now, stage: .reachedOut, registry: registry)

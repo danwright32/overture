@@ -96,10 +96,12 @@ struct RenderDataComparisonCoversEveryFieldTests {
         let members = Self.members(populated.data)
         let byName = Dictionary(uniqueKeysWithValues: RenderDataComparison.fields.map { ($0.name, $0.how) })
         let objectMembers = members.filter { Self.holdsAnObject($0.value) }.map(\.label)
-        // The premise: today RenderData holds the card store and several model collections (until plan step 5
-        // reshapes it), including the Reached out list, whose type names no model and whose entries carry them
-        // in enum payloads. A walk that did not find all four measured less than it claims.
-        for member in ["cards", "queueScope", "reachedOut", "reachedOutList"] {
+        // The premise: RenderData still holds the card store (a class, whose sources are the models until the
+        // engine builds the pass, #4358) and the Reached out list, whose type names no model and whose entries
+        // carry them in enum payloads (#4371). A walk that did not find both measured less than it claims.
+        // `queueScope` and `reachedOut` hold identities since #4357 step 5, which `OutputsHoldNoModelTests`
+        // holds them to.
+        for member in ["cards", "reachedOutList"] {
             #expect(objectMembers.contains(member), Comment(rawValue: "the walk did not see \(member) holding a "
                 + "model, so the fixture or the walk is too thin to check it"))
         }
@@ -129,7 +131,7 @@ struct RenderDataComparisonCoversEveryFieldTests {
         let store = Self.pass([]).cards
         let labels = Mirror(reflecting: store).children.compactMap(\.label)
         let accounted = RenderDataComparison.cardStoreMembers
-        #expect(labels.count >= 8, "the walk of the card store found too few members to have checked anything")
+        #expect(labels.count >= 7, "the walk of the card store found too few members to have checked anything")
         let missing = Set(labels).subtracting(accounted.keys).sorted()
         let extra = Set(accounted.keys).subtracting(labels).sorted()
         #expect(missing.isEmpty, Comment(rawValue: "card store members neither compared nor left out with a "
@@ -139,7 +141,9 @@ struct RenderDataComparisonCoversEveryFieldTests {
         // Every member said to be compared through `contents` really is a member of it, and `contents` holds
         // nothing that no store member is said to reach.
         let contents = Set(Mirror(reflecting: store.contents).children.compactMap(\.label))
-        let targets = Set(accounted.values.filter { $0.hasPrefix("contents.") }.map { String($0.dropFirst(9)) })
+        // A member may reach several (`sources` holds both the shows and their contacts), comma separated.
+        let targets = Set(accounted.values.filter { $0.hasPrefix("contents.") }
+            .flatMap { $0.components(separatedBy: ", ") }.map { String($0.dropFirst(9)) })
         #expect(targets == contents, Comment(rawValue: "contents holds " + contents.sorted().joined(separator: ", ")
             + " but the store's members are said to reach " + targets.sorted().joined(separator: ", ")))
     }

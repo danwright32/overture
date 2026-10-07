@@ -95,7 +95,7 @@ final class AReachedOutRowRedrawsOnlyWhenItChangesTests {
         let c = try TestModelContainer.inMemory(AppSchema.models)
         let t = try seed(c.mainContext)
         let served = pass(t, at: now)
-        let keys = served.reachedOut.map(\.prospect.naturalKey)
+        let keys = served.reachedOut.map(\.show.naturalKey)
         #expect(keys.count == 5, "the fixture put \(keys.count) shows on Reached out, not five")
         let target = try #require(keys.first)
 

@@ -102,9 +102,13 @@ struct StageListsFromThePassTests {
         let store = try seed(try context())
         let data = pass(store, stage: .reachedOut)
 
-        // What the body did, with its own arguments, at the pass's instant.
+        // What the body did, with its own arguments, at the pass's instant. #4357 step 5: the pass publishes
+        // its reached out list by identity now, so the models are taken the way the pass takes them.
+        let reached = ReachedOutQueue.activeWithDates(from: QueueModel.queueScope(store.shows), now: now)
+        #expect(reached.map { ReachedOutSnapshot(show: $0.prospect, contact: $0.recipient, next: $0.next) }
+                    == data.reachedOut, "the pass's reached out list is not the one these models give")
         let old = QueueModel.reachedOutEntries(
-            prospects: data.reachedOut,
+            prospects: reached,
             inquiries: store.inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut }, now: now)
         let oldGroups = QueueModel.reachOutDateGroups(old, reachDate: { $0.next })
         let oldCalendars = QueueModel.sourceCalendarIndex(store.sources)
@@ -124,7 +128,7 @@ struct StageListsFromThePassTests {
 
         // The positive control: the comparison can see a wrong list. Without the inquiries the list loses
         // a row, so a pass that dropped them would fail the line above.
-        let withoutInquiries = QueueModel.reachedOutEntries(prospects: data.reachedOut, inquiries: [], now: now)
+        let withoutInquiries = QueueModel.reachedOutEntries(prospects: reached, inquiries: [], now: now)
         #expect(drawn(withoutInquiries) != drawn(old))
     }
 

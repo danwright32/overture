@@ -352,7 +352,7 @@ struct QueueEnginePhase0bProbeTests {
             "stageCounts": data.stageCounts.sorted { $0.key.rawValue < $1.key.rawValue }
                 .map { "\($0.key.rawValue)=\($0.value)" }.joined(separator: ","),
             "agentInputs": String(describing: data.agentInputs),
-            "reachedOut order": data.reachedOut.map { "\($0.prospect.naturalKey)|\($0.recipient.id)|\($0.next.timeIntervalSince1970)" }.joined(separator: ";"),
+            "reachedOut order": data.reachedOut.map { "\($0.show.naturalKey)|\($0.contactId)|\($0.next.timeIntervalSince1970)" }.joined(separator: ";"),
             "feedBreaks": data.feedBreaks.map { String(describing: $0) }.joined(separator: ";"),
             "mergeSurvivorsDropped": data.mergeSurvivorsDropped.map { String(describing: $0) }.joined(separator: ";"),
             "fanOutLine": data.fanOutLine ?? "nil",

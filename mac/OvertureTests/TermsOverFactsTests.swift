@@ -1064,3 +1064,100 @@ struct TermsOverFactsTests {
                 "a finding named an address or a title rather than a field")
     }
 }
+
+// MARK: #4357 step 5, the whole pass over the populated fixture
+
+// G3's oracle part one compared several pill counts only at zero, because the live store holds none (the
+// #4357 status note of 2026-10-06), so a comparison of whole passes needs THIS fixture as well as the live
+// clone: here every count the pills state is non zero, and the pass draws a Reached out list and an inquiry
+// block. Both tests below run the real pass over it.
+extension TermsOverFactsTests {
+
+    @MainActor
+    private func populatedPass(_ all: [Prospect], _ inquiries: [Inquiry], focus: StageFocus) -> QueueView.RenderData {
+        var inputs = QueueRenderPass.Inputs(allProspects: QueueRenderPass.Corpus(all), inquiries: inquiries,
+                                            orgAnswers: [], context: TermsOverFacts.stageContext(for: all, asOf: asOf),
+                                            focusedStage: focus)
+        inputs.gmailConnected = true
+        inputs.checkRunSince = Date(timeIntervalSince1970: 1_790_000_000)
+        inputs.checkLookups = 3
+        return QueueRenderPass.make(inputs)
+    }
+
+    @MainActor
+    @Test func theComparatorJudgesAPassWhoseEveryPillCountsSomething() throws {
+        let ctx = try context()
+        let (all, inquiries) = try seedAgentInputsFrom(ctx)
+        let first = populatedPass(all, inquiries, focus: .review)
+        // Positive control (L159): no count the pills state is zero in the pass itself.
+        let zero = Mirror(reflecting: first.agentInputs).children.compactMap { child in
+            (child.value as? Int) == 0 ? child.label : nil
+        }
+        #expect(zero.isEmpty, "the pass leaves \(zero.joined(separator: ", ")) at zero, so nothing compared them")
+        let again = RenderDataComparison.differingFields(first, populatedPass(all, inquiries, focus: .review))
+        #expect(again.isEmpty, Comment(rawValue: "two passes over one store differ in: " + again.joined(separator: ", ")))
+
+        // A send claimed since the first pass: the stuck send pill moves, and the comparator names it.
+        let quiet = try #require(all.first { $0.naturalKey == "degraded" }?.recipients.first)
+        quiet.sendState = .sending
+        quiet.sendClaimedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let moved = RenderDataComparison.differingFields(first, populatedPass(all, inquiries, focus: .review))
+        #expect(moved.contains("agentInputs"), Comment(rawValue: "a claimed send was not seen in the pill counts: "
+            + moved.joined(separator: ", ")))
+    }
+
+    // The no-model walk over a whole published pass (`OutputsHoldNoModelTests` holds the scan and the card
+    // store). Two passes, because the Reached out list and the inquiry block are each built for one stage only.
+    @MainActor
+    @Test func aPopulatedPassHoldsAModelOnlyWhereItIsStillAllowed() throws {
+        let ctx = try context()
+        let (all, inquiries) = try seedAgentInputsFrom(ctx)
+        let passes = [StageFocus.reachedOut, .review].map { ($0, populatedPass(all, inquiries, focus: $0)) }
+
+        // Positive control (L159): every member holds something in at least one of the two passes, so a model
+        // it could carry would be in reach. The members this fixture leaves empty are named with why.
+        let leftEmpty: [String: String] = [
+            "fanOutLine": "a value type (an optional sentence), so it carries no model whatever it says",
+            "missedByACheckKeys": "natural keys, strings, so they carry no model whatever they hold",
+            "feedBreaks": "notices, a value type, so they carry no model whatever they say",
+            "mergeSurvivorsDropped": "notices, a value type, so they carry no model whatever they say",
+        ]
+        var labels: [String] = []
+        var populated = Set<String>()
+        for (_, data) in passes {
+            for child in Mirror(reflecting: data).children {
+                guard let label = child.label else { continue }
+                if !labels.contains(label) { labels.append(label) }
+                if RowFactsHoldNoModelTests.isPopulated(child.value) { populated.insert(label) }
+            }
+        }
+        #expect(labels.count > 25, "the walk of RenderData found too few members to have checked anything")
+        let empty = labels.filter { !populated.contains($0) && leftEmpty[$0] == nil }
+        #expect(empty.isEmpty, Comment(rawValue: "these members are empty in both passes, so the walk sees "
+            + "nothing in them: " + empty.joined(separator: ", ")))
+        for (name, _) in leftEmpty where populated.contains(name) {
+            Issue.record(Comment(rawValue: "\(name) is populated now, so take it off the list of members left empty"))
+        }
+
+        var holding = Set<String>()
+        var offenders: [String] = []
+        for (focus, data) in passes {
+            for child in Mirror(reflecting: data).children {
+                guard let label = child.label else { continue }
+                let found = RowFactsHoldNoModelTests.models(in: child.value, path: label)
+                guard !found.isEmpty else { continue }
+                holding.insert(label)
+                if OutputsHoldNoModelTests.stillHoldingAModel[label] == nil {
+                    offenders += found.map { "\(focus.rawValue): \($0)" }
+                }
+            }
+        }
+        #expect(offenders.isEmpty, Comment(rawValue: "a published pass holds a live model at: "
+            + offenders.joined(separator: ", ")))
+        // The exemptions are real today, so each one is deleted with the change that ends it rather than left
+        // standing as permission nobody needs (L373). It also proves the walk sees a model where one is.
+        let stale = OutputsHoldNoModelTests.stillHoldingAModel.keys.filter { !holding.contains($0) }.sorted()
+        #expect(stale.isEmpty, Comment(rawValue: "these members no longer hold a model, so take them off "
+            + "`OutputsHoldNoModelTests.stillHoldingAModel`: " + stale.joined(separator: ", ")))
+    }
+}
