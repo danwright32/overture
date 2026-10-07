@@ -293,6 +293,8 @@ final class QueueEngineClockTests {
         // Another caller publishes the next generation before the floor's turn.
         engine.publish(QueueEngineOutput(value: current.value, saveCount: current.saveCount,
                                          generation: current.generation + 1, now: current.now, reasons: [.first]))
+        // Publishing it re-armed the clock from it; the new timer must be sleeping before the clock moves.
+        await waitUntil("the published output's timer is sleeping") { clock.waiting == 1 }
         let passes = engine.counters.passes
         clock.advance(by: 60)
         await waitUntil("the floor asked for a turn") { !turns.queued.isEmpty }

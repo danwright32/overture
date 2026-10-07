@@ -164,12 +164,20 @@ final class EngineTestClock: @unchecked Sendable {
         }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (resume: CheckedContinuation<Void, Error>) in
-                let cancelled: Bool = lock.withLock {
-                    if Task.isCancelled { return true }
+                // A sleep that is already due (no time left) ends at once: only `advance` wakes sleepers, so one
+                // registered after its instant passed would otherwise wait for ever.
+                enum Outcome { case cancelled, due, sleeping }
+                let outcome: Outcome = lock.withLock {
+                    if Task.isCancelled { return .cancelled }
+                    if interval <= 0 { return .due }
                     sleepers[key] = (instant.addingTimeInterval(interval), resume)
-                    return false
+                    return .sleeping
                 }
-                if cancelled { resume.resume(throwing: CancellationError()) }
+                switch outcome {
+                case .cancelled: resume.resume(throwing: CancellationError())
+                case .due: resume.resume()
+                case .sleeping: break
+                }
             }
         } onCancel: {
             let resume = lock.withLock { sleepers.removeValue(forKey: key)?.resume }
