@@ -250,7 +250,9 @@ struct TestsNameTheirLandingInputFilesTests {
             let code = Self.code(file.text)
             guard derived.entryPoints.contains(where: { code.contains($0.call) }) else { continue }
             // A CALL with the default inputs, the shared folder's two files; the declaration alone refuses nothing.
-            #expect(code.contains("handoffInputsRefusal()"), Comment(rawValue: """
+            // Read into a value first, so a failure says why rather than rendering the whole file (L445).
+            let refuses = code.contains("handoffInputsRefusal()")
+            #expect(refuses, Comment(rawValue: """
                 \(file.name) is overlaid onto 6d3453d8 and reaches a landing without naming its files, and no \
                 longer refuses when the shared folder holds one
                 """))
