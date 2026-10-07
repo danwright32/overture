@@ -20,7 +20,7 @@ import Foundation
 // proof says the same thing on this Mac as on a runner (L504). The second half refuses the chained host
 // calendar step anywhere in the test tree, so a thirty first copy of that shape cannot arrive (L30), and the
 // same fold's second shape: whole days added as seconds to an instant that is then named as an Eastern day,
-// which had 23 more sites. Each detector's blind spot is written beside it.
+// which had 25 more sites. Each detector's blind spot is written beside it.
 @Suite("A test's nights are Eastern days, whatever zone the host is in (#4569)")
 struct TestNightsAreEasternDaysTests {
 

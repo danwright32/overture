@@ -51,8 +51,7 @@ struct ADrawnRowReallyAsksTheStoreTests {
                              venue: "Venue \(n) Hall",
                              // Dated FROM the clock rather than pinned, so the shows stay inside the
                              // queue's own lead-time window whatever year this runs in (L130).
-                             performanceDate: EasternDate.dayString(
-                                 from: Date().addingTimeInterval(Double(30 + n) * 86_400)),
+                             performanceDate: ScoutTestClock.day(30 + n, after: Date()),
                              sourceListingURL: nil, priorRelationship: "none", production: "self",
                              profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                              fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
