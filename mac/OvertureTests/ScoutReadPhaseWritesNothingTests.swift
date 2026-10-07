@@ -631,7 +631,9 @@ struct ScoutReadPhaseWritesNothingTests {
         #expect(states["b-org"] == .deferred, Comment(rawValue:
             "the source over budget was reported as \(String(describing: states["b-org"]))"))
         #expect(!outcome.sources.contains { $0.state == .queuedForReading })
-        #expect(outcome.clientListWarning == DownbeatBridge.warningText(for: DownbeatBridge.loadWithHealth(now: now).health))
+        // #4582: the run was handed no export, so the health said is the missing one, never a read of the default
+        // file, which under test is a folder every test shares.
+        #expect(outcome.clientListWarning == DownbeatBridge.warningText(for: .missing))
     }
 }
 

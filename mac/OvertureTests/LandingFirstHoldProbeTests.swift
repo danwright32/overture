@@ -228,11 +228,12 @@ final class LandingFirstHoldProbeTests {
                 _ = URLSession.shared.configuration
                 Self.say(String(format: "x1 first touch of URLSession.shared: %.1f ms", Phase0.ms(since: t0)))
                 // The rest of what runScout does on the main thread before its first await, each touched once
-                // here first: the LIVE Downbeat export (runScout reads the real one, the members above a copy), and
-                // the context's pending state. If one of them is the one-time cost, it shows here and leaves pass 1.
+                // here first: the Downbeat export (#4582: runScout reads the probe's copy now, as the members above
+                // do), and the context's pending state. If one of them is the one-time cost, it shows here and leaves
+                // pass 1.
                 let t1 = Phase0.now()
-                _ = DownbeatBridge.loadWithHealth(now: Date())
-                Self.say(String(format: "x1 first live Downbeat export load: %.1f ms", Phase0.ms(since: t1)))
+                _ = DownbeatBridge.loadWithHealth(from: inputs.exportURL, now: Date())
+                Self.say(String(format: "x1 first Downbeat export load: %.1f ms", Phase0.ms(since: t1)))
                 let t2 = Phase0.now()
                 _ = ctx.hasChanges
                 Self.say(String(format: "x1 first pending check: %.1f ms", Phase0.ms(since: t2)))

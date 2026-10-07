@@ -246,17 +246,41 @@ struct TestsNameTheirLandingInputFilesTests {
         #expect(overlay.contains("LandingOracleCorpus.swift"), Comment(rawValue: "the overlay read was \(overlay)"))
         let derived = Self.derive(AppSourceWalk.appFiles().map { (name: $0.name, text: $0.text) })
         let tests = AppSourceWalk.files(underAll: Self.testRoots, floor: AppSourceWalk.appFloor)
+        var judged = 0
         for file in tests where overlay.contains(file.name) {
-            let code = Self.code(file.text)
-            guard derived.entryPoints.contains(where: { code.contains($0.call) }) else { continue }
-            // A CALL with the default inputs, the shared folder's two files; the declaration alone refuses nothing.
-            // Read into a value first, so a failure says why rather than rendering the whole file (L445).
-            let refuses = code.contains("handoffInputsRefusal()")
-            #expect(refuses, Comment(rawValue: """
-                \(file.name) is overlaid onto 6d3453d8 and reaches a landing without naming its files, and no \
-                longer refuses when the shared folder holds one
+            let unrefused = Self.functionsReachingALandingUnrefused(Self.code(file.text), entryPoints: derived.entryPoints)
+            judged += unrefused.reaching
+            #expect(unrefused.names.isEmpty, Comment(rawValue: """
+                \(file.name) is overlaid onto 6d3453d8, where no landing takes its files, and these functions reach \
+                one without calling handoffInputsRefusal() first, so they land whatever the shared folder holds: \
+                \(unrefused.names)
                 """))
         }
+        #expect(judged > 0, "no overlaid function reaching a landing was found, so the exemption was judged on nothing")
+    }
+
+    // Each function in `code` that calls an entry point, and those of them that do not also CALL
+    // `handoffInputsRefusal()` (a call with the default inputs, the shared folder's two files; the declaration
+    // alone refuses nothing). Judged per function, not per file, so one refusing function never answers for
+    // another that lands without refusing (L135).
+    static func functionsReachingALandingUnrefused(_ code: String, entryPoints: [EntryPoint])
+        -> (reaching: Int, names: [String]) {
+        let ns = code as NSString
+        // Functions only: an `init(` here is as likely a call (`.init(`) as a declaration.
+        let starts = declaration.matches(in: code, range: NSRange(location: 0, length: ns.length))
+            .filter { $0.range(at: 1).location != NSNotFound }.map(\.range)
+        var reaching = 0
+        var names: [String] = []
+        for (i, start) in starts.enumerated() {
+            let end = i + 1 < starts.count ? starts[i + 1].location : ns.length
+            let body = ns.substring(with: NSRange(location: start.location, length: end - start.location))
+            guard entryPoints.contains(where: { body.contains($0.call) }) else { continue }
+            reaching += 1
+            if !body.contains("handoffInputsRefusal()") {
+                names.append(String(ns.substring(with: start).dropLast()).trimmingCharacters(in: .whitespaces))
+            }
+        }
+        return (reaching, names)
     }
 
     // MARK: - the rule, on sources written here
@@ -306,6 +330,21 @@ struct TestsNameTheirLandingInputFilesTests {
             "T.swift:4 Landing.land( passes the real file for exportURL",
             "T.swift:7 Sheet( names no exportURL:",
         ])
+    }
+
+    @Test func anOverlaidFunctionIsJudgedOnItsOwnRefusalNotTheFiles() {
+        let entries = Self.derive([(name: "Fixture.swift", text: Self.fixtureApp)]).entryPoints
+        let corpus = """
+            enum Corpus {
+                static func handoffInputsRefusal(_ inputs: [URL] = []) -> String? { nil }
+                static func refusing() { if handoffInputsRefusal() != nil { return }; Landing.land(1, into: 2) }
+                static func landing() { Landing.land(1, into: 2) }
+                // static func commented() { handoffInputsRefusal() }
+            }
+            """
+        let judged = Self.functionsReachingALandingUnrefused(Self.code(corpus), entryPoints: entries)
+        #expect(judged.reaching == 2)
+        #expect(judged.names == ["func landing"], Comment(rawValue: "\(judged.names)"))
     }
 
     @Test func theOverlayIsReadFromTheScriptsOwnList() {
