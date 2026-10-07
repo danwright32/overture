@@ -21,6 +21,9 @@ import SwiftData
 //      progress rather than interleaving with it;
 //   5. the entry flush again, now the store is held, then `apply` with the pre-classified pass;
 //   6. a failed save put back through `ScoutService.isolateFailedSave`, and said.
+// #4536: and, between 5 and 6, a landing record (`LandingRun`) carrying how many of the two entry flushes saved
+// pending edits, stamped landed only once the shows saved, so the paste is counted where runScout's and the
+// ingest's landings are (`scripts/landing-flush-rate.sh`).
 // The paste still never reconciles (#826): `apply` is given no `feed`.
 @MainActor
 enum LeadPasteLanding {
@@ -52,11 +55,18 @@ enum LeadPasteLanding {
         importedHistory: URL = LocalHistory.importedURL,
         saveEntry: (ModelContext) throws -> Void = { try $0.save() },
         saveSource: @escaping (ModelContext) throws -> Void = { try $0.save() },
+        // #4536: the save that stamps the landing record landed, injected so a test can make it fail.
+        saveClosing: (ModelContext) throws -> Void = { try $0.save() },
         into context: ModelContext
     ) async -> Result {
-        if case .recentEditsUnsaved(let rows)? = ScoutService.flushBeforeLanding(context, save: saveEntry).refusal {
+        // #4536: how many of the two entry flushes saved pending edits, for the landing record, as runScout and
+        // the ingest count theirs (#4338).
+        var entryFlushSaves = 0
+        let readPhaseFlush = ScoutService.flushBeforeLanding(context, save: saveEntry)
+        if case .recentEditsUnsaved(let rows)? = readPhaseFlush.refusal {
             return .refused(LeadIntake.recentEditsUnsaved(rows))
         }
+        if readPhaseFlush == .saved { entryFlushSaves += 1 }
         let read = await readOffTheMainThread(container: context.container, read: readProspectTable,
                                               readOverrides: readProducerOverrides, loadExport: loadExport,
                                               importedHistory: importedHistory)
@@ -76,10 +86,22 @@ enum LeadPasteLanding {
         defer { token.end() }
         // Again, now the store is held: whatever Dan edited while the paste read and waited is saved before
         // anything is applied, so a revert, which restores committed values, cannot put back an edit of his.
-        if case .recentEditsUnsaved(let rows)? = ScoutService.flushBeforeLanding(context, save: saveEntry).refusal {
+        let entryFlush = ScoutService.flushBeforeLanding(context, save: saveEntry)
+        if case .recentEditsUnsaved(let rows)? = entryFlush.refusal {
             return .refused(LeadIntake.recentEditsUnsaved(rows))
         }
+        if entryFlush == .saved { entryFlushSaves += 1 }
         let landing = ScoutLandingStore(context: context, read: readProspectTable, saveSource: saveSource)
+        // #4536: the landing's record of itself, as #4335 gave runScout and the ingest, inserted at the start of
+        // the landing block and carried by its save, so `scripts/landing-flush-rate.sh` counts the paste's entry
+        // flushes and outcome with theirs. Its own identity, minted here, since a paste has no results file to
+        // hash. Sequence 0: the paste stamps no source and keeps no journal, so it has no place in the order
+        // landings are minted in, and a sequence would only raise the floor every other landing mints above.
+        // A settled row, so a failed save of the shows does not take it with them.
+        let run = LandingRun.begin(runIdentity: "paste-" + UUID().uuidString, sequence: 0, entryPoint: .leadPaste,
+                                   startedAt: now, in: context)
+        run.entryFlushSaves = entryFlushSaves
+        landing.noteSettled(run)
         let outcome = ScoutService.apply(
             events: events, clients: read.clients, history: read.history,
             // #901: the SAME calendar the scout uses, days off included.
@@ -91,16 +113,33 @@ enum LeadPasteLanding {
         if !outcome.saveFailed {
             // A paste that added nothing because the store could not say whether its shows were new is a failed
             // read, never "nothing new on that page" (L215, #4339 review).
-            if outcome.storeUnreadable > 0 && outcome.inserted + outcome.updated == 0 {
-                return .refused(LeadIntake.storeUnreadableMessage)
-            }
+            let unreadable = outcome.storeUnreadable > 0 && outcome.inserted + outcome.updated == 0
+            // #4536: stamped landed only once the shows' save went through, in a closing save of its own, as the
+            // ingest stamps its record (#4336). A closing save the store refuses puts the stamp back
+            // (`saveLanding`), and the shows are landed all the same, so the answer does not change.
+            if !unreadable { run.landedAt = now }
+            _ = ScoutService.saveLanding(landing, into: context, save: saveClosing)
+            if unreadable { return .refused(LeadIntake.storeUnreadableMessage) }
             return .landed(outcome)
         }
         // Put back, so nothing it wrote is left pending for a later save to carry (#4334's rule).
         switch ScoutService.isolateFailedSave(of: "the pasted page", scope: outcome.saveFailureScope,
                                               landing: landing) {
-        case .notReverted?: return .refused(LeadIntake.notRevertedMessage)
-        default: return .refused(LeadIntake.saveFailedMessage)
+        case .notReverted?:
+            // #4334's rule: a landing that could not put everything back makes no further save. Its record never
+            // reached the store, so it is withdrawn rather than left for the next save to carry, which would be
+            // the next paste's entry flush naming it among Dan's unsaved edits. This paste's flushes then go
+            // uncounted, as a landing refused before its record was written goes uncounted.
+            if context.insertedModelsArray.contains(where: { $0.persistentModelID == run.persistentModelID }) {
+                _ = LandingRevert.revert(LandingRevert.WriteSet(changed: [], inserted: [run], deleted: []),
+                                         in: context)
+            }
+            return .refused(LeadIntake.notRevertedMessage)
+        default:
+            // The record, unlanded, in a save of its own, as the ingest saves what a stopped landing left: the
+            // paste is on the record as a landing that started and did not land.
+            _ = ScoutService.saveLanding(landing, into: context, save: saveClosing)
+            return .refused(LeadIntake.saveFailedMessage)
         }
     }
 

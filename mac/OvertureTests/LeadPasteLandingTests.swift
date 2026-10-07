@@ -131,6 +131,105 @@ struct LeadPasteLandingTests {
         #expect(try ScoutFailedSaveIsolationTests.holdsOnlyWhatTheStoreHolds(context, container),
                 "the failed save's writes were left pending for a later save to carry")
         #expect(try count(container) == 1)
+        // #4536: the paste is on the record as a landing that started and did not land, with its flush count.
+        let run = try #require(try runs(container).first)
+        #expect(try runs(container).count == 1)
+        #expect(run.landedAt == nil, "a paste whose save failed was recorded as landed")
+        #expect(run.entryFlushSaves == 0)
+    }
+
+    // MARK: - #4536: the paste's landing record
+
+    private func runs(_ container: ModelContainer) throws -> [LandingRun] {
+        try ModelContext(container).fetch(FetchDescriptor<LandingRun>())
+    }
+
+    /// #4536: the paste records a landing as runScout and the ingest do (#4335), under its own run identity, so
+    /// its entry flushes are counted with theirs by `scripts/landing-flush-rate.sh` (#4338). With an edit of Dan's
+    /// pending, the read phase flush saves it and the flush under the store finds nothing more, so one; with
+    /// nothing pending, zero, which is a recorded count and not "no count" (nil).
+    @Test func aLandedPasteRecordsItsLandingAndHowManyOfItsEntryFlushesSaved() async throws {
+        let (container, context) = try seeded()
+        let stored = try #require(try context.fetch(FetchDescriptor<Prospect>()).first)
+        stored.groupName = "Renamed By Dan"
+        let result = await LeadPasteLanding.landPastedLead(
+            [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            into: context)
+        guard case .landed = result else {
+            Issue.record("the paste did not land: \(result)")
+            return
+        }
+        #expect(!context.hasChanges, "the paste left its record unsaved")
+        let run = try #require(try runs(container).first, "the paste recorded no landing")
+        #expect(try runs(container).count == 1)
+        #expect(run.entryPointRaw == LandingSingleFlight.EntryPoint.leadPaste.rawValue)
+        #expect(run.runIdentity.hasPrefix("paste-"), Comment(rawValue: run.runIdentity))
+        #expect(run.startedAt == Self.now)
+        #expect(run.landedAt == Self.now, "a paste that landed was not stamped as landed")
+        #expect(run.entryFlushSaves == 1)
+
+        // A second paste is a landing of its own, under its own identity, and with nothing pending counts zero.
+        _ = await LeadPasteLanding.landPastedLead(
+            [event("Low Tide")], today: Self.today, now: Self.now, landings: LandingSingleFlight(), into: context)
+        let both = try runs(container)
+        #expect(Set(both.map(\.runIdentity)).count == 2, Comment(rawValue: "\(both.map(\.runIdentity))"))
+        #expect(both.map(\.entryFlushSaves).sorted { ($0 ?? -1) < ($1 ?? -1) } == [0, 1])
+    }
+
+    /// The flush under the store counts too: an edit Dan makes while the paste waits its turn is saved by it.
+    @Test func anEditSavedByTheFlushUnderTheStoreIsCounted() async throws {
+        let (container, context) = try seeded()
+        let flight = LandingSingleFlight(sleep: { _ in try? await Task.sleep(for: .seconds(3600)) })
+        let held = try await flight.begin(entryPoint: .scoutExtractIngest, priority: .scout, deadline: .seconds(60))
+        let stored = try #require(try context.fetch(FetchDescriptor<Prospect>()).first)
+        stored.groupName = "Renamed Before"
+        let paste = Task { @MainActor in
+            await LeadPasteLanding.landPastedLead([event("Harbor Lights")], today: Self.today, now: Self.now,
+                                                  landings: flight, into: context)
+        }
+        let waiting = await waitUntil("the paste waits its turn", timeout: .seconds(30)) { flight.queue == [.leadPaste] }
+        #expect(waiting, "the paste never queued for the store: \(flight.queue)")
+        stored.groupName = "Renamed While Waiting"
+        held.end()
+        guard case .landed = await paste.value else {
+            Issue.record("the paste did not land")
+            return
+        }
+        #expect(try runs(container).map(\.entryFlushSaves) == [2])
+    }
+
+    /// A paste that read nothing it could judge refuses, and its record says it did not land.
+    @Test func aPasteRefusedForAnUnreadableStoreIsRecordedAsNotLanded() async throws {
+        let (container, context) = try seeded()
+        defer { withExtendedLifetime(container) {} }
+        let result = await LeadPasteLanding.landPastedLead(
+            [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            readProspectTable: { _ in throw Refused() }, into: context)
+        #expect(result == .refused(LeadIntake.storeUnreadableMessage), "said \(result)")
+        let run = try #require(try runs(container).first, "the refused paste recorded no landing")
+        #expect(run.landedAt == nil, "a refused paste was recorded as landed")
+        #expect(!context.hasChanges, "the refused paste left its record unsaved")
+    }
+
+    /// The stamp rides a save of its own after the shows', so a store that refuses it leaves the shows landed,
+    /// the stamp put back, and nothing pending.
+    @Test func aStampTheStoreRefusesIsPutBackAndThePasteStillLanded() async throws {
+        let (container, context) = try seeded()
+        let result = await LeadPasteLanding.landPastedLead(
+            [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            saveClosing: { _ in throw Refused() }, into: context)
+        guard case .landed = result else {
+            Issue.record("a paste whose shows saved reported \(result)")
+            return
+        }
+        #expect(try count(container) == 2)
+        // The record itself reached the store with the shows' save; only its stamp was refused.
+        let stored = try runs(container)
+        #expect(stored.count == 1, "the record went with the refused stamp: \(stored.count) rows")
+        #expect(stored.first?.landedAt == nil, "a stamp the store refused reached it")
+        #expect(stored.first?.entryFlushSaves == 0)
+        #expect(try ScoutFailedSaveIsolationTests.holdsOnlyWhatTheStoreHolds(context, container),
+                "the refused stamp was left pending for a later save to carry")
     }
 
     /// #4339: a failed save that could not all be put back tells Dan to paste again, and says what that does:
@@ -153,6 +252,10 @@ struct LeadPasteLandingTests {
         #expect(LeadIntake.notRevertedMessage.contains("Paste the page again"),
                 "the not reverted sentence gives Dan nothing to do: \(LeadIntake.notRevertedMessage)")
         #expect(context.hasChanges, "nothing was left unsaved, so this proves nothing about the next paste")
+        // #4536: what is left is only what could not be put back, never the paste's own unsaved record, which
+        // the next paste's refusal would otherwise name as one more record of Dan's.
+        #expect(!context.insertedModelsArray.contains { $0 is LandingRun },
+                "the paste's record was left pending for a later save to carry")
 
         // "or tells you which shows it still can't save": a flush that cannot save names them and adds nothing.
         let refused = await LeadPasteLanding.landPastedLead(
