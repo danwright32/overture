@@ -27,6 +27,7 @@ What is not, and why:
 - `App/LogRotation.swift`: lines written INTO a diagnostic log file, never the app's voice on screen
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
+- `App/QueueEngine.swift`: developer diagnostic log and a Debug stop, never shown to Dan (#4358)
 - `App/QueueEngine.swift`: developer diagnostic log, not the app's own voice (#4358)
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
 - `App/StoreLocation.swift`: a Debug launch refusal, said only in the stop it causes, never on a screen (#4338)
