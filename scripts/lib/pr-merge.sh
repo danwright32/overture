@@ -86,7 +86,14 @@ lessons_review_allows() {
 # a run that did not print the suite's PASSED line, which is what a skipped or crashed suite looks like. Allows, and
 # says so, a PR that touches no engine file. ALLOW_ENGINE_GATE_SKIP=1 skips it for one command, loudly; explain to Dan
 # first. ENGINE_GATE_RUNNER replaces the run, for the fixture.
-ENGINE_GATE_PATHS_RE='^mac/Overture/(App/QueueEngine|App/RootView\.swift|Domain/QueueEngine|Domain/FactStore\.swift|Domain/ShowIdentity\.swift|Domain/CardDivergence|UI/QueueRenderPass\.swift|UI/QueueView)'
+#
+# WHICH PRs: every one that changes app Swift. Not a list of the engine's files, which is what this was first and is
+# what the lessons review of E4d1 refused (L41, L96): the engine's pass runs the queue's rules wherever they live
+# (`QueueLongTailTerms`, `SelfBookingConflict`, the stage rules, the contact and producer rules), so a hand-written
+# list misses whichever file the next rule moves into, and deriving it from what `QueueEngineQueue.derive` reaches
+# needs a call graph no shell script has. Every app Swift file is the set no rule can live outside. The price is a
+# run of about a minute on every app PR, on the one Mac with a live store.
+ENGINE_GATE_PATHS_RE='^mac/Overture/.*\.swift$'
 ENGINE_GATE_PASSED_LINE='engine-divergence-gate: PASSED'
 
 # engine_gate_run <head-sha>: the suite at that commit, in a worktree of its own, removed afterwards on EVERY exit,
@@ -129,7 +136,7 @@ engine_gate_allows() {
     return 1
   fi
   if ! grep -Eq "${ENGINE_GATE_PATHS_RE}" <<< "${files}"; then
-    echo "engine gate: PR #${pr_number} touches no queue engine file, so the live clone gate was not needed."
+    echo "engine gate: PR #${pr_number} touches no app Swift file, so the live clone gate was not needed."
     return 0
   fi
   if [[ ! "${head}" =~ ^[0-9a-f]{40}$ ]]; then

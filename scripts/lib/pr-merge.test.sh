@@ -249,8 +249,17 @@ rm -rf "${GATE_REPO}" "${GATE_TMP}"
 
 OUT="$(gate_files_out "scripts/lib/scratch.sh" "${GATE_SHA}" gate_fails)"
 assert_contains "a PR touching no engine file is allowed" "${OUT}" "RC=0"
-assert_contains "and says why the gate was not run" "${OUT}" "touches no queue engine file"
+assert_contains "and says why the gate was not run" "${OUT}" "touches no app Swift file"
 assert_contains "and runs nothing" "${OUT}" "RUNS=0"
+
+# A rule the engine's pass runs, in a file no list of engine files named, still runs the gate (the lessons review of
+# E4d1): the set is every app Swift file, and a file outside the app (a doc, a script, a test) is not in it.
+for rule_file in mac/Overture/Domain/SelfBookingConflict.swift mac/Overture/UI/QueueLongTailTerms.swift; do
+  OUT="$(gate_files_out "${rule_file}" "${GATE_SHA}" gate_passes)"
+  assert_contains "a PR touching only ${rule_file} runs the gate" "${OUT}" "RUNS=1"
+done
+OUT="$(gate_files_out "mac/OvertureTests/QueueEngineQueueTests.swift" "${GATE_SHA}" gate_fails)"
+assert_contains "a PR touching only a test runs nothing" "${OUT}" "RUNS=0"
 
 OUT="$(gate_files_out "mac/Overture/App/QueueEngine.swift" "${GATE_SHA}" gate_passes)"
 assert_contains "an engine PR whose suite says PASSED is allowed" "${OUT}" "RC=0"
