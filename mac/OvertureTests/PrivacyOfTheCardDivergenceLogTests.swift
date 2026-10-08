@@ -28,11 +28,18 @@ struct PrivacyOfTheCardDivergenceLogTests {
     /// SwiftData model where every field is one. Extended HERE rather than there, because widening the
     /// shared helper would newly count every `let` constant inside every class it already reads, and a
     /// classification guard would then demand somebody classify them.
+    ///
+    /// #4583: an access modifier in front (`private(set) var`, `private let`) is read past rather than
+    /// ending the match. Until then a field declared that way was invisible to the one guard that exists to
+    /// see every field, which is a blind spot of exactly the kind a derived list is supposed not to have (L96).
     private func storedNames(in body: String) -> [String] {
-        body.components(separatedBy: "\n").compactMap { line in
+        let modifiers = ["private(set) ", "fileprivate(set) ", "internal(set) ", "private ", "fileprivate ",
+                         "internal ", "public ", "nonisolated "]
+        return body.components(separatedBy: "\n").compactMap { line in
             let indented = line.hasPrefix("    ") && !line.hasPrefix("     ")
             guard indented else { return nil }
-            let code = line.trimmingCharacters(in: .whitespaces)
+            var code = line.trimmingCharacters(in: .whitespaces)
+            while let modifier = modifiers.first(where: { code.hasPrefix($0) }) { code.removeFirst(modifier.count) }
             guard !code.contains("{"), code.hasPrefix("let ") || code.hasPrefix("var ") else { return nil }
             let name = code.dropFirst(4).prefix { $0.isLetter || $0.isNumber || $0 == "_" }
             return name.isEmpty ? nil : String(name)
@@ -49,8 +56,15 @@ struct PrivacyOfTheCardDivergenceLogTests {
                                                            in: model))
         // #4354 (plan v7 D8): kind, source and suppressedRepeats, two closed enums and a count, asserted to
         // stay closed by `kindAndSourceAreClosedEnums` below.
+        //
+        // #4583 (plan v7 D7 and D8, L179): build, commit and generation, added on purpose, and none of them is
+        // anybody's data. `build` is a closed enum, held closed by `kindAndSourceAreClosedEnums`. `generation` is
+        // a number the queue engine minted, which names an output and never a row. `commit` is the one String,
+        // and it is the app's own source revision rather than anything Dan or a contact typed: the only writer
+        // stamps it from the installer's record, and only when it is a whole commit, so a value of any other
+        // shape has nowhere to go (`theCommitHoldsOnlyACommit` below).
         let allowed: Set<String> = ["session", "sequence", "at", "fields", "cardsBuilt", "stage",
-                                    "kind", "source", "suppressedRepeats"]
+                                    "kind", "source", "suppressedRepeats", "build", "commit", "generation"]
         let declared = Set(storedNames(in: body))
         // A floor FIRST. An extraction that read nothing and a record with no fields leave the same empty
         // set, and the emptiest possible failure must not read as the cleanest possible pass (L98).
@@ -69,7 +83,8 @@ struct PrivacyOfTheCardDivergenceLogTests {
         let body = try #require(SourceGuardHelper.between("struct CardDivergenceRecord", and: "\n}", in: model))
         #expect(body.contains("    let kind: Kind\n"))
         #expect(body.contains("    let source: Source?\n"))
-        for name in ["enum Kind: String,", "enum Source: String,"] {
+        #expect(body.contains("    private(set) var build: Build?\n"))
+        for name in ["enum Kind: String,", "enum Source: String,", "enum Build: String,"] {
             let decl = try #require(SourceGuardHelper.between(name, and: "\n    }", in: body),
                                     Comment(rawValue: "\(name) is gone from the record"))
             let cases = decl.components(separatedBy: "\n").filter {
@@ -87,6 +102,28 @@ struct PrivacyOfTheCardDivergenceLogTests {
         let line = try #require(CardDivergenceLog.line(for: record))
         #expect(line.contains("\"kind\":\"noOpDirty\""))
         #expect(line.contains("\"source\":\"reconcile\""))
+    }
+
+    // #4583: the commit is the one free String on the record, so the stamp takes it only when it is a whole
+    // commit. An installer record holding anything else (here a performer's name, the identity class C7 is
+    // about) stamps the record as not recorded, with no commit at all, rather than carrying the text.
+    @Test("the commit field holds a commit and nothing else")
+    func theCommitHoldsOnlyACommit() {
+        let sha = "0123456789abcdef0123456789abcdef01234567"
+        func installed(_ commit: String) -> InstalledBuild {
+            InstalledBuild(commit: commit, commitDate: Date(timeIntervalSince1970: 1_800_000_000),
+                           repoPath: "/code/overture", provenance: .main)
+        }
+        #expect(CardDivergenceLog.BuildStamp.of(installed: installed(sha), isRunFromSource: false)
+                == CardDivergenceLog.BuildStamp(build: .installed, commit: sha))
+        for refused in ["Marguerite Eddowes", String(sha.prefix(7)), sha + "0", "", String(repeating: "g", count: 40)] {
+            let stamp = CardDivergenceLog.BuildStamp.of(installed: installed(refused), isRunFromSource: false)
+            #expect(stamp == CardDivergenceLog.BuildStamp(build: .notRecorded, commit: nil),
+                    Comment(rawValue: "a commit of `\(refused)` stamped \(stamp)"))
+        }
+        // And a build run from source carries none, whatever the installer's record says.
+        #expect(CardDivergenceLog.BuildStamp.of(installed: installed(sha), isRunFromSource: true)
+                == CardDivergenceLog.BuildStamp(build: .runFromSource, commit: nil))
     }
 
     // The comparison hands back NAMES, and this is asserted against real data rather than by reading the

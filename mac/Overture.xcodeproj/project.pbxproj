@@ -732,6 +732,7 @@
 		46BB3A176C0764D1D4559594 /* LeadMonthsReadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ACE884CD7428E918C0764DC /* LeadMonthsReadTests.swift */; };
 		46CCA3FD1103F549631FAF37 /* CanonicalContactOrderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1F5DEBC52BE8688A8920E5 /* CanonicalContactOrderTests.swift */; };
 		46CEF836905AC2E98883DDC3 /* RunScoutTailRowsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3796AC883BC0C4B28D0C316 /* RunScoutTailRowsTests.swift */; };
+		4701A6AF85EAEC904589A8DC /* TheDivergenceLogStampsItsBuildTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E32C4B75F284FA8E1E0CFA7 /* TheDivergenceLogStampsItsBuildTests.swift */; };
 		47045F3809835E5C47F12C69 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B30D320FEBBA85BDF8EC7A4F /* Assets.xcassets */; };
 		47161CBC51F910A4CB9025BC /* VenueNameAskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E244333506277713633CEA82 /* VenueNameAskTests.swift */; };
 		4732A6D5C916DC3295EF0FA5 /* DetachConversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45091D2A3EFC72AEDF5079F0 /* DetachConversation.swift */; };
@@ -2850,6 +2851,7 @@
 		1DA72131D3A406C012910FA9 /* LocationsTheRulesWouldRefuseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationsTheRulesWouldRefuseTests.swift; sourceTree = "<group>"; };
 		1DB0056105E84E20D1B5D7B8 /* HandMarkedReply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandMarkedReply.swift; sourceTree = "<group>"; };
 		1DDF53BBA9238AA83DA74F52 /* ListingURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListingURL.swift; sourceTree = "<group>"; };
+		1E32C4B75F284FA8E1E0CFA7 /* TheDivergenceLogStampsItsBuildTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TheDivergenceLogStampsItsBuildTests.swift; sourceTree = "<group>"; };
 		1E39747FEE0870A41BF573C5 /* GenrePrecedence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenrePrecedence.swift; sourceTree = "<group>"; };
 		1E73CA861184A5C580399484 /* TestFilesAreInTheBuiltProjectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFilesAreInTheBuiltProjectTests.swift; sourceTree = "<group>"; };
 		1E78896912D9D3956B8E19C0 /* StoreLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreLockTests.swift; sourceTree = "<group>"; };
@@ -6051,6 +6053,7 @@
 				61BE5C1A1E9E7F28A22EE69E /* TheArchivePruneDecodesOnlyWhatItRemovesTests.swift */,
 				87673B91FD2858EF5A66A0D1 /* TheDivergenceLogIsCompactedTests.swift */,
 				FCD18573CC882E125A974E30 /* TheDivergenceLogKeysOnKindAndSourceTests.swift */,
+				1E32C4B75F284FA8E1E0CFA7 /* TheDivergenceLogStampsItsBuildTests.swift */,
 				5413D4478D3B1F70EC7D5358 /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift */,
 				3D5D1C4AC4B0559A6EC8D312 /* TheFreezeLogKeepsItsOldestRecordsTests.swift */,
 				DF071E8CC57B29B1988BF50D /* TheFreezeLogSaysWhereItsWindowEndsTests.swift */,
@@ -9362,6 +9365,7 @@
 				330CFF9A7C765B18AF72DD95 /* TheArchivePruneDecodesOnlyWhatItRemovesTests.swift in Sources */,
 				81A5D2E4BBD512D20D11FD0D /* TheDivergenceLogIsCompactedTests.swift in Sources */,
 				2A630C1EA6F4119C1EC6F1AF /* TheDivergenceLogKeysOnKindAndSourceTests.swift in Sources */,
+				4701A6AF85EAEC904589A8DC /* TheDivergenceLogStampsItsBuildTests.swift in Sources */,
 				025A7F0495B66B2ED30BD39F /* TheFreezeLogIsBoundedWhileTheAppRunsTests.swift in Sources */,
 				CD58E47DD6204CC2BB5FF787 /* TheFreezeLogKeepsItsOldestRecordsTests.swift in Sources */,
 				276397FEA8A9F186A6155907 /* TheFreezeLogSaysWhereItsWindowEndsTests.swift in Sources */,
