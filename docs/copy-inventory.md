@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1809 sentences**.
+Every sentence Overture can say to Dan: **1827 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 680 of the 1809 below hold a
+  sentence carrying a VALUE: 692 of the 1827 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -36,6 +36,8 @@ What is not, and why:
 - `App/UpdateCommandFile.swift`: a shell script for Terminal, not Overture's voice to Dan (#915)
 - `Domain/BilledHierarchy.swift`: parser tokens matched against a listing page, never Overture's voice
 - `Domain/CardDivergence.swift`: a filename, not a sentence Overture says
+- `Domain/CardDivergenceReport.swift`: a developer log line, never shown to Dan (#4358)
+- `Domain/CardDivergenceReport.swift`: a date format, not a sentence
 - `Domain/CatchAllFitReasonMigration.swift`: the retired sentence, named only so this pass can find and clear it
 - `Domain/CompiledPattern.swift`: A developer assertion, never rendered to Dan (#3432)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
@@ -134,6 +136,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 - `UI/QueueScopeRow.swift`: a redaction marker for a run log, never a sentence Dan reads (#3655)
+- `UI/RenderDataComparison.swift`: member names and the reasons a comparator leaves one out, never said to Dan
 
 ## The same sentence, said in more than one place (56)
 
@@ -1619,6 +1622,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "One set of calendar results is still waiting for the store."
     `Domain/LandingSingleFlight.swift`
+"One show in your queue has been out of step with its saved copy for over an hour. Press Reload this show on its card."
+    `Domain/CardDivergenceReport.swift`
+"One show in your queue is out of step with its saved copy, and Overture is still reloading it."
+    `Domain/CardDivergenceReport.swift`
 "One show on that page wasn't added, because Overture couldn't check it against the shows it already has. Paste the page again to add it."
     `Domain/LeadIntake.swift`
 "One show was left out of this run. The local store stopped answering, so Overture could not tell whether it was a new show or a card you have already decided on, and it would rather skip it than write over one. Run the scout again to pick it up."
@@ -1691,6 +1698,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture cannot tell which shows the \(runNoun) is working on, so it will not start a run that might take the same ones. Wait for that run to finish and try again."
     `Integration/PrepQueueService.swift`
+"Overture checked your queue against your saved shows and found they matched \(matches) times, most recently on \(when)."
+    `Domain/CardDivergenceReport.swift`
+"Overture checked your queue against your saved shows and found they matched \(matches) times."
+    `Domain/CardDivergenceReport.swift`
+"Overture checked your queue against your saved shows once, and they matched."
+    `Domain/CardDivergenceReport.swift`
+"Overture checked your queue against your saved shows once, on \(when), and they matched."
+    `Domain/CardDivergenceReport.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
 "Overture could not check whether it stopped responding this session, so nothing here can say whether it did."
@@ -1711,6 +1726,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingSingleFlight.swift`
 "Overture could not read kept calendar results at \(path) (\(why))."
     `Domain/LandingSingleFlight.swift`
+"Overture could not read the saved copy of \(org), so nothing was reloaded. Try again in a moment"
+    `App/QueueEngineQueue.swift`
 "Overture could not rewrite the freeze archive without its records older than a month, so nothing was deleted from the archive. It tries again every hour."
     `Domain/FreezeHousekeepingCopy.swift`
 "Overture could not save the record of what this run searched for, so it will be lost when the next run starts: \(reason)"
@@ -1807,6 +1824,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchGap.swift`
 "Overture has not yet checked whether the cards it builds for your queue are right, so nothing here can say whether they are."
     `Domain/CardDivergenceReport.swift`
+"Overture has not yet checked your queue against your saved shows, so nothing here can say whether they match."
+    `Domain/CardDivergenceReport.swift`
 "Overture has stopped looking for a reply to this one. If they did write, link it by hand."
     `Domain/ProposedConversation.swift`
 "Overture has twice been unable to save your recent edits, so scout results wait until they are saved or discarded. Not yet saved: "
@@ -1853,6 +1872,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Overture refused its store folder: \(why)"
     `App/StoreLocation.swift`
+"Overture reloaded \(org), and its copy still does not match the saved show. Nothing was changed, and Overture will keep trying on its own"
+    `App/QueueEngineQueue.swift`
 "Overture still couldn't read that landing record (\(why)), so it can't tell whether that landing finished."
     `Domain/LandingProgress.swift`
 "Overture stopped responding \(count) times and could not write the records of them, so nothing here can say how long for."
@@ -1869,6 +1890,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchGap.swift`
 "Overture was not running for \(PrepStatus.duration(seconds: seconds)), and started again \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
+"Overture's copy of \(org) is out of step with the saved show, so nothing was changed. Press Reload this show on its card, then try again"
+    `Domain/ShowIdentity.swift`
+"Overture's copy of \(org) is out of step with the saved show, so nothing was undone. Press Reload this show on its card before changing it again"
+    `Domain/ShowIdentity.swift`
+"Overture's copy of that show is out of step with the saved show, so nothing was changed. Press Reload this show on its card, then try again"
+    `Domain/ShowIdentity.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may have written to \(path). Nothing has been opened or changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
@@ -2946,6 +2973,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Where the surface records which cards it drew, for the next pass. Written by the render and \\nnever read as an input to this one."
     `App/QueueContextSignals.swift`
+"Whether the pass checks one of its own cards, which is how the pass runs rather than what it reads. \\nThe queue engine checks at publish instead (#4358 slice E4b)."
+    `App/QueueContextSignals.swift`
 "Which kept shows to prep?"
     `Domain/PrepSelectionCopy.swift`
 "Which message is their reply?"
@@ -3238,6 +3267,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/EmptyAnswerSection.swift`
 "\(count) shows have no genre read and will stay."
     `Domain/GenreGate.swift`
+"\(count) shows in your queue are out of step with their saved copies, \(stuck) of them for over an hour. Press Reload this show on each one's card."
+    `Domain/CardDivergenceReport.swift`
+"\(count) shows in your queue are out of step with their saved copies, and Overture is still reloading them."
+    `Domain/CardDivergenceReport.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     `Domain/GenreGate.swift`
 "\(count) shows on that page weren't added, because Overture couldn't check them against the shows it already has. Paste the page again to add them."
@@ -3423,6 +3456,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "\(opening) to \(closing)"
     `Domain/EventDateInDraft.swift`
+"\(org) already matches the saved show, so there was nothing to reload"
+    `App/QueueEngineQueue.swift`
 "\(org) already moved on, so there was nothing to undo"
     `App/ActionFeedback.swift`
 "\(org) can be drafted despite the clash"
@@ -3457,6 +3492,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "\(org) dismissed: you had paid work."
     `Domain/ShowOutcome.swift`
+"\(org) has a change that is not saved yet, and reloading now would lose it. Nothing was reloaded. Finish that change, then reload it"
+    `App/QueueEngineQueue.swift`
 "\(org) has already been sent to, so there's nothing to redraft"
     `App/ActionFeedback.swift`
 "\(org) has already been sent to; re-prepping to find new contacts only"
@@ -3481,6 +3518,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowIdentity.swift`
 "\(org) was merged, or moved to a different night, since then, so nothing was undone"
     `Domain/ShowIdentity.swift`
+"\(org) was reloaded from the saved show, so it is safe to change again"
+    `App/QueueEngineQueue.swift`
 "\(org) was still being added when this row was drawn, so Overture could not tell which show you pressed. Nothing was changed. The list has caught up, so press it again if it is still there"
     `Domain/ShowIdentity.swift`
 "\(org) was still being added when you acted on it, so Overture could not tell which show to put back. Nothing was undone"

@@ -252,11 +252,19 @@ enum EngineHarness {
                               verifier: QueueEngineVerifierSetup = QueueEngineVerifierSetup(triggers: .byHand),
                               // The launch's reads run in a turn here: these suites start the engine and run its
                               // turns, and `QueueEngineLaunchTests` drives the launch thread itself.
-                              launch: QueueEngineLaunchSetup = QueueEngineLaunchSetup(reads: .inTurn))
+                              launch: QueueEngineLaunchSetup = QueueEngineLaunchSetup(reads: .inTurn),
+                              // #4358 slice E4b: the signal inputs every pass is handed. These suites' subject is not
+                              // the pass, so the same value every time, asked for by name (`noSignals`).
+                              contextInputs: @escaping @MainActor () -> QueueEngineContextInputs = { EngineHarness.noSignals },
+                              landing: QueueEngineLandingSetup = QueueEngineLandingSetup())
         -> QueueEngine<Value> {
         QueueEngine(context: store.context, derivation: derivation, saves: saves, clock: clock.clock, events: events,
-                    schedule: turns.schedule, refused: refused, verifier: verifier, launch: launch)
+                    schedule: turns.schedule, refused: refused, verifier: verifier, launch: launch,
+                    contextInputs: contextInputs, landing: landing)
     }
+
+    /// No client, Gmail not connected, nothing running: a fixed answer for every input that arrives by a signal.
+    nonisolated static let noSignals = QueueEngineContextInputs(clients: .none)
 
     /// A counting engine, started, with the start's turns run.
     static func started(_ store: EngineStore, _ turns: EngineTurns,
@@ -955,7 +963,7 @@ final class QueueEngineCostProbeTests {
                             clock: EngineTestClock().clock,
                             events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                             schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand),
-                            launch: QueueEngineLaunchSetup(reads: .inTurn))
+                            launch: QueueEngineLaunchSetup(reads: .inTurn), contextInputs: { EngineHarness.noSignals })
             }
             // The start with the launch's reads made in a turn: the first read and the whole fill back to back,
             // which the app spreads across turns and off the main thread (#4358 slice E3, measured batch by
@@ -1059,7 +1067,8 @@ final class QueueEngineCostProbeTests {
                                          events: QueueEngineSystemEvents(workspace: NotificationCenter(),
                                                                          system: NotificationCenter()),
                                          schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand),
-                                         launch: QueueEngineLaunchSetup())
+                                         launch: QueueEngineLaunchSetup(),
+                                         contextInputs: { EngineHarness.noSignals })
                 let started = Phase0.now()
                 engine.start()
                 let landed = await waitUntil("the launch's first read", timeout: .seconds(120)) {

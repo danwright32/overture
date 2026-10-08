@@ -261,6 +261,40 @@ struct QueueEnginePassInput: Sendable {
     let facts: FactStore
     let viewInputs: QueueEngineViewInputs
     let now: Date
+    /// #4358 slice E4b: the inputs that arrive by a signal, as the engine read them for this pass.
+    let context: QueueEngineContextInputs
+}
+
+/// #4358 slice E4b: every input of the queue's pass that is neither a store row, the clock nor the surface's view,
+/// which is every input `QueueInputSource.byInput` names `.signal` (`QueueEngineContextInputsTests` holds the two
+/// to one list, L96). The engine reads these on the main actor when a pass derives and carries them on the output,
+/// so the verifier's rebuild on its own thread derives from exactly what the output on screen was derived from: a
+/// rebuild that read them again could disagree with the screen for a reason that is not a fault (L70).
+///
+/// `clients` is REQUIRED, on `StageContext`'s rule: `ClientWindow.none` is a real answer ("nobody is a client"),
+/// so a caller has to ask for it by name rather than arrive at it by forgetting.
+struct QueueEngineContextInputs: Equatable, Sendable {
+    var clients: ClientWindow
+    var gmailConnected = false
+    var runInFlight: RunKind?
+    var prepSlotRunning = false
+    var checkSlotRunning = false
+    var checkRunSince: Date?
+    var checkLookups: Int?
+    var replyRunAlive = false
+
+    init(clients: ClientWindow, gmailConnected: Bool = false, runInFlight: RunKind? = nil,
+         prepSlotRunning: Bool = false, checkSlotRunning: Bool = false, checkRunSince: Date? = nil,
+         checkLookups: Int? = nil, replyRunAlive: Bool = false) {
+        self.clients = clients
+        self.gmailConnected = gmailConnected
+        self.runInFlight = runInFlight
+        self.prepSlotRunning = prepSlotRunning
+        self.checkSlotRunning = checkSlotRunning
+        self.checkRunSince = checkRunSince
+        self.checkLookups = checkLookups
+        self.replyRunAlive = replyRunAlive
+    }
 }
 
 /// Why a pass derived. A turn with no reason does not derive (the generation gate, plan v2 Phase 4 step 2).
@@ -398,6 +432,21 @@ struct QueueEngineCounters: Equatable, Sendable {
     var insertsMergedAway: QueueEngineAnomaly = .neverFired
     /// A read that THREW, left as it was rather than read as deleted (L215).
     var unreadRows: QueueEngineAnomaly = .neverFired
+    /// #4369 (#4358 slice E4b): turns in which a landing's capped intake read rows, and turns that had a reason to
+    /// derive and held it because a landing was still open or still carried rows (the held publish).
+    var landingBatches = 0
+    var heldTurns = 0
+}
+
+/// #4369 (#4358 slice E4b, plan item 4): the scout landing as a declared BULK change kind in the engine's own
+/// intake. Measured on #4603's probe over the frozen 4x store: one landing's intake took 328.7 to 344.1 ms of main
+/// actor time in one turn, about 0.33 ms a row, against plan v7's 50 ms bulk turn budget. So while a landing is open
+/// the intake reads at most `batchSize` rows a turn and carries the rest to the next (decision 10's batch of 150,
+/// about 49 ms at 4x on that reading), and publishes nothing until it closes unless Dan acts.
+struct QueueEngineLandingSetup: Sendable {
+    /// Rows read per turn while a landing holds the intake. A test forces 1 so every landing it drives takes the
+    /// multi-batch path, which at the default only a landing over 150 rows would (L101).
+    var batchSize = 150
 }
 
 // MARK: - The launch (#4358 slice E3, plan v7 D6 and decision 4)

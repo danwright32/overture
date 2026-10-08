@@ -149,7 +149,7 @@ struct RenderDataComparisonCoversEveryFieldTests {
     }
 
     @Test func theComparatorNeverComparesByDescription() {
-        let source = SourceGuardHelper.source("OvertureTests/RenderDataComparison.swift")
+        let source = SourceGuardHelper.source("Overture/UI/RenderDataComparison.swift")
         #expect(!source.isEmpty, "the comparator's source was not read")
         let code = SwiftSource.scannableLines(in: source).map(\.code).joined(separator: "\n")
         for spelling in ["describing:", "reflecting:", ".description", "debugDescription"] {

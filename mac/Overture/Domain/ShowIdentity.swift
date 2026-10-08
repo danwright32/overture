@@ -18,6 +18,12 @@ import SwiftData
 // launch fill, and keeps a temporary to permanent identifier map for one generation. Each of those is a
 // fact only the engine holds, so each would have no writer today and is left out rather than added
 // unreachable (L65). The engine conforms to `ShowResolver` and adds them there.
+//
+// #4358 slice E4b: the engine conforms (`QueueEngine`'s `ShowResolver` extension), answering from its own members
+// by identifier, falling back to the main context for a row the launch fill has not reached yet and marking it
+// dirty, and refusing a row it knows to be out of step with the store (`Refusal.outOfStep`). The temporary to
+// permanent identifier map is still not here: nothing an action holds needs it until the cutover (E4d) draws rows
+// from the engine, so it would have no reader.
 struct ShowIdentity: Equatable, Hashable, Sendable {
     let showID: PersistentIdentifier
     // The WITNESS, never the identity. If this disagrees with the row `showID` finds, the row is not the
@@ -43,6 +49,7 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
 
     // WHY A PRESS FINDS NOTHING. Three causes, three sentences, because two outcomes given the same
     // message are one outcome in practice and only one of these is "the show is gone" (L11, L260).
+    // #4358 slice E4b adds a fourth, where the press DOES find the show and must still not act on it.
     enum Refusal: Equatable, CaseIterable, CustomStringConvertible {
         /// No row the resolver holds carries this identifier. It was deleted, or merged away.
         case gone
@@ -54,12 +61,18 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
         /// different show that holds its key. Refused rather than resolved by key, which is the L75 shape
         /// this whole type exists to stop. #4358's map is what lets a press like this resolve.
         case drawnBeforeItsFirstSave
+        /// #4358 slice E4b (plan v7 D7, plan item 11): the row is found, and the queue engine knows Overture's
+        /// copy of it is out of step with the saved show (its verifier faulted it, or a save through another
+        /// context touched it). Saving the main context's object would write the stale fields back over the saved
+        /// ones, so the press is refused until the row is reloaded, by recovery or by Dan's "Reload this show".
+        case outOfStep
 
         var description: String {
             switch self {
             case .gone: return "gone"
             case .reKeyed: return "reKeyed"
             case .drawnBeforeItsFirstSave: return "drawnBeforeItsFirstSave"
+            case .outOfStep: return "outOfStep"
             }
         }
 
@@ -97,6 +110,18 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
                 return "\(org) was still being added when this row was drawn, so Overture could not tell "
                     + "which show you pressed. Nothing was changed. The list has caught up, so press it "
                     + "again if it is still there"
+            // COLD READ, 2026-10-08, in the order Dan meets it: he presses a control on a card, the card does
+            // not change, and this appears. The only refusal whose show IS there, so it is the only one that
+            // asks him to do something first, and what it names is a button on that same card (L80, L111): a
+            // reload is what changes the state he is stuck in, and pressing again without one is refused again.
+            // "Saved show" rather than "the store", which is not his word (L399).
+            case .outOfStep:
+                guard let org, !org.isEmpty else {
+                    return "Overture's copy of that show is out of step with the saved show, so nothing was "
+                        + "changed. Press Reload this show on its card, then try again"
+                }
+                return "Overture's copy of \(org) is out of step with the saved show, so nothing was changed. "
+                    + "Press Reload this show on its card, then try again"
             }
         }
 
@@ -118,6 +143,12 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
             case .drawnBeforeItsFirstSave:
                 return "\(org) was still being added when you acted on it, so Overture could not tell which "
                     + "show to put back. Nothing was undone"
+            // COLD READ, 2026-10-08: the menu said "Undo Dismiss: X", he pressed it, and nothing came back. It
+            // names the button that unsticks the row and never asks for Cmd+Z again, which would undo the NEXT
+            // action instead (L111): what it asks is the reload, before the row is changed again.
+            case .outOfStep:
+                return "Overture's copy of \(org) is out of step with the saved show, so nothing was undone. "
+                    + "Press Reload this show on its card before changing it again"
             }
         }
     }
@@ -145,6 +176,9 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
             return .refused(showID.storeIdentifier == nil ? .drawnBeforeItsFirstSave : .gone)
         }
         guard show.naturalKey == naturalKey else { return .refused(.reKeyed) }
+        // Asked only once the row is found and is the one drawn: a gone or re-keyed row says so first, because
+        // reloading would not help either.
+        guard !shows.isOutOfStep(showID) else { return .refused(.outOfStep) }
         return .found(show)
     }
 }
@@ -166,9 +200,16 @@ protocol ShowResolver {
     /// re-prep, and the two reads that need a show's OTHER rows (the manual prep prefill's past addresses,
     /// and an organisation's do not contact mark). Never a way to find one show: that is `liveShow`.
     @MainActor var everyShow: [Prospect] { get }
+    /// #4358 slice E4b: whether this resolver knows its copy of the row is out of step with the saved store, so an
+    /// action on it would write stale fields back. Only the queue engine can know; rows a caller merely holds
+    /// answer false (the extension below).
+    @MainActor func isOutOfStep(_ id: PersistentIdentifier) -> Bool
 }
 
 extension ShowResolver {
+    @MainActor
+    func isOutOfStep(_ id: PersistentIdentifier) -> Bool { false }
+
     @MainActor
     func identity(forKey key: String) -> ShowIdentity? {
         identities(forKeys: [key])[key]

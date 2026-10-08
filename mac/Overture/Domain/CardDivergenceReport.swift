@@ -112,3 +112,82 @@ enum CardDivergenceCopy {
         return "\(count) earlier records could not be read."
     }
 }
+
+// #4358 slice E4b (plan item 10): what the launch notice says about the queue engine's verifier, as values. The
+// cutover (slice E4d) wires them into the notice and decides which session's counts they are handed; until then
+// `QueueEngineNoticeCopyTests` is their reader.
+//
+// ZERO IS "NEVER CHECKED", NEVER "CLEAN" (L557, L98). A verifier that has not matched once has measured nothing, and
+// a sentence counting zero matches would read as a queue nothing found wrong. So zero has its own sentence, in the
+// words `neverRan` already uses for the card check's same gap.
+enum QueueEngineNoticeCopy {
+
+    // COLD READ, 2026-10-08, each branch in the order Dan meets it, in the launch notice under the card check's line.
+    // "Your saved shows" for what the queue is checked against, never "the store" (L399). ONE match and SEVERAL are
+    // separate sentences, on `FreezeNoticeCopy.report`'s finding that a count spliced into one sentence reads "1
+    // times". The instant is absolute and says its day, because a notice read the next morning makes "at 3:40 PM"
+    // ambiguous, and a relative time would need an anchor the notice does not show (L589).
+    static func verifierSentence(matches: Int, lastMatchedAt: Date?, timeZone: TimeZone = .current) -> String {
+        guard matches > 0 else {
+            return "Overture has not yet checked your queue against your saved shows, so nothing here can say "
+                + "whether they match."
+        }
+        guard let lastMatchedAt else {
+            return matches == 1
+                ? "Overture checked your queue against your saved shows once, and they matched."
+                : "Overture checked your queue against your saved shows and found they matched \(matches) times."
+        }
+        let when = instant(lastMatchedAt, timeZone: timeZone)
+        return matches == 1
+            ? "Overture checked your queue against your saved shows once, on \(when), and they matched."
+            : "Overture checked your queue against your saved shows and found they matched \(matches) times, "
+                + "most recently on \(when)."
+    }
+
+    // Nothing when no show is out of step: a line saying so on every launch is a notice with no action in it (L36).
+    // A show stuck over an hour asks for Dan's hand, by the button on its card (L80); one still inside recovery's
+    // bounds asks for nothing, because recovery is still working on it.
+    static func faultSentence(_ summary: QueueEngineFaults.Summary) -> String? {
+        switch (summary.count, summary.stuck) {
+        case (0, _):
+            return nil
+        case (1, 0):
+            return "One show in your queue is out of step with its saved copy, and Overture is still reloading it."
+        case (1, _):
+            return "One show in your queue has been out of step with its saved copy for over an hour. Press "
+                + "Reload this show on its card."
+        case (let count, 0):
+            return "\(count) shows in your queue are out of step with their saved copies, and Overture is still "
+                + "reloading them."
+        case (let count, let stuck):
+            return "\(count) shows in your queue are out of step with their saved copies, \(stuck) of them for "
+                + "over an hour. Press Reload this show on each one's card."
+        }
+    }
+
+    /// The four full-read nets and the verifier's state as one log line, so #4343's real-use day can be read from the
+    /// log (the E4 plan's section 1, point 1). Never shown to Dan.
+    static func logLine(matches: Int, lastMatchedAt: Date?, faults: QueueEngineFaults.Summary,
+                        counters: QueueEngineCounters) -> String {
+        let iso = ISO8601DateFormatter()
+        // copy-inventory:ignore-start  a developer log line, never shown to Dan (#4358)
+        return "Queue engine: verifier matches \(matches), last matched "
+            + (lastMatchedAt.map { iso.string(from: $0) } ?? "never")
+            + "; faulted rows \(faults.count), oldest " + (faults.oldestSince.map { iso.string(from: $0) } ?? "none")
+            + ", stuck \(faults.stuck); full reads \(counters.fullReads); foreign saves \(counters.foreignSaves.times)"
+            + ", unclassified saves \(counters.unclassifiedSaves.times)"
+            + ", merged inserts \(counters.insertsMergedAway.times), unread rows \(counters.unreadRows.times)."
+        // copy-inventory:ignore-end
+    }
+
+    /// An instant with its day, in Dan's own time zone (the Mac's), as the notice says it.
+    static func instant(_ date: Date, timeZone: TimeZone) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        // copy-inventory:ignore-start  a date format, not a sentence
+        formatter.dateFormat = "MMMM d 'at' h:mm a"
+        // copy-inventory:ignore-end
+        return formatter.string(from: date)
+    }
+}

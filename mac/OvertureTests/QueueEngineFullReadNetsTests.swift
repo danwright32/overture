@@ -100,7 +100,7 @@ final class EngineNetRun {
                              clock: .system,
                              events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                              schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand),
-                             launch: QueueEngineLaunchSetup(reads: .inTurn))
+                             launch: QueueEngineLaunchSetup(reads: .inTurn), contextInputs: { EngineHarness.noSignals })
     }
 
     struct LaunchDidNotEnd: Error, CustomStringConvertible {
