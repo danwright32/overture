@@ -48,7 +48,8 @@ struct LeadStartsWatchingTests {
                                                    performanceDate: "2099-10-03",
                                                    sourceUrl: "https://bargemusic.org/show/1")],
                         note: nil)])
-            })
+            },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         m.urlText = url
         return m
     }

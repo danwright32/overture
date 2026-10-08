@@ -399,3 +399,129 @@ struct QueueEngineCounters: Equatable, Sendable {
     /// A read that THREW, left as it was rather than read as deleted (L215).
     var unreadRows: QueueEngineAnomaly = .neverFired
 }
+
+// MARK: - The launch (#4358 slice E3, plan v7 D6 and decision 4)
+
+// How the engine fills itself at launch, as values. The first output comes from ONE read of the saved store made off
+// the main thread, and nothing is published before it lands, so the queue is never shown empty while it loads. Then
+// the rows the engine watches (the main context's own, each with a tracker armed) are taken in keyset batches of 20
+// on a byte order sort, one batch per main actor turn, so no turn holds the main thread for the whole table (0b.3:
+// batches of 25 had a worst sample of 17.5 ms at 5,376, so 20, against plan v7's 16 ms). The inquiries follow in
+// one fetch (they have no stored unique key to page on). Last, a read of every stored identifier on its own context
+// finds any row the keyset skipped: `naturalKey` is mutable, so a row renamed below the cursor while the fill runs is
+// never reached by it (L15, L16, L211).
+
+/// Why a read the launch made could not be used. Every case is produced by a test (L151).
+enum QueueEngineLaunchFailure: String, Error, Equatable, Sendable, CaseIterable {
+    /// The read threw.
+    case readFailed
+    /// The read came back with fewer rows than a count of the same store said it holds (D6: a short read is a
+    /// failure, never a shorter queue).
+    case shortRead
+    /// The launch thread did not answer within its deadline.
+    case timedOut
+    /// An earlier read on the launch thread has still not returned, so this one was never started.
+    case wedged
+
+    /// What the launch thread throwing `error` measured: its deadline passing, its refusal while an abandoned read
+    /// still runs, or the read's own failure.
+    static func from(_ error: any Error) -> QueueEngineLaunchFailure {
+        switch error as? BlockingWorkError {
+        case .timedOut: return .timedOut
+        case .busy: return .wedged
+        case nil: return .readFailed
+        }
+    }
+}
+
+/// What the surface can show while the engine fills, as two halves that move separately: the first output, which
+/// Dan waits for, and the fill behind it, which he does not. Each half has working, failed and finished as distinct
+/// states, and the working state carries when it began, so the surface can show the time it has taken (Dan's rule
+/// for anything that takes time). Assigned only when a state CHANGES, never per batch, so a surface observing it is
+/// not drawn again for every batch of the fill.
+struct QueueEngineLaunchState: Equatable, Sendable {
+    enum FirstPaint: Equatable, Sendable {
+        case notStarted
+        /// The first read is under way, since `since`, on its `attempt`th try.
+        case loading(since: Date, attempt: Int)
+        /// It could not be used, after `attempts` tries. Nothing is on screen; `retryLaunch()` tries again.
+        case failed(QueueEngineLaunchFailure, attempts: Int, at: Date)
+        /// The first output is on screen.
+        case ready(at: Date, attempts: Int)
+    }
+
+    enum Fill: Equatable, Sendable {
+        /// It begins once the first output is on screen.
+        case waiting
+        /// Under way since `since`. How far it has got is `QueueEngine.fillReport`, read when asked.
+        case filling(since: Date)
+        /// A batch could not be read, after `attempts` tries. The output stays on screen and every row not yet
+        /// taken is still reached by a save that names it; `retryLaunch()` resumes from where it stopped.
+        case failed(QueueEngineLaunchFailure, attempts: Int, at: Date)
+        case done(QueueEngineFillReport)
+    }
+
+    var firstPaint: FirstPaint = .notStarted
+    var fill: Fill = .waiting
+}
+
+/// Whether the fill missed a row the store holds.
+enum QueueEngineShortfall: Equatable, Sendable {
+    /// Rows the store holds that the fill did not reach, and how many of those one fetch then admitted (the rest
+    /// were deleted since).
+    case measured(missing: Int, admitted: Int)
+    /// Rows the store holds that the fill did not reach, and the one fetch that would have admitted them failed:
+    /// they are stored and not held, which is never read as deleted (L215, L11). The verifier's fresh read finds
+    /// them stored and not held, and recovery takes them from there.
+    case unadmitted(missing: Int, QueueEngineLaunchFailure)
+    /// The identifier read could not be made, so whether the fill missed a row is not known. Never read as none
+    /// (L215).
+    case unmeasured(QueueEngineLaunchFailure)
+}
+
+/// What one fill did and what each batch cost the main thread, counted where it happens (L63), so the budget is
+/// read off the run itself.
+struct QueueEngineFillReport: Equatable, Sendable {
+    var shows = 0
+    var inquiries = 0
+    /// Keyset batches taken, the last of which comes back short or empty.
+    var batches = 0
+    /// Each batch's main thread time in seconds (the fetch, arming each row, and recording its value), in order.
+    var batchSeconds: [TimeInterval] = []
+    /// The one fetch of every inquiry.
+    var inquirySeconds: TimeInterval = 0
+    /// Nil until the identifier read has answered.
+    var shortfall: QueueEngineShortfall?
+
+    var slowestBatch: TimeInterval { batchSeconds.max() ?? 0 }
+    var batchesOverBudget: Int { batchSeconds.filter { $0 > QueueEngineLaunchFill.batchBudgetSeconds }.count }
+}
+
+enum QueueEngineLaunchFill {
+    /// Rows per keyset batch (decision 4).
+    static let batchSize = 20
+    /// What one batch may cost the main thread (plan v7 section 14: "Launch: batches of 20 under 16 ms"). A batch
+    /// over it is counted (`batchesOverBudget`), never hidden; nothing is decided from it.
+    static let batchBudgetSeconds: TimeInterval = 0.016
+    /// How long the launch thread gets for one read. The whole read took 3,237 ms at 5,376 shows in Debug on the
+    /// main thread (#4358 slice E1a), so this is about ten times the slowest read measured.
+    static let deadlineSeconds: TimeInterval = 30
+
+    /// The next `limit` shows after `cursor` in BYTE order. The predicate compares stored bytes, so the sort must
+    /// too: `.lexical`, never the default `.localizedStandard`, which orders numbers, case and accents otherwise
+    /// and made a fill miss 60 rows and repeat 120 at 5,376 while every count looked plausible (0b.3).
+    static func batch(after cursor: String?, limit: Int) -> FetchDescriptor<Prospect> {
+        var descriptor = FetchDescriptor<Prospect>(sortBy: [SortDescriptor(\Prospect.naturalKey, comparator: .lexical)])
+        if let cursor { descriptor.predicate = #Predicate<Prospect> { $0.naturalKey > cursor } }
+        descriptor.fetchLimit = limit
+        return descriptor
+    }
+
+    /// Every show and inquiry identifier the SAVED store holds, read through a context of its own (D6: a separate
+    /// read, so an unsaved delete on the main context cannot mask a missing row).
+    static func storedIdentifiers(_ container: ModelContainer) throws -> Set<PersistentIdentifier> {
+        let reader = ModelContext(container)
+        return Set(try reader.fetchIdentifiers(FetchDescriptor<Prospect>()))
+            .union(try reader.fetchIdentifiers(FetchDescriptor<Inquiry>()))
+    }
+}

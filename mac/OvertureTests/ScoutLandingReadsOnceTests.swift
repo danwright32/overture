@@ -83,7 +83,8 @@ struct ScoutLandingReadsOnceTests {
             readProspectTable: { ctx in
                 reads.bump()
                 return try ScoutService.readProspectTable(ctx)
-            })
+            },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         return (reads.value, outcome.inserted)
     }
 

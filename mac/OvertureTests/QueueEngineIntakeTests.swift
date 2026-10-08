@@ -126,6 +126,15 @@ final class EngineTurns {
         }
         return ran
     }
+
+    /// Runs the first queued turn only, and says whether there was one: a launch test steps the fill a batch
+    /// at a time with it.
+    @discardableResult
+    func runOne() -> Bool {
+        guard !queued.isEmpty else { return false }
+        queued.removeFirst()()
+        return true
+    }
 }
 
 /// A clock the test moves by hand, whose sleeps end only when it has moved far enough (L524).
@@ -240,10 +249,13 @@ enum EngineHarness {
                               },
                               // The verifier runs only when asked here: these suites count the clock's sleepers,
                               // and `QueueEngineVerifierTests` drives its own triggers.
-                              verifier: QueueEngineVerifierSetup = QueueEngineVerifierSetup(triggers: .byHand))
+                              verifier: QueueEngineVerifierSetup = QueueEngineVerifierSetup(triggers: .byHand),
+                              // The launch's reads run in a turn here: these suites start the engine and run its
+                              // turns, and `QueueEngineLaunchTests` drives the launch thread itself.
+                              launch: QueueEngineLaunchSetup = QueueEngineLaunchSetup(reads: .inTurn))
         -> QueueEngine<Value> {
         QueueEngine(context: store.context, derivation: derivation, saves: saves, clock: clock.clock, events: events,
-                    schedule: turns.schedule, refused: refused, verifier: verifier)
+                    schedule: turns.schedule, refused: refused, verifier: verifier, launch: launch)
     }
 
     /// A counting engine, started, with the start's turns run.
@@ -942,10 +954,12 @@ final class QueueEngineCostProbeTests {
                 QueueEngine(context: context, derivation: EngineDerivations.counts(), saves: StoreSaveCount(),
                             clock: EngineTestClock().clock,
                             events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
-                            schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand))
+                            schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand),
+                            launch: QueueEngineLaunchSetup(reads: .inTurn))
             }
-            // The full read, which is the start, and since #4358 slice E2 a foreign save only when its
-            // identifiers never reached the engine (the launch fill is #4358 E3's).
+            // The start with the launch's reads made in a turn: the first read and the whole fill back to back,
+            // which the app spreads across turns and off the main thread (#4358 slice E3, measured batch by
+            // batch in `launchFillInBatchesAtOneAndFourTimesTheStore`).
             let fullRead = Phase0.median5 {
                 engine().start()
                 turns.run()
@@ -996,13 +1010,100 @@ final class QueueEngineCostProbeTests {
             print("""
                 engine-cost [\(label)] \(Phase0.load())
                   shape                                     \(Phase0.shape(shows))
-                  full read (start, or an unattributed save) \(fullRead.text)
+                  start, read and whole fill in one go      \(fullRead.text)
                   turn taking in one edited row             \(Phase0.Reading(runs: edits).text)
                   turn taking in one equal-value write      \(Phase0.Reading(runs: equals).text)
                   turn taking in about 40 rows in one save  \(Phase0.Reading(runs: nights).text)
                   value pass over facts                     UNMEASURED: make over facts needs #4357 (plan: 68 to 155 ms at 1,344, 275 to 624 at 5,376)
                   today's pass over models, viewport cards  \(today.text)  (the yardstick)
                   engine turns \(live.counters.turns), rows read again \(live.counters.rowsReread), equal reads dropped \(live.counters.equalValueReads)
+                """)
+        }
+    }
+
+    // #4358 slice E3: the launch as the app runs it. The first read on the launch thread (its wall time, which holds
+    // no main actor turn), then the fill, one batch per turn, against plan v7's "Launch: batches of 20 under 16 ms"
+    // (section 14). Each batch is timed twice: by the engine's own uptime around the batch, and from outside around
+    // the whole turn that ran it, so other work in the turn cannot hide behind the batch's figure (L345). Five
+    // launches per corpus, each on a container opened afresh, every batch of all five pooled.
+    @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
+    func launchFillInBatchesAtOneAndFourTimesTheStore() async throws {
+        guard Self.enabled else {
+            print("engine-launch: not measured. Set TEST_RUNNER_MEASURE_4358_ENGINE=1 to run it.")
+            return
+        }
+        let dir = try sandboxes.make(named: "engine-launch")
+        guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+            throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
+        }
+        let big = try Phase0.scaledCopy(of: clone, factor: 4, in: dir)
+        func ms(_ seconds: [TimeInterval]) -> [Double] { seconds.map { $0 * 1000 } }
+        func spread(_ runs: [Double]) -> String {
+            let sorted = runs.sorted()
+            guard !sorted.isEmpty else { return "UNMEASURED: nothing ran" }
+            let p99 = sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.99).rounded(.up)) - 1)]
+            return String(format: "median %.1f ms, p99 %.1f, max %.1f over %d", sorted[sorted.count / 2], p99,
+                          sorted[sorted.count - 1], sorted.count)
+        }
+        for (label, url) in [("live clone", clone), ("4x", big)] {
+            var firstReads: [Double] = [], fills: [Double] = [], batches: [Double] = [], turnTimes: [Double] = []
+            var inquiries: [Double] = []
+            var shortfalls: [String] = []
+            var shape = ""
+            for _ in 0..<5 {
+                let container = try Phase0.openContainer(at: url)
+                container.mainContext.autosaveEnabled = false
+                let turns = EngineTurns()
+                let engine = QueueEngine(context: container.mainContext, derivation: EngineDerivations.counts(),
+                                         saves: StoreSaveCount(), clock: EngineTestClock().clock,
+                                         events: QueueEngineSystemEvents(workspace: NotificationCenter(),
+                                                                         system: NotificationCenter()),
+                                         schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand),
+                                         launch: QueueEngineLaunchSetup())
+                let started = Phase0.now()
+                engine.start()
+                let landed = await waitUntil("the launch's first read", timeout: .seconds(120)) {
+                    if case .loading = engine.launch.firstPaint { return false }
+                    return true
+                }
+                guard landed, engine.output != nil else {
+                    Issue.record("engine-launch [\(label)]: the first read did not land: \(engine.launch.firstPaint)")
+                    return
+                }
+                firstReads.append(Phase0.ms(since: started))
+                let filling = Phase0.now()
+                for _ in 0..<100_000 where !LaunchRig.fillEnded(engine) {
+                    if turns.queued.isEmpty {
+                        let moved = await waitUntil("the fill's next step", timeout: .seconds(120)) {
+                            !turns.queued.isEmpty || LaunchRig.fillEnded(engine)
+                        }
+                        if !moved { break }
+                        continue
+                    }
+                    turnTimes.append(Phase0.time { turns.runOne() })
+                }
+                fills.append(Phase0.ms(since: filling))
+                guard let report = LaunchRig.report(engine) else {
+                    Issue.record("engine-launch [\(label)]: the fill did not finish: \(engine.launch.fill)")
+                    return
+                }
+                batches += ms(report.batchSeconds)
+                inquiries.append(report.inquirySeconds * 1000)
+                shortfalls.append("\(report.shortfall.map { "\($0)" } ?? "none")")
+                shape = "\(report.shows) shows in \(report.batches) batches of up to \(QueueEngineLaunchFill.batchSize), "
+                    + "\(report.inquiries) inquiries"
+            }
+            let budget = QueueEngineLaunchFill.batchBudgetSeconds * 1000
+            print("""
+                engine-launch [\(label)] \(Phase0.load())
+                  shape                                     \(shape)
+                  first read, launch thread, wall           \(Phase0.Reading(runs: firstReads).text)  (holds no main actor turn)
+                  each batch, engine's own uptime           \(spread(batches))
+                  batches over \(String(format: "%.0f", budget)) ms                       \(batches.filter { $0 > budget }.count) of \(batches.count)
+                  each fill turn, timed from outside        \(spread(turnTimes))
+                  inquiries in one fetch                    \(Phase0.Reading(runs: inquiries).text)
+                  fill, first output to done, wall          \(Phase0.Reading(runs: fills).text)
+                  shortfall per launch                      \(shortfalls.joined(separator: ", "))
                 """)
         }
     }

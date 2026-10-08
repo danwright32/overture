@@ -44,7 +44,8 @@ struct ScoutServiceNativeProgressTests {
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: defaults(),
-            onNativeProgress: { name, index, total in updates.append((name, index, total)) })
+            onNativeProgress: { name, index, total in updates.append((name, index, total)) },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         // Every fetched source is reported exactly once, with sequential 1-based positions and the run's
         // total. The ORDER is the scheduler's (plan.fetch), not insertion order and not the modal's to
@@ -67,7 +68,8 @@ struct ScoutServiceNativeProgressTests {
             into: ctx, extractor: noEvents, fetch: page("same"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") }, launch: { _ in },
             defaults: defaults(),
-            onNativeProgress: { name, index, total in updates.append((name, index, total)) })
+            onNativeProgress: { name, index, total in updates.append((name, index, total)) },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(updates.map(\.name) == ["Org a"])
         #expect(updates.first?.total == 1)
@@ -81,7 +83,8 @@ struct ScoutServiceNativeProgressTests {
         let outcome = try await ScoutService.runScout(
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(outcome.sources.contains { $0.sourceId == "a" })
     }

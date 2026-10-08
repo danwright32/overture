@@ -48,7 +48,8 @@ struct ScoutQueueForReadingTests {
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, id in URL(fileURLWithPath: "/tmp/pinned-\(id).html") },
             launch: { launched = $0 },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched.count == 1)
         // The id is OPAQUE and must be echoed verbatim by the run: a key it rebuilds matches nothing on
@@ -68,7 +69,8 @@ struct ScoutQueueForReadingTests {
         _ = try await ScoutService.runScout(
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(s.pendingContentHash == "new")
         #expect(s.lastContentHash == "old")   // NOT promoted: nothing has been read yet
@@ -83,7 +85,8 @@ struct ScoutQueueForReadingTests {
         _ = try await ScoutService.runScout(
             into: ctx, extractor: noEvents, fetch: page("same"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") }, launch: { launched = $0 },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched.isEmpty)   // no pin, no queue, no Claude run, no tokens
     }
@@ -98,7 +101,8 @@ struct ScoutQueueForReadingTests {
             into: ctx, depth: .watchOnly, extractor: noEvents, fetch: page("new"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") },
             launch: { _ in launchCount += 1 },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launchCount == 0)
         #expect(s.hasUnreadChanges)          // but Dan can see there is something waiting
@@ -117,7 +121,8 @@ struct ScoutQueueForReadingTests {
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { launchCount += 1; items = $0 },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launchCount == 1)
         #expect(items.count == 3)
@@ -137,7 +142,8 @@ struct ScoutQueueForReadingTests {
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") },
             launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable("no runner") },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         let warning = outcome.warning ?? ""
         #expect(warning.isEmpty == false)
@@ -156,7 +162,8 @@ struct ScoutQueueForReadingTests {
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") },
             launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable("no runner") },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(s.health != .failing)
         #expect(s.lastFailure == nil)

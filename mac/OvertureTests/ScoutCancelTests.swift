@@ -44,7 +44,8 @@ struct ScoutCancelTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in launched = true },
             defaults: defaults(),
-            isCancelled: { true })
+            isCancelled: { true },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched == false)
         // No html source was checked (the sweep stopped before the first).
@@ -65,7 +66,8 @@ struct ScoutCancelTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in launched = true },
             defaults: defaults(),
-            isCancelled: { checks += 1; return checks > 1 })   // false for the first check, then true
+            isCancelled: { checks += 1; return checks > 1 },   // false for the first check, then true
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched == false)
         // Exactly one html source was checked before the cancel stopped the rest.
@@ -83,7 +85,8 @@ struct ScoutCancelTests {
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in launched = true },
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched == true)
     }

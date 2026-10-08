@@ -34,14 +34,11 @@ final class LandingInputsTests {
         return (c, ctx)
     }
 
-    private let absentHistory = URL(fileURLWithPath: "/dev/null/no-imported-history.json")
-    private let absentExport = URL(fileURLWithPath: "/dev/null/no-downbeat-export.json")
-
     @Test func theIngestsHistoryIsReadOffTheMainThread() async throws {
         let (container, ctx) = try seeded()
         defer { withExtendedLifetime(container) {} }
         let threads = Threads()
-        let inputs = await LandingInputs.read(exportURL: absentExport, historyURL: absentHistory,
+        let inputs = await LandingInputs.read(exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
                                               readProspectTable: { threads.note(); return try ScoutService.readProspectTable($0) },
                                               into: ctx)
         #expect(threads.all == [false], "the show table was read on threads \(threads.all) (true is main)")
@@ -51,10 +48,10 @@ final class LandingInputsTests {
     @Test func anUnreadableTableIsRecordedAndTheHistoryIsTheImportedRecordAlone() async throws {
         let (container, ctx) = try seeded()
         defer { withExtendedLifetime(container) {} }
-        let inputs = await LandingInputs.read(exportURL: absentExport, historyURL: absentHistory,
+        let inputs = await LandingInputs.read(exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
                                               readProspectTable: { _ in throw Unreadable() }, into: ctx)
         #expect(inputs.degradedReads == [.repeatClientHistory])
-        #expect(inputs.history == LocalHistory.forMatching(existing: [], importedFrom: absentHistory))
+        #expect(inputs.history == LocalHistory.forMatching(existing: [], importedFrom: AbsentHandoff.history))
     }
 
     // #4526: the idle landing recovery's read. The same builder, off the main thread the same way, but a table
@@ -65,10 +62,11 @@ final class LandingInputsTests {
         defer { withExtendedLifetime(container) {} }
         let threads = Threads()
         let refusing = await LandingInputs.readRefusingUnreadableShowTable(
-            exportURL: absentExport, historyURL: absentHistory,
+            exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
             readProspectTable: { threads.note(); return try ScoutService.readProspectTable($0) }, into: ctx)
         #expect(threads.all == [false], "the show table was read on threads \(threads.all) (true is main)")
-        let ordinary = await LandingInputs.read(exportURL: absentExport, historyURL: absentHistory, into: ctx)
+        let ordinary = await LandingInputs.read(exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
+                                                into: ctx)
         guard case .success(let inputs) = refusing else {
             Issue.record("a table that reads was refused")
             return
@@ -82,7 +80,7 @@ final class LandingInputsTests {
         let (container, ctx) = try seeded()
         defer { withExtendedLifetime(container) {} }
         let refusing = await LandingInputs.readRefusingUnreadableShowTable(
-            exportURL: absentExport, historyURL: absentHistory,
+            exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
             readProspectTable: { _ in throw Unreadable() }, into: ctx)
         guard case .failure(let unreadable) = refusing else {
             Issue.record("an unreadable show table was handed on as inputs")
@@ -104,10 +102,11 @@ final class LandingInputsTests {
         try ctx.save()
         let threads = Threads()
         let read = await LandingInputs.readWithBrandCorpus(
-            exportURL: absentExport, historyURL: absentHistory,
+            exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
             readProspectTable: { threads.note(); return try ScoutService.readProspectTable($0) }, into: ctx)
         #expect(threads.all == [false], "the show table was read on threads \(threads.all) (true is main)")
-        let ordinary = await LandingInputs.read(exportURL: absentExport, historyURL: absentHistory, into: ctx)
+        let ordinary = await LandingInputs.read(exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
+                                                into: ctx)
         #expect(!ordinary.history.isEmpty, "the positive control: the stored show is in the history")
         #expect(read.inputs.history == ordinary.history)
         #expect(read.inputs.clients == ordinary.clients)
@@ -121,10 +120,10 @@ final class LandingInputsTests {
         let (container, ctx) = try seeded()
         defer { withExtendedLifetime(container) {} }
         let read = await LandingInputs.readWithBrandCorpus(
-            exportURL: absentExport, historyURL: absentHistory,
+            exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
             readProspectTable: { _ in throw Unreadable() }, into: ctx)
         #expect(read.inputs.degradedReads == [.repeatClientHistory])
-        #expect(read.inputs.history == LocalHistory.forMatching(existing: [], importedFrom: absentHistory))
+        #expect(read.inputs.history == LocalHistory.forMatching(existing: [], importedFrom: AbsentHandoff.history))
         #expect(read.corpus.degradedReads == [.venueBrandCorpus])
     }
 
@@ -135,10 +134,12 @@ final class LandingInputsTests {
         defer { withExtendedLifetime(container) {} }
         let threads = Threads()
         let load: LandingInputs.ExportLoad = { threads.note(); return LandingInputs.loadExportFile($0, $1) }
-        _ = await LandingInputs.read(exportURL: absentExport, historyURL: absentHistory, loadExport: load, into: ctx)
-        _ = await LandingInputs.readRefusingUnreadableShowTable(exportURL: absentExport, historyURL: absentHistory,
+        _ = await LandingInputs.read(exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
+                                     loadExport: load, into: ctx)
+        _ = await LandingInputs.readRefusingUnreadableShowTable(exportURL: AbsentHandoff.export,
+                                                                historyURL: AbsentHandoff.history,
                                                                 loadExport: load, into: ctx)
-        _ = await LandingInputs.readWithBrandCorpus(exportURL: absentExport, historyURL: absentHistory,
+        _ = await LandingInputs.readWithBrandCorpus(exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
                                                     loadExport: load, into: ctx)
         #expect(threads.all == [false, false, false], "the export was read on threads \(threads.all) (true is main)")
     }
@@ -151,7 +152,7 @@ final class LandingInputsTests {
         let stored = try #require(try ctx.fetch(FetchDescriptor<Prospect>()).first)
         stored.groupName = "Renamed By Dan"
         let threads = Threads()
-        _ = await LandingInputs.read(exportURL: absentExport, historyURL: absentHistory,
+        _ = await LandingInputs.read(exportURL: AbsentHandoff.export, historyURL: AbsentHandoff.history,
                                      readProspectTable: { threads.note(); return try ScoutService.readProspectTable($0) },
                                      into: ctx)
         #expect(threads.all == [true], "a read with an edit pending ran on \(threads.all), where the edit is unseen")
@@ -170,7 +171,8 @@ final class LandingInputsTests {
             pin: { _, id in URL(fileURLWithPath: "/dev/null/\(id).html") }, launch: { _ in },
             defaults: ScratchDefaults.make("LandingInputsTests"),
             readProspectTable: { threads.note(); return try ScoutService.readProspectTable($0) },
-            landings: LandingSingleFlight())
+            landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         #expect(threads.all.first == false, "runScout's first table read, its history, ran on the main thread: \(threads.all)")
     }
 }

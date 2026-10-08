@@ -1139,6 +1139,16 @@ extension TermsOverFactsTests {
             Issue.record(Comment(rawValue: "\(name) is populated now, so take it off the list of members left empty"))
         }
 
+        // #4579: the narrowed exemption reaches something only if the Reached out pass draws an inquiry row
+        // beside its show rows, so a model left in an inquiry row would be in reach of the walk (L159).
+        let reachedOutList = try #require(passes.first { $0.0 == .reachedOut }?.1.reachedOutList)
+        #expect(reachedOutList.entries.contains { if case .inquiry = $0 { return true }; return false }
+                    && reachedOutList.entries.contains { if case .prospect = $0 { return true }; return false },
+                "the Reached out pass draws no inquiry row beside a show row, so the narrowing checks nothing")
+        let narrowedWithoutExemption = Set(OutputsHoldNoModelTests.allowedOnlyThrough.keys)
+            .subtracting(OutputsHoldNoModelTests.stillHoldingAModel.keys)
+        #expect(narrowedWithoutExemption.isEmpty, "a narrowing names a member that holds no exemption")
+
         var holding = Set<String>()
         var offenders: [String] = []
         for (focus, data) in passes {
@@ -1149,6 +1159,8 @@ extension TermsOverFactsTests {
                 holding.insert(label)
                 if OutputsHoldNoModelTests.stillHoldingAModel[label] == nil {
                     offenders += found.map { "\(focus.rawValue): \($0)" }
+                } else if let through = OutputsHoldNoModelTests.allowedOnlyThrough[label] {
+                    offenders += found.filter { !$0.contains(through) }.map { "\(focus.rawValue): \($0)" }
                 }
             }
         }

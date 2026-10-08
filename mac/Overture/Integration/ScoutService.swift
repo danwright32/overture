@@ -622,7 +622,14 @@ enum ScoutService {
                          // not. nil keeps none, for a test whose subject is not the journal.
                          journals: LandingJournals? = nil,
                          // #4335 (RC6): where each landed source's feed movement line is appended, after its save.
-                         movementLog: any FeedMovementLog.Sink = FeedMovementLog.file)
+                         movementLog: any FeedMovementLog.Sink = FeedMovementLog.file,
+                         // #4582: Downbeat's export and the imported booking history, the two files the run reads
+                         // its clients, bookings, blocked days and history from, as the lead paste takes them
+                         // (#4558). The app passes neither, so it reads the real files; every test names its own,
+                         // and `TestsNameTheirLandingInputFilesTests` fails one that does not, because the default
+                         // under test is one folder every test process on the Mac shares (#2097).
+                         exportURL: URL = DownbeatBridge.defaultURL,
+                         importedHistory: URL = LocalHistory.importedURL)
                          async throws -> Outcome {
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
@@ -635,7 +642,8 @@ enum ScoutService {
         // landing reads its inputs through, by its refusing read; this used to build the export read and the
         // calendar itself beside it.
         let loaded: LandingInputs.Inputs
-        switch await LandingInputs.readRefusingUnreadableShowTable(now: now, readProspectTable: readProspectTable,
+        switch await LandingInputs.readRefusingUnreadableShowTable(exportURL: exportURL, historyURL: importedHistory,
+                                                                   now: now, readProspectTable: readProspectTable,
                                                                    into: context) {
         case .success(let read): loaded = read
         case .failure(let unreadable): throw StoreReadFailure(read: .repeatClientHistory, underlying: unreadable)

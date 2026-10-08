@@ -38,7 +38,8 @@ struct LeadMonthsReadTests {
                         fetch: { _ in page },
                         pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                         launch: { _ in },
-                        readResults: { _ in nil })
+                        readResults: { _ in nil },
+                        exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     private func page(read: [String], unread: [String], unreachable: [String] = []) -> FetchedPage {

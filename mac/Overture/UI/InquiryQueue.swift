@@ -40,6 +40,12 @@ struct InquiryRow: Identifiable, Equatable, Sendable {
     // rather than a Bool so the row asks `InquiryCopy.foundInGmailBadge` the same question the store
     // answers, instead of a second reading of it that could drift.
     var conversationAttachedAt: Date? = nil
+
+    // #4579: the event's key, from the same three fields the inquiry's own `naturalKey` is computed from and
+    // through the same function, so a list orders its rows by key without holding the model.
+    var naturalKey: String {
+        Inquiry.makeNaturalKey(eventName: eventName, performanceDate: performanceDate, venue: venue)
+    }
 }
 
 // One row of the unified daily list: a scouted show to pitch, or a hire inquiry. The queue groups and
@@ -72,10 +78,11 @@ enum QueueRow: Identifiable, Equatable {
 // date, so two identical-looking headings in one view answered different questions.
 enum ReachedOutEntry: Identifiable {
     case prospect(prospect: Prospect, recipient: Recipient, next: Date)
-    // Carries the Inquiry itself, not just its display row: the view needs the model to act on it, and
-    // looking it back up by the row's id is unreliable (that id comes from the persistent model id,
-    // which is not yet distinct for an unsaved object).
-    case inquiry(inquiry: Inquiry, row: InquiryRow, next: Date)
+    // #4579: carries the inquiry's IDENTITY beside its display row, never the model. A press resolves it
+    // against the view's live query at the moment of the press (`InquiryIdentity.inquiry(for:...)`), so the
+    // published pass holds values. The identity is taken from each inquiry beside its own row rather than
+    // looked back up by the row's id, which is what made that lookup unreliable before `InquiryIdentity.rowID`.
+    case inquiry(identity: InquiryIdentity, row: InquiryRow, next: Date)
 
     var next: Date {
         switch self {

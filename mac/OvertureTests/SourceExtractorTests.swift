@@ -171,7 +171,8 @@ struct ScoutSourceInjectionTests {
         let stub = StubSourceExtractor(error: StubSourceExtractor.Failure.unreachable)
         let scratch = ScratchDefaults.make("ScoutSourceFailureTests")
 
-        let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
+        let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch,
+                                                      exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(stub.callCount == 1)     // the injected source really is the one the scout asked
         #expect(try ctx.fetch(FetchDescriptor<Prospect>()).isEmpty)   // and nothing was written
@@ -218,7 +219,8 @@ struct ScoutSourceInjectionTests {
             // including CI. The stale results file it left behind is what later hung his Add-a-lead sheet.
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in },
-            defaults: scratch)
+            defaults: scratch,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         // Every source is accounted for. The run did not stop at the broken one.
         #expect(outcome.sources.count == 3)
@@ -248,7 +250,8 @@ struct ScoutSourceInjectionTests {
             },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },   // #849
             launch: { _ in },
-            defaults: scratch)
+            defaults: scratch,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         let org = outcome.sources.first { $0.sourceId == "org" }
         #expect(org?.state == .changedNotRead)   // noticed, flagged, and not a token spent on it
@@ -284,7 +287,8 @@ struct ScoutSourceInjectionTests {
                                     sourceUrl: "https://org.example/show")],
             verdict: .upcomingListings))
 
-        let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
+        let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch,
+                                                      exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(outcome.found == 1)
         #expect(outcome.inserted == 1)
@@ -333,7 +337,8 @@ struct ScoutSourceInjectionTests {
                                     sourceUrl: "https://org.example/other")],
             verdict: .upcomingListings))
 
-        _ = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
+        _ = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch,
+                                            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(stored.missedScoutCount == 0)
         #expect(stored.disappearedFromFeed == false)
