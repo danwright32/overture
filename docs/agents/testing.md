@@ -456,7 +456,9 @@ the measurement it came from lives here. Read the entry before the rule decides 
   `--analyse <readings.tsv>` re-reads a kept comparison without running anything.
   A probe takes part by printing `Phase0.Reading.probeLine(<metric>)` beside its human readable line;
   `fixtures/probe-reading/lines.txt` is the one line shape both `Phase0ProbeLineTests` and the script's
-  fixture read (L26). `MemoPathDerivationCostProbeTests`'s header holds an exact command.
+  fixture read (L26). `MemoPathDerivationCostProbeTests`'s header holds an exact command. Every run builds
+  and takes the lock, so six rounds are twelve runs of it: the report states each one's duration, including
+  any wait for the lock, and the total, so read the cost there rather than from a figure written here.
 - **Every probe reading prints that line, because the only ways to make one print it (#4617).** A reading
   comes from `Phase0.median5(<metric>)`, `Phase0.reading(<metric>, runs:)` or `Phase0.alternating(...)`,
   each of which prints the line as it makes the reading, so every probe that takes Phase0 readings or reports a
@@ -477,9 +479,7 @@ the measurement it came from lives here. Read the entry before the rule decides 
   after comparison, since both sides run the same order; a fixed one biases a comparison BETWEEN the rivals
   inside a run. Alternated on 2026-10-08: p7's generic arms, 0b.1's and 0c.3's cold builds (0c.3's ratio is
   its stop rule), 0c.7's conflict sweep and its dry run, #4332's two corpus reads, ShowLink's grouping against
-  its neighbour, the scope surfaces, the scope memo's ratio and the scout match arms. Every run builds and takes the lock, so six rounds are twelve runs of it: the report states
-  each one's duration, including any wait for the lock, and the total, so read the cost there rather than
-  from a figure written here.
+  its neighbour, the scope surfaces, the scope memo's ratio and the scout match arms.
 
 ## Seeing a guard fail
 
