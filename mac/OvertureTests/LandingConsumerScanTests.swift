@@ -572,3 +572,103 @@ struct EngineMembersReadWholeTests {
         #expect(Self.readers(in: [planted]) == ["Planted.swift.countEverything"])
     }
 }
+
+// #4358 slice E4d, carried over from `OneWholeTableProspectQueryTests`, which the cutover deleted with the query it
+// ratcheted (L430: the query ratchet's premise was consumed, these two claims were not). Every surface RootView
+// presents takes the rows the queue engine holds, and none gives what it takes a DEFAULT.
+//
+// A default is not an untidiness here: a caller that forgets the argument renders an empty sheet, and an empty sheet
+// is exactly what an empty store looks like, so the failure is silent and total (L168, L67). And the call site is
+// asserted, not only the absence of a query in the sheet, because a sheet handed something OTHER than the engine's
+// rows would compile (L3).
+@Suite("Every surface RootView presents takes the engine's rows, with no default (#3871, #4358)")
+struct TheSheetsTakeTheEnginesRowsTests {
+
+    /// Each surface's file and the one stored declaration it takes its rows by.
+    static let declarations: [(file: String, declaration: String)] = [
+        ("QueueView.swift", "let engine: QueueEngineHost.Engine"),
+        ("ArchiveView.swift", "let rows: QueueEngineRows"),
+        ("SourcesView.swift", "let held: QueueEngineRows"),
+        ("OutcomePatternsView.swift", "let prospects: [Prospect]"),
+        ("WrittenOffBacklogSection.swift", "let prospects: [Prospect]"),
+        ("EmptyAnswerSection.swift", "let prospects: [Prospect]"),
+        ("ExperimentReportView.swift", "let prospects: [Prospect]"),
+        ("FollowUpsView.swift", "let prospects: [Prospect]"),
+        ("OrganisationsView.swift", "let prospects: [Prospect]"),
+        ("StruckAddressesView.swift", "let prospects: [Prospect]"),
+    ]
+
+    /// RootView's call sites, each handing the engine's rows, and OutcomePatternsView's, handing on its own.
+    static let rootCalls = [
+        "QueueView(engine: engine,", "ArchiveView(rows: rows,", "SourcesView(held: rows,",
+        "OutcomePatternsView(prospects: rows.everyShow)", "FollowUpsView(prospects: rows.everyShow,",
+        "StruckAddressesView(prospects: rows.everyShow)", "OrganisationsView(prospects: rows.everyShow,",
+    ]
+    static let patternsCalls = [
+        "EmptyAnswerSection(prospects: prospects)", "WrittenOffBacklogSection(prospects: prospects)",
+        "ExperimentReportView(prospects: prospects)",
+    ]
+
+    /// Every uncommented line declaring `name` with `type` as storage, a computed property (a brace) excluded.
+    static func storedDeclarations(of name: String, type: String, in text: String) -> [String] {
+        text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") && !$0.contains("{") }
+            .filter { $0.contains("\(name): \(type)") }
+    }
+
+    @Test func eachSurfaceTakesItsRowsAsALetWithNoDefault() throws {
+        let app = AppSourceWalk.appFiles()
+        for (fileName, declaration) in Self.declarations {
+            let file = try #require(app.first { $0.name == fileName }, "\(fileName) was not found in the app")
+            let parts = declaration.dropFirst("let ".count).split(separator: ":", maxSplits: 1)
+            let name = String(parts[0])
+            let type = parts[1].trimmingCharacters(in: .whitespaces)
+            let found = Self.storedDeclarations(of: name, type: type, in: file.text)
+            // The positive control: a file where the declaration cannot be found would pass every claim below while
+            // checking nothing (L98).
+            #expect(found.count == 1, Comment(rawValue:
+                "\(fileName) holds \(found.count) stored declarations of `\(name): \(type)`, not one, so this cannot "
+                + "say whether it carries a default"))
+            for line in found {
+                let carriesADefault = line.contains("=")
+                #expect(!carriesADefault, Comment(rawValue:
+                    "\(fileName) gives its handed-down rows a default. A caller that forgets them then renders an "
+                    + "empty screen that looks exactly like an empty store"))
+                let isALet = line.hasPrefix("let ")
+                #expect(isALet, Comment(rawValue:
+                    "\(fileName) declares its handed-down rows as something other than a `let`, so they can be "
+                    + "given a default or reassigned after the view is built"))
+            }
+        }
+    }
+
+    @Test func rootViewHandsEachSurfaceTheEnginesRows() throws {
+        let root = SourceGuardHelper.source("Overture/App/RootView.swift")
+        #expect(!root.isEmpty, "RootView.swift could not be read, so nothing below was measured")
+        for call in Self.rootCalls {
+            // Bound to a Bool first, so a failure prints the sentence rather than the file (L445).
+            let hands = SourceGuardHelper.containsCode(call, in: root)
+            #expect(hands, Comment(rawValue:
+                "RootView no longer hands the engine's rows through `\(call)`, so that surface draws from something "
+                + "other than what the queue engine holds"))
+        }
+        let patterns = SourceGuardHelper.source("Overture/UI/OutcomePatternsView.swift")
+        for call in Self.patternsCalls {
+            let passes = SourceGuardHelper.containsCode(call, in: patterns)
+            #expect(passes, Comment(rawValue: "OutcomePatternsView no longer passes its rows to \(call)"))
+        }
+    }
+
+    // The reader sees a default when one is there, so the clean answer above is a finding.
+    @Test func theReaderSeesAPlantedDefault() {
+        let text = """
+            struct Planted: View {
+                let prospects: [Prospect] = []
+                private var count: [Prospect] { prospects }
+            }
+            """
+        let found = Self.storedDeclarations(of: "prospects", type: "[Prospect]", in: text)
+        #expect(found == ["let prospects: [Prospect] = []"])
+    }
+}

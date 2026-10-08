@@ -106,6 +106,24 @@ struct ExternalRebuildProbeTests {
         }.queueRows
     }
 
+    // #4358 slice E4d: the same reading for the QUEUE, which draws the engine's pass. The engine's turns are main
+    // actor tasks, and a nested run of the run loop never reaches one, so this waits by SUSPENDING, with the tally
+    // bound across the wait so the turns the trigger schedules carry it (they inherit the task-local).
+    @MainActor
+    private func rowsProvokedByAwaiting(_ trigger: () -> Void, in hosting: NSView, seconds: Double = 1.5) async -> Int {
+        let tally = QueueRenderPass.WorkTally()
+        await QueueRenderPass.WorkTally.$current.withValue(tally) {
+            trigger()
+            let deadline = Date().addingTimeInterval(seconds)
+            while Date() < deadline && tally.queueRows == 0 {
+                hosting.layoutSubtreeIfNeeded()
+                hosting.displayIfNeeded()
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        return tally.queueRows
+    }
+
     @Test func whatCostsAWholeStorePassWithNoDataChange() throws {
         guard ProcessInfo.processInfo.environment["PROBE_EXTERNAL_REBUILD"] != nil else {
             // Not silently skipped: an instrument that says nothing is indistinguishable from one that
@@ -638,7 +656,7 @@ struct ExternalRebuildProbeTests {
     // a SwiftData change. So an unwarmed Queue reads 0 on the focus trigger while its positive control
     // still fires on the write, which is the exact shape of a control that passes for the wrong reason:
     // "quiet on focus" and "never drew at all" are the same number (L98, L159).
-    @Test func whetherTheMainQueueDoesItToo() throws {
+    @Test func whetherTheMainQueueDoesItToo() async throws {
         guard ProcessInfo.processInfo.environment["PROBE_EXTERNAL_REBUILD"] != nil else {
             print("external-rebuild-probe: not measured. Set TEST_RUNNER_PROBE_EXTERNAL_REBUILD=1 to run it.")
             return
@@ -652,7 +670,7 @@ struct ExternalRebuildProbeTests {
         let ctx = c.mainContext
         seed(ctx)
         let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-        // Started here and run by the pumping below, as the app's run loop runs its turns.
+        // Started here, and its turns run in the awaited waits below, as the app's main actor runs them.
         let engine = HostedQueueEngine.make(context: ctx)
         engine.start()
         let (window, hosting) = host(HostedPassCounting.Mounted(content: QueueHarness(container: c, engine: engine)))
@@ -660,33 +678,33 @@ struct ExternalRebuildProbeTests {
 
         // WARM: a throwaway write on a row this test never asserts about, pumped until the list has
         // actually built. Asserted, because everything below is meaningless if it did not.
-        let warm = rowsProvokedBy({
+        let warm = await rowsProvokedByAwaiting({
             rows.last?.fitScore = 8
             try? ctx.save()
-        }, seconds: 60)
+        }, in: hosting, seconds: 60)
         #expect(warm > 0, Comment(rawValue:
                 "the Queue built \(warm) rows from a real write, so it never drew and the focus reading "
                 + "below would be a zero from an empty surface rather than from a quiet one (L98)"))
 
-        func quieten() -> Bool {
+        func quieten() async -> Bool {
             let by = Date().addingTimeInterval(30)
             while Date() < by {
-                if rowsProvokedBy({}, seconds: 0.3) == 0 { return true }
+                if await rowsProvokedByAwaiting({}, in: hosting, seconds: 0.3) == 0 { return true }
             }
             return false
         }
-        _ = quieten()
-        _ = rowsProvokedBy {
+        _ = await quieten()
+        _ = await rowsProvokedByAwaiting({
             NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
-        }
-        _ = quieten()
-        let onKeyChange = rowsProvokedBy {
+        }, in: hosting)
+        _ = await quieten()
+        let onKeyChange = await rowsProvokedByAwaiting({
             NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
-        }
-        let onARealWrite = rowsProvokedBy({
+        }, in: hosting)
+        let onARealWrite = await rowsProvokedByAwaiting({
             rows.first?.fitScore = 9
             try? ctx.save()
-        }, seconds: 30)
+        }, in: hosting, seconds: 30)
 
         print("""
         external-rebuild-probe, the MAIN queue surface (#3876)

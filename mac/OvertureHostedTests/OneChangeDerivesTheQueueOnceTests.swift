@@ -311,20 +311,16 @@ struct OneChangeDerivesTheQueueOnceTests {
     // ZERO derivations, not one, because nothing the pass reads changed and "it rebuilt but quickly" is
     // a statement about the machine (L63).
     //
-    // #4516: AND THE REDRAWS ARRIVE AFTER THE MEMO'S CLOCK WINDOW, on every run. A late evaluation with
-    // nothing changed is what the two flaky siblings in this suite recorded as their extra derivation
-    // (`prospects | nothing this view reads` on CI run 37246102075): the queue's memo, like the Sources
-    // sheet's, refuses an answer older than two seconds by its clock, and on a loaded runner the next
-    // evaluation arrives later than that. So the queue is handed a frozen clock and this test waits past
-    // the window in real time first, which makes every run the slow one
-    // (`HostedPassCounting.waitPastTheRenderMemoWindow`).
+    // #4358 slice E4d: the queue holds no memo and no clock of its own any more. It draws the pass the engine
+    // published, and the engine derives only when its turn takes a change in, so a redraw from above derives
+    // nothing however late it arrives. The wait past the render memo's two second window (#4516) went with the
+    // memo, since there is no window left for a late redraw to fall outside.
     @Test func aRedrawWithNoDataChangeDerivesNothing() async throws {
         let c = try container()
         let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
-        await HostedPassCounting.waitPastTheRenderMemoWindow(since: Date())
 
         let evaluationsBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.queueBodySurface)
         var why: [String] = []
