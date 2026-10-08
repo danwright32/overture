@@ -197,23 +197,38 @@ final class ScopeMemo<Value> {
                savesIn store: ModelContainer,
                onRefetch: Refetch,
                build: () -> Value) -> Value {
-        let main = store.mainContext
         let wanted = Key(fingerprint: fingerprint.finalized(), cardKeys: cardKeys)
         let savesNow = saves.value(for: store)
         if let current = held(wanted, now: now, staleAfter: staleAfter), savesAtBuild == savesNow {
             if !staleFlag.isSet { return current }
-            if onRefetch == .serveWhenNothingChanged, !main.hasChanges, !saves.hasForeignSaves(in: store) {
-                let generation = staleFlag.arm()
-                withObservationTracking {
-                    fingerprint.sources.armAll()
-                } onChange: { [staleFlag] in
-                    staleFlag.set(ifArmedAt: generation)
-                }
-                servedUnchanged += 1
+            if servesRefetch(onRefetch, in: store) {
+                rearm(fingerprint) {}
                 return current
             }
         }
         return rebuild(wanted, now: now, savesNow: savesNow, build: build)
+    }
+
+    /// #4252: whether an answer observation has marked stale, with no save since its build, is a refetch
+    /// that changed nothing, which may be served. The one predicate both the plain serve above and the card
+    /// adoption below (#4591) decide by, so the two can never disagree about what a refetch is (L261).
+    private func servesRefetch(_ onRefetch: Refetch, in store: ModelContainer) -> Bool {
+        onRefetch == .serveWhenNothingChanged && !store.mainContext.hasChanges
+            && !saves.hasForeignSaves(in: store)
+    }
+
+    /// #4252: serves a refetch. The refetch spent the tracking the build armed, so a new generation is armed
+    /// on every stored property of every row, and on whatever `alsoTracked` reads (#4591: the cards adopted
+    /// in the same breath), so no later edit to any of it is missed.
+    private func rearm(_ fingerprint: ScopeFingerprint, alsoTracked: () -> Void) {
+        let generation = staleFlag.arm()
+        withObservationTracking {
+            fingerprint.sources.armAll()
+            alsoTracked()
+        } onChange: { [staleFlag] in
+            staleFlag.set(ifArmedAt: generation)
+        }
+        servedUnchanged += 1
     }
 
     private func held(_ wanted: Key, now: Date, staleAfter: Staleness) -> Value? {
@@ -260,7 +275,7 @@ final class ScopeMemo<Value> {
 }
 
 /// #4570: a memoised answer that carries the pass's card store, which is what lets the memo decide the
-/// card half of its own key (`ScopeMemo.cardKeys(serving:under:)`) for every surface from one implementation.
+/// card half of its own key (`ScopeMemo.value(fingerprint:drawn:...)`) for every surface from one implementation.
 protocol CarriesCardStore {
     var cards: QueueModel.CardStore { get }
 }
@@ -270,52 +285,73 @@ extension QueueView.RenderData: CarriesCardStore {}
 
 extension ScopeMemo where Value: CarriesCardStore {
 
-    /// The card keys to key this evaluation on, given the keys the LAST FRAME DREW (drained from the
-    /// registry by the caller, on every evaluation, as the header's part 3 requires).
+    /// The answer for a surface whose pass carries a card store, given the keys the LAST FRAME DREW (drained
+    /// from the registry by the caller, on every evaluation, as the header's part 3 requires). `build` is
+    /// handed the card keys the pass must prebuild.
     ///
-    /// Two rules, and both are about cards the held answer can already serve with its tracking intact.
+    /// The memo decides the card half of its own key here, one implementation for the queue and the Archive
+    /// (L613), and both rules are about cards the held answer can serve with its tracking intact.
     ///
-    /// 1. COVERED. Every drawn key was prebuilt by the build that made the held answer, so that build's
-    ///    key set is handed back and the answer is served: a frame drawing fewer rows than the last pass
-    ///    prebuilt needs nothing new. This was the queue's own rule (`cardKeysForMemo`, #4106); the Archive
-    ///    now shares it rather than carrying a second copy (L613).
+    /// 1. COVERED. Every drawn key was prebuilt by the build that made the held answer, so that build's key
+    ///    set is the key and the answer is served: a frame drawing fewer rows than the last pass prebuilt
+    ///    needs nothing new (#4106).
     ///
-    /// 2. THE FIRST FRAME, #4570. A surface's first build runs before any row has drawn, so it is asked
-    ///    for NO card, and every row the first frame draws is built on demand (#3654's expected first-frame
-    ///    miss). The first evaluation after that frame then asked for those keys, which the held answer did
-    ///    not prebuild, and derived the whole store a second time to bring them inside the tracking: 120 of
-    ///    120 rows on a frozen clock, about 277 ms on the live store, on every Archive open, since RootView
-    ///    redraws above the sheet within moments of mounting it. Instead those cards are ADOPTED: built
-    ///    again inside tracking armed at the build's own generation (`CardStore.adopt`), so a field only a
-    ///    card reads still marks the answer stale, and counted as requested, so the key holds still. A
-    ///    mount costs one derivation.
+    /// 2. ADOPTED. Some drawn key was not prebuilt, so its card was built on demand during the render,
+    ///    OUTSIDE the build's tracking. Rather than derive the whole store again to bring it inside, those
+    ///    cards are built again inside tracking (`CardStore.adopt`) and counted as requested, so a field only
+    ///    a card reads still marks the answer stale and the key holds still. #4570 did this for the first
+    ///    frame of a mount alone. #4591 measured the two cases it left: shows arriving under a mounted queue,
+    ///    where the save's refetch has marked the answer stale before the first frame's cards are asked for,
+    ///    and a removal that reveals rows, whose cards the change's own pass could not have prebuilt. Each
+    ///    derived the whole store a second time, reason `nothing this view reads`, and a scroll is the same
+    ///    shape. A whole-store pass is the queue's 364 ms (2026-09-25); adopting is one card build per row
+    ///    revealed.
     ///
-    ///    Only when the held build was asked for no card at all. A SCROLL, a row revealed by a removal, a
-    ///    filter widening on a screen that had drawn, each asks for a key the last pass did not prebuild
-    ///    and derives exactly as it always did, which is #3654's contract; this changes the mount and
-    ///    nothing else.
-    ///
-    /// Anything else hands back what was drawn, which differs from the held key and derives.
-    ///
-    /// `fingerprint` is the one this evaluation will key on, and adoption requires it to match the held
-    /// answer's: a row deleted since the build moves the fingerprint, and building a card again from a
-    /// deleted model is a read of data that is gone, so the answer is derived instead. A stale answer is
-    /// about to be rebuilt anyway, so adopting into it would be work thrown away.
-    func cardKeys(serving drawn: Set<String>, under fingerprint: ScopeFingerprint) -> Set<String> {
+    /// Adoption happens only into an answer this evaluation would otherwise SERVE: the same rows (the
+    /// fingerprint, since building a card from a deleted model reads data that is gone), inside its window,
+    /// no save since its build, and either unmarked or marked only by a refetch that changed nothing
+    /// (`servesRefetch`). In the unmarked case the cards' tracking EXTENDS the build's generation; in the
+    /// refetch case the refetch is served here and the cards are tracked in the same re-arm. Anything else
+    /// derives, exactly as it always did.
+    func value(fingerprint: ScopeFingerprint,
+               drawn: Set<String>,
+               now: Date,
+               staleAfter: Staleness = .seconds(ScopeMemo.staleAfterSeconds),
+               savesIn store: ModelContainer,
+               onRefetch: Refetch,
+               build: (Set<String>) -> Value) -> Value {
+        let keys = cardKeys(serving: drawn, under: fingerprint, now: now, staleAfter: staleAfter,
+                            savesIn: store, onRefetch: onRefetch)
+        return value(fingerprint: fingerprint, cardKeys: keys, now: now, staleAfter: staleAfter,
+                     savesIn: store, onRefetch: onRefetch) { build(keys) }
+    }
+
+    private func cardKeys(serving drawn: Set<String>, under fingerprint: ScopeFingerprint, now: Date,
+                          staleAfter: Staleness, savesIn store: ModelContainer,
+                          onRefetch: Refetch) -> Set<String> {
         guard let key, let value, let prebuilt = value.cards.requestedKeys else { return drawn }
         if drawn.isSubset(of: prebuilt) { return prebuilt }
-        guard prebuilt.isEmpty, key.cardKeys.isEmpty, !staleFlag.isSet,
-              key.fingerprint == fingerprint.finalized() else { return drawn }
-        let generation = staleFlag.current
+        guard key.fingerprint == fingerprint.finalized(), let builtAt,
+              !staleAfter.hasExpired(builtAt: builtAt, now: now),
+              savesAtBuild == saves.value(for: store) else { return drawn }
+        let refetched = staleFlag.isSet
+        if refetched && !servesRefetch(onRefetch, in: store) { return drawn }
+        let revealed = drawn.subtracting(prebuilt)
         var adopted = false
-        withObservationTracking {
-            adopted = value.cards.adopt(drawn)
-        } onChange: { [staleFlag] in
-            staleFlag.set(ifArmedAt: generation)
+        if refetched {
+            rearm(fingerprint) { adopted = value.cards.adopt(revealed) }
+        } else {
+            let generation = staleFlag.current
+            withObservationTracking {
+                adopted = value.cards.adopt(revealed)
+            } onChange: { [staleFlag] in
+                staleFlag.set(ifArmedAt: generation)
+            }
         }
         guard adopted else { return drawn }
-        self.key = Key(fingerprint: key.fingerprint, cardKeys: drawn)
-        return drawn
+        let widened = prebuilt.union(revealed)
+        self.key = Key(fingerprint: key.fingerprint, cardKeys: widened)
+        return widened
     }
 }
 
@@ -381,7 +417,7 @@ final class StaleFlag: @unchecked Sendable {
     }
 
     /// #4570: the generation the latest `arm()` started, WITHOUT starting a new one, for tracking that
-    /// EXTENDS what the build armed rather than replacing it (`ScopeMemo.cardKeys(serving:under:)`). A new
+    /// EXTENDS what the build armed rather than replacing it (`ScopeMemo.value(fingerprint:drawn:...)`). A new
     /// generation there would silence the build's own tracking, so a later edit only the build read would
     /// no longer mark the answer stale.
     var current: Int {
