@@ -52,7 +52,8 @@ struct TicketTailorEndToEndTests {
             },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
-            defaults: ScratchDefaults.make("tt-e2e"))
+            defaults: ScratchDefaults.make("tt-e2e"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let p = try #require(stored.first { $0.groupName == "Autumn Chamber Concert" },
@@ -93,7 +94,8 @@ struct TicketTailorEndToEndTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in },
             now: injectedNow,
-            defaults: ScratchDefaults.make("tt-e2e-1302"))
+            defaults: ScratchDefaults.make("tt-e2e-1302"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         let p = try #require(stored.first { $0.groupName == "Autumn Chamber Concert" },

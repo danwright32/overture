@@ -380,7 +380,8 @@ struct ScoutReLandWritesNothingTests {
                                     results: [ScoutExtractResult(sourceId: id, verdict: .upcomingListings,
                                                                  events: [lead], note: nil)])
             },
-            isRunAlive: { false })
+            isRunAlive: { false },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         paste.urlText = "https://example.test/birchwood"
         await paste.start(into: ctx, now: Date(), today: Self.today, sleep: { _ in })
         let afterPaste = saves.saves.count

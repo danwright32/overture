@@ -225,7 +225,8 @@ struct ScoutReadPhaseWritesNothingTests {
                     await probe.read("squarespace probe")
                     return Self.squarespaceCollection
                 },
-                onApplyCaptured: { applied += $0.sites })
+                onApplyCaptured: { applied += $0.sites },
+                exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         }
         // The end of the read phase: every source read, the landing waiting for the store the test holds.
         await waitUntil("the run's landing is waiting for the store") { flight.queue == [.runScoutLanding] }
@@ -416,7 +417,8 @@ struct ScoutReadPhaseWritesNothingTests {
                 sequenceFloor: {
                     ctx.insert(LandingRun(runIdentity: "written-at-the-mint", landedAt: nil))
                     return 0
-                })
+                },
+                exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         }
         await waitUntil("the run's landing is waiting for the store") { flight.queue == [.runScoutLanding] }
         #expect(!ctx.hasChanges, "the entry flush did not save the early write, so this control shows nothing about #4456")
@@ -480,7 +482,8 @@ struct ScoutReadPhaseWritesNothingTests {
                 pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
                 launch: { _ in },
                 now: now, defaults: ScratchDefaults.make("ScoutReadPhaseWritesNothingTests-overtaken"),
-                landings: flight, sequenceFloor: { 0 })
+                landings: flight, sequenceFloor: { 0 },
+                exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         }
         let older = Task { @MainActor in try await run(failing: true) }
         await waitUntil("the older run is fetching") { gate.entered == 1 }
@@ -518,7 +521,8 @@ struct ScoutReadPhaseWritesNothingTests {
                 pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
                 launch: { launched($0.map(\.sourceId)) },
                 now: now, defaults: ScratchDefaults.make("ScoutReadPhaseWritesNothingTests-handoff"),
-                landings: flight, sequenceFloor: { 0 })
+                landings: flight, sequenceFloor: { 0 },
+                exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         }
         var olderLaunched: [String] = []
         var newerLaunched: [String] = []
@@ -586,7 +590,8 @@ struct ScoutReadPhaseWritesNothingTests {
             saveClosing: { _ in
                 saves += 1
                 throw SaveRefused()
-            })
+            },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(saves == 1, "save one was not attempted, or the landing carried on to another save")
         #expect(outcome.saveFailed)
@@ -615,7 +620,8 @@ struct ScoutReadPhaseWritesNothingTests {
             budget: 1,
             now: now, defaults: ScratchDefaults.make("ScoutReadPhaseWritesNothingTests-saveone-report"),
             landings: flight, sequenceFloor: { 0 },
-            saveClosing: { _ in throw SaveRefused() })
+            saveClosing: { _ in throw SaveRefused() },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(outcome.saveFailed)
         #expect(!launched)
@@ -625,7 +631,9 @@ struct ScoutReadPhaseWritesNothingTests {
         #expect(states["b-org"] == .deferred, Comment(rawValue:
             "the source over budget was reported as \(String(describing: states["b-org"]))"))
         #expect(!outcome.sources.contains { $0.state == .queuedForReading })
-        #expect(outcome.clientListWarning == DownbeatBridge.warningText(for: DownbeatBridge.loadWithHealth(now: now).health))
+        // #4582: the run was handed no export, so the health said is the missing one, never a read of the default
+        // file, which under test is a folder every test shares.
+        #expect(outcome.clientListWarning == DownbeatBridge.warningText(for: .missing))
     }
 }
 

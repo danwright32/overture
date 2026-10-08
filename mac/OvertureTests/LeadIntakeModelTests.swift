@@ -63,7 +63,8 @@ struct LeadIntakeModelTests {
                         fetch: fetch,
                         pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                         launch: launch,
-                        readResults: results)
+                        readResults: results,
+                        exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     @Test func aBlankOrNonsenseLinkIsRefusedBeforeAnythingIsSpent() async {
@@ -240,7 +241,8 @@ struct LeadIntakeModelTests {
                                      fetch: LeadIntakeModelTests.okFetch,
                                      pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                                      launch: { _ in },
-                                     readResults: { id in self.results(.upcomingListings, [event], id: id) }) }
+                                     readResults: { id in self.results(.upcomingListings, [event], id: id) },
+                                     exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history) }
 
         let first = make()
         first.urlText = "https://org.example/events"
@@ -268,7 +270,8 @@ struct LeadIntakeModelTests {
                                      fetch: LeadIntakeModelTests.okFetch,
                                      pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
                                      launch: { _ in },
-                                     readResults: { id in self.results(.upcomingListings, [], id: id) }) }
+                                     readResults: { id in self.results(.upcomingListings, [], id: id) },
+                                     exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history) }
 
         let first = make()
         first.urlText = "https://org.example/events"
@@ -430,7 +433,8 @@ struct LeadIntakeDeadRunTests {
             pin: { _, _ in URL(fileURLWithPath: "/tmp/pinned.html") },
             launch: { _ in },
             readResults: results,
-            isRunAlive: alive)
+            isRunAlive: alive,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     // THE test. The run is gone and it left nothing for us. Say so at once, and say what actually

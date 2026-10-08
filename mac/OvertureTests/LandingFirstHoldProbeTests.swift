@@ -228,11 +228,12 @@ final class LandingFirstHoldProbeTests {
                 _ = URLSession.shared.configuration
                 Self.say(String(format: "x1 first touch of URLSession.shared: %.1f ms", Phase0.ms(since: t0)))
                 // The rest of what runScout does on the main thread before its first await, each touched once
-                // here first: the LIVE Downbeat export (runScout reads the real one, the members above a copy), and
-                // the context's pending state. If one of them is the one-time cost, it shows here and leaves pass 1.
+                // here first: the Downbeat export (#4582: runScout reads the probe's copy now, as the members above
+                // do), and the context's pending state. If one of them is the one-time cost, it shows here and leaves
+                // pass 1.
                 let t1 = Phase0.now()
-                _ = DownbeatBridge.loadWithHealth(now: Date())
-                Self.say(String(format: "x1 first live Downbeat export load: %.1f ms", Phase0.ms(since: t1)))
+                _ = DownbeatBridge.loadWithHealth(from: inputs.exportURL, now: Date())
+                Self.say(String(format: "x1 first Downbeat export load: %.1f ms", Phase0.ms(since: t1)))
                 let t2 = Phase0.now()
                 _ = ctx.hasChanges
                 Self.say(String(format: "x1 first pending check: %.1f ms", Phase0.ms(since: t2)))
@@ -249,7 +250,10 @@ final class LandingFirstHoldProbeTests {
             if factor == 1 && ProcessInfo.processInfo.environment["MEASURE_4339_HISTORY_FIRST"] != nil {
                 Self.say("x1 before the history read: context has changes \(ctx.hasChanges)")
                 // #4558: runScout reads its history through the refusing read, with the export and the calendar.
-                let (_, historyHold) = try await measure { await LandingInputs.readRefusingUnreadableShowTable(into: ctx) }
+                let (_, historyHold) = try await measure {
+                    await LandingInputs.readRefusingUnreadableShowTable(exportURL: inputs.exportURL,
+                                                                        historyURL: inputs.historyURL, into: ctx)
+                }
                 Self.say("x1 history read alone: " + historyHold.text)
             }
             // `TEST_RUNNER_MEASURE_4339_SAMPLE=<dir outside any checkout>`: the first run in this process at 1x is
@@ -287,7 +291,8 @@ final class LandingFirstHoldProbeTests {
                             defer { reads.note(onMain: Thread.isMainThread, from: t0, to: Phase0.now()) }
                             return try ScoutService.readProspectTable(context)
                         },
-                        landings: LandingSingleFlight())
+                        landings: LandingSingleFlight(),
+                        exportURL: inputs.exportURL, importedHistory: inputs.historyURL)
                     return "\(outcome.sources.count) sources reported, save failed \(outcome.saveFailed), "
                         + "stop \(outcome.landingStop.map { "\($0)" } ?? "none"), "
                         + "client warning \(outcome.clientListWarning == nil ? "none" : "set")"

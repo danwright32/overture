@@ -273,6 +273,25 @@ the measurement it came from lives here. Read the entry before the rule decides 
   false under parallel, in the wording most likely to stop somebody looking further (L11).
 
 
+## A test that reaches a landing names the export and history it reads
+
+- **Pass `AbsentHandoff.export` and `AbsentHandoff.history` (`mac/TestSupport/AbsentHandoff.swift`), or files
+  of the test's own, to every call of `ScoutService.runScout`, `LeadPasteLanding.landPastedLead`,
+  `LeadIntakeModel(` and the `LandingInputs` reads (#4582).** Each takes `exportURL:` and a history file
+  defaulted to the real files, so the app reads Dan's own. Under test the default is
+  `StoreLocation.testRunHandoffDirectory`, ONE folder every test process on the Mac shares (#2097), so a test
+  naming neither read whatever any other test, worktree or concurrent run left there, and a Downbeat export
+  in it turns a show the test expects cold into a booked client. `TestsNameTheirLandingInputFilesTests`
+  derives the entry points from the app (every declaration whose own parameters carry `exportURL:`
+  defaulted to `DownbeatBridge.defaultURL`) and fails a test call that omits either file or passes the real
+  one. Two limits: a test reaching a landing THROUGH something else names no entry point and is not judged,
+  and an instance method taking the seam cannot be matched by its call text, so the derivation refuses it
+  by name. The oracle files `scripts/landing-oracle.sh` overlays onto 6d3453d8 are exempt, read from the
+  script's own `ORACLE_OVERLAY`, because no seam exists there; they must keep calling
+  `handoffInputsRefusal()` instead. Other handoff seams with other labels (`downbeatURL:` on
+  `PrepQueueService.settleReachabilityProbe`, `from:` on `ReconcileScheduler`) are outside this rule.
+
+
 ## Listing the tests that assert a decision Dan has reversed
 
 - **Before implementing a decision Dan has REVERSED, list the tests that assert the old one:

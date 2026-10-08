@@ -85,7 +85,8 @@ final class ScoutLandingRecordTests {
             fetch: { url, _, _ in self.inlinePage(url) },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: now, defaults: ScratchDefaults.make("ScoutLandingRecordTests"),
-            landings: flight, sequenceFloor: { 0 }, saveSource: saveSource, journals: journals)
+            landings: flight, sequenceFloor: { 0 }, saveSource: saveSource, journals: journals,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     private func runs(_ c: ModelContainer) throws -> [LandingRun] {

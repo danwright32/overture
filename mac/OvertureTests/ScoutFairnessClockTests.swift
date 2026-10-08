@@ -55,7 +55,8 @@ struct ScoutFairnessClockTests {
 
         _ = try await ScoutService.runScout(
             into: ctx, depth: .watchOnly, extractor: noEvents, fetch: page("new"),
-            pin: noPin, launch: { _ in }, defaults: defaults())
+            pin: noPin, launch: { _ in }, defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(s.lastManualReadAt == nil)   // the daily run leaves the manual clock alone
         #expect(s.lastCheckedAt != nil)      // but the shared fetch clock DID advance
@@ -70,7 +71,8 @@ struct ScoutFairnessClockTests {
 
         _ = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
-            pin: noPin, launch: { _ in }, now: now, defaults: defaults())
+            pin: noPin, launch: { _ in }, now: now, defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(s.lastManualReadAt == now)
     }
@@ -88,7 +90,8 @@ struct ScoutFairnessClockTests {
 
         _ = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
-            pin: noPin, launch: { _ in }, now: now, defaults: defaults())
+            pin: noPin, launch: { _ in }, now: now, defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(onlyFetched.lastCheckedAt == now)        // it WAS fetched, and the shared clock says so
         #expect(wasRead.lastManualReadAt == now)         // it had its turn
@@ -106,7 +109,8 @@ struct ScoutFairnessClockTests {
         _ = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
             pin: noPin, launch: { _ in }, now: now, defaults: defaults(),
-            askReadBudget: { _ in .firstBatch })
+            askReadBudget: { _ in .firstBatch },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         let stamped = sources.filter { $0.lastManualReadAt == now }
         #expect(stamped.count == ScoutReadBudget.askAbove)          // the batch he took
@@ -136,7 +140,8 @@ struct ScoutFairnessClockTests {
                 return FetchedPage(normalizedHTML: "<p>x</p>", finalURL: url.absoluteString,
                                    contentHash: hash)
             },
-            pin: noPin, launch: { launched = $0 }, budget: 20, defaults: defaults())
+            pin: noPin, launch: { launched = $0 }, budget: 20, defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched.contains { $0.sourceId == "zzz" })
         // And the run still respected the cap: at most the budget of pages was queued.
@@ -158,7 +163,8 @@ struct ScoutFairnessClockTests {
 
         let outcome = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("same"),
-            pin: noPin, launch: { _ in }, budget: 1, now: now, defaults: defaults())
+            pin: noPin, launch: { _ in }, budget: 1, now: now, defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(outcome.sources.contains { $0.state == .deferred } == false)
     }
@@ -177,7 +183,8 @@ struct ScoutFairnessClockTests {
 
         let outcome = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
-            pin: noPin, launch: { _ in }, budget: 1, now: now, defaults: defaults())
+            pin: noPin, launch: { _ in }, budget: 1, now: now, defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(outcome.sources.contains { $0.sourceId == "zzz" && $0.state == .deferred })
     }
