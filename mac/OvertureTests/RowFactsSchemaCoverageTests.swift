@@ -300,22 +300,17 @@ struct RowFactsHoldNoModelTests {
 // The same three checks as above, each where it can apply. `RenderData` and the card store are not `Sendable`
 // (the store is a class that builds a missed card while drawing), so the compiler says nothing about them and
 // the walk and the scan carry the whole of it there. The walk over a whole pass runs in `TermsOverFactsTests`
-// (`aPopulatedPassHoldsAModelOnlyWhereItIsStillAllowed`), because that is where the fixture lives in which
+// (`aPopulatedPassHoldsNoModelAnywhere`), because that is where the fixture lives in which
 // every pill and stage counts something.
 //
-// ONE MEMBER STILL HOLDS A MODEL, named below with the issue that takes it out, and nothing else may. It is a
-// reason, not a convenience: the card store needs a value for every row in scope and only the engine retains
-// them (a store over facts built by today's pass would extract every row on every pass, which the live store
-// cost probe prices). The Reached out list's exemption went with #4358 slice E4a (#4371): its show rows hold
-// a `ReachedOutSnapshot`, as its inquiry rows have held an `InquiryIdentity` since #4579.
+// NO MEMBER IS EXEMPT. The Reached out list's exemption went with #4358 slice E4a (#4371): its show rows hold
+// a `ReachedOutSnapshot`, as its inquiry rows have held an `InquiryIdentity` since #4579. The card store's went
+// with E4a part 2 (#4371): over the models it holds each show's `ShowIdentity` and its contacts' identifiers
+// (`CardSourcesByIdentity`) and resolves a card it did not prebuild at draw time through the surface's live
+// shows, so the pass the app runs today publishes no model anywhere, exactly as the engine's will.
 @Suite("What the queue pass publishes holds no model (#4357)")
 @MainActor
 struct OutputsHoldNoModelTests {
-
-    /// The RenderData members still allowed a model, each with the issue that takes it out.
-    static let stillHoldingAModel: [String: String] = [
-        "cards": "#4358: today's pass hands the card store its models; the engine's pass hands it RowFacts",
-    ]
 
     @Test func thePublishedValueTypesAreSendable() {
         RowFactsHoldNoModelTests.requireSendable(ReachedOutEntry.self)
@@ -338,7 +333,7 @@ struct OutputsHoldNoModelTests {
 
     /// A store over this row with every member set: one prebuilt card, the row's contacts, a requested key set
     /// and a registry, so the walk below has something in each place a model could sit.
-    static func store<Row: ProspectFacts>(over row: Row, preamble pre: QueueModel.CardPreamble) -> QueueModel.CardStore {
+    static func store<Row: QueuePassRow>(over row: Row, preamble pre: QueueModel.CardPreamble) -> QueueModel.CardStore {
         QueueModel.CardStore(cards: [row.naturalKey: QueueModel.card(row, among: row.factContacts, preamble: pre)],
                              shows: [row], contactsByKey: [row.naturalKey: row.factContacts], preamble: pre,
                              requestedKeys: [row.naturalKey], registry: QueueModel.CardKeyRegistry())
@@ -367,17 +362,32 @@ struct OutputsHoldNoModelTests {
         #expect(found.isEmpty, Comment(rawValue: "a card store built over facts holds a live model at: "
             + found.joined(separator: ", ")))
 
-        // The walk's own control, and what today's pass hands the store: built over the live show, it holds it.
+        // #4371: and what today's pass hands the store, built over the live show and its contacts, holds none
+        // either: it holds their identities, and reaches the show and both contacts through them.
         let overModels = Self.store(over: show, preamble: pre)
-        #expect(!RowFactsHoldNoModelTests.models(in: overModels, path: "CardStore").isEmpty,
-                "the walk was handed a store holding the live show and did not report it")
+        let emptyOverModels = Mirror(reflecting: overModels).children
+            .filter { !RowFactsHoldNoModelTests.isPopulated($0.value) }.compactMap(\.label)
+        #expect(emptyOverModels.isEmpty, Comment(rawValue: "the store over models holds these members empty, so the "
+            + "walk sees nothing in them: " + emptyOverModels.joined(separator: ", ")))
+        #expect(overModels.contents == overFacts.contents, Comment(rawValue: "a store over the models holds other "
+            + "shows, contacts, cards or keys than the same store over facts"))
+        let foundOverModels = RowFactsHoldNoModelTests.models(in: overModels, path: "CardStore")
+        #expect(foundOverModels.isEmpty, Comment(rawValue: "a card store built over the models holds a live model "
+            + "at: " + foundOverModels.joined(separator: ", ")))
 
-        // And a card the pass did not build comes out of a store over facts as it does out of one over models.
+        // The walk's own control (L159): handed what the store used to hold, the live show and its contacts, it
+        // reports both.
+        #expect(!RowFactsHoldNoModelTests.models(in: [show.naturalKey: show], path: "shows").isEmpty
+                    && !RowFactsHoldNoModelTests.models(in: [show.naturalKey: contacts], path: "contacts").isEmpty,
+                "the walk was handed the live show and its contacts and did not report them")
+
+        // And a card the pass did not build comes out of a store over facts as it does out of one over models,
+        // the second resolving its show through the live rows it is handed, as a drawn row does.
         let row = QueueScopeRow(show, facts: RecipientFacts.of(show, contacts: show.factContacts))
         let fromFacts = QueueModel.CardStore(cards: [:], shows: [facts], contactsByKey: [:], preamble: pre,
-                                             requestedKeys: []).card(for: row)
+                                             requestedKeys: []).card(for: row, resolving: [Prospect]())
         let fromModels = QueueModel.CardStore(cards: [:], shows: [show], contactsByKey: [:], preamble: pre,
-                                              requestedKeys: []).card(for: row)
+                                              requestedKeys: []).card(for: row, resolving: [show])
         #expect(fromFacts.showID == show.persistentModelID, "the missed card was not built from the show")
         #expect(fromFacts.contacts.count == 2, "the missed card was built without the show's own contacts")
         #expect(fromFacts == fromModels, Comment(rawValue: "a missed card over facts differs from one over the "
@@ -395,6 +405,7 @@ struct OutputsHoldNoModelTests {
         ("QueueView+Model.swift", "struct RecipientSnapshot:", "RecipientSnapshot"),
         ("QueueView+Model.swift", "final class CardStore {", "CardStore"),
         ("QueueView+Model.swift", "struct CardSourcesOf<", "CardSourcesOf"),
+        ("QueueView+Model.swift", "struct CardSourcesByIdentity:", "CardSourcesByIdentity"),
         ("QueueScopeRow.swift", "struct QueueScopeRow:", "QueueScopeRow"),
         ("QueueView.swift", "struct RenderData {", "RenderData"),
     ]
@@ -433,7 +444,6 @@ struct OutputsHoldNoModelTests {
                 let name = field.dropFirst(4).prefix { $0 != ":" }.trimmingCharacters(in: .whitespaces)
                 seen[owner, default: 0] += 1
                 guard declared.contains(model) else { continue }
-                if owner == "RenderData", Self.stillHoldingAModel[name] != nil { continue }
                 offenders.append("\(file.name):\(line) \(owner).\(name) is declared as\(declared)")
             }
         }

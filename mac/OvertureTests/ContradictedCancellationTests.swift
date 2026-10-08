@@ -167,7 +167,7 @@ struct ContradictedCancellationTests {
         var data = QueueModel.scope(from: all, now: Date())
         func warning(_ key: String) throws -> Bool {
             let row = try #require(data.rows.first { $0.id == key }, "no row for \(key)")
-            return data.cards.card(for: row).disappearedFromFeed
+            return data.cards.card(for: row, resolving: all).disappearedFromFeed
         }
 
         #expect(try warning("gone") == false,
@@ -240,7 +240,7 @@ struct ContradictedCancellationTests {
             var data = QueueModel.scope(from: onScreen, corpus: all, now: Date())
             let stillWarned = contradicted.compactMap { show -> String? in
                 guard let row = data.rows.first(where: { $0.id == show.naturalKey }) else { return nil }
-                return data.cards.card(for: row).disappearedFromFeed ? show.groupName : nil
+                return data.cards.card(for: row, resolving: all).disappearedFromFeed ? show.groupName : nil
             }
             #expect(stillWarned.isEmpty,
                     Comment(rawValue: "\(stillWarned.count) of \(flagged.count) cancellation "

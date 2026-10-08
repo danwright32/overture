@@ -104,7 +104,7 @@ struct CardsOnlyForWhatRendersTests {
 
         // The frame draws the three it was asked for and one it was not, which is what a scroll does.
         let drawn = data.rows.filter { wanted.contains($0.id) || $0.id == "k9" }
-        for row in drawn { _ = data.cards.card(for: row) }
+        for row in drawn { _ = data.cards.card(for: row, resolving: shows) }
 
         #expect(data.rows.count == Self.corpusSize)
         #expect(data.cards.builtCount == wanted.count + data.cards.expectedFirstFrameMisses)
@@ -120,7 +120,7 @@ struct CardsOnlyForWhatRendersTests {
         let data = QueueRenderPass.make(inputs(shows, cardKeys: ["k1"]))
         let unasked = try #require(data.rows.first { $0.id == "k9" })
 
-        let built = data.cards.card(for: unasked)
+        let built = data.cards.card(for: unasked, resolving: shows)
 
         #expect(built.id == "k9")
         // The same card the pass would have made, not a thinner one: the whole-corpus tables it is
@@ -150,7 +150,7 @@ struct CardsOnlyForWhatRendersTests {
                                             now: Date(), day: "2099-01-01"),
                                           requestedKeys: ["k1"])
 
-        _ = broken.card(for: row)
+        _ = broken.card(for: row, resolving: shows)
 
         #expect(broken.unexpectedCardMisses == 1)
         #expect(broken.expectedFirstFrameMisses == 0)
@@ -167,7 +167,7 @@ struct CardsOnlyForWhatRendersTests {
         let registry = QueueModel.CardKeyRegistry()
         let data = QueueRenderPass.make(inputs(shows, cardKeys: [], registry: registry))
 
-        for row in data.rows.prefix(4) { _ = data.cards.card(for: row) }
+        for row in data.rows.prefix(4) { _ = data.cards.card(for: row, resolving: shows) }
 
         #expect(registry.keys == Set(data.rows.prefix(4).map(\.id)))
         #expect(registry.takeKeys().count == 4)
@@ -185,7 +185,7 @@ struct CardsOnlyForWhatRendersTests {
         let data = QueueRenderPass.make(inputs(shows, cardKeys: ["k1"], registry: registry))
         let hit = try #require(data.rows.first { $0.id == "k1" })
 
-        _ = data.cards.card(for: hit)
+        _ = data.cards.card(for: hit, resolving: shows)
 
         #expect(data.cards.expectedFirstFrameMisses == 0, "k1 was prebuilt, so this was a hit")
         #expect(registry.keys == ["k1"])

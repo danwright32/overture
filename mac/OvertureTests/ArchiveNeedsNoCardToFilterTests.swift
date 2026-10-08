@@ -122,7 +122,7 @@ struct ArchiveNeedsNoCardToFilterTests {
         let scope = archiveScope(shows)
         let row = try #require(scope.rows.first { $0.id == "k4" })
 
-        let card = scope.cards.card(for: row)
+        let card = scope.cards.card(for: row, resolving: shows)
 
         #expect(card.id == "k4")
         #expect(card.contacts.count == 1, "the card built on the spot lost this show's contacts")
@@ -189,7 +189,7 @@ struct ArchiveWiringGuardTests {
     // surface that reached for a card any other way would draw correctly and register nothing.
     @Test("a drawn row gets its card through the store")
     func aDrawnRowGoesThroughTheStore() {
-        let goesThroughTheStore = archive.contains("cards.card(for: scopeRow)")
+        let goesThroughTheStore = archive.contains("cards.card(for: scopeRow, resolving: shows)")
         #expect(goesThroughTheStore,
                 Comment(rawValue: "Archive's row no longer resolves its card through the store, so "
                         + "nothing records what it drew and the next pass predicts nothing (L621)"))
