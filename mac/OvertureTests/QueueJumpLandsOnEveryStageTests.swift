@@ -191,11 +191,15 @@ struct QueueJumpIdentityWiringGuardTests {
             return
         }
         let showBranch = list[show.upperBound..<inquiry.lowerBound]
+        // The inquiry case is the switch's last, so its branch runs to the case's own row and divider; the
+        // count above is what keeps a third divider after the switch from being read as the inquiry's.
         let inquiryBranch = list[inquiry.upperBound...]
+        let inquiryRow = inquiryBranch.range(of: "inquiryRowView(")
         #expect(list.components(separatedBy: "Divider()").count - 1 == 2,
                 "the Reached out list should draw exactly one divider per kind of row")
-        #expect(showBranch.contains("Divider()") && inquiryBranch.prefix(200).contains("Divider()"),
-                "each kind of row must draw its own divider, inside its own branch")
+        #expect(showBranch.contains("Divider()")
+                    && inquiryRow.map { inquiryBranch[$0.upperBound...].prefix(120).contains("Divider()") } == true,
+                "each kind of row must draw its own divider, right after its own row")
     }
 
     @Test func theDateGroupedCardsUseTheSameMark() {
