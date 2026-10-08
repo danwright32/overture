@@ -74,6 +74,65 @@ final class TermsOverFactsLiveStoreTests {
     }
 }
 
+// #4358 slice E4a (oracle part two for the WHOLE pass, on real data): `QueueRenderPass.make` over the clone's live
+// models answers what it answers over the same store as the engine will hold it (every show extracted, every
+// inquiry, answer and source as its record), member by member through the RenderData comparator. A LIVE STORE
+// TEST, read only on a clone, so it gates every merge as plan item 14 asks: nothing in the DATA can make the two
+// arms differ, since both run the one generic pass, so a finding is a fault between a model and its value. The
+// clone at every stage with every card built; the 4x copy at three stages with a sample of cards, the size the
+// plan budgets for. Findings name a stage and a member, never a title (L222).
+@MainActor
+@Suite("The whole queue pass answers the same over facts as over models on the live store (#4358)")
+final class WholePassOverFactsLiveStoreTests {
+    private let sandboxes = TemporarySandboxes()
+
+    @Test(.enabled(if: LiveStorePresence.exists, LiveStorePresence.absenceReason))
+    func theCloneAndItsFourfoldCopyPassTheSameOverFactsAsOverModels() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try sandboxes.make(named: "whole-pass-over-facts")
+            guard let base = try LiveStoreClone.makeClone(in: dir) else {
+                throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
+            }
+            let corpora = [("live clone", base), ("4x", try Phase0.scaledCopy(of: base, factor: 4, in: dir))]
+            for (label, url) in corpora {
+                let container = try Phase0.openContainer(at: url)
+                let ctx = ModelContext(container)
+                let shows = try ctx.fetch(FetchDescriptor<Prospect>())
+                // An empty read is a failed open, never a clean bill of health (L98).
+                #expect(!shows.isEmpty, "the \(label) holds no shows, so nothing below compared anything")
+                let store = TermsOverFacts.PassStore(
+                    shows: shows, inquiries: try ctx.fetch(FetchDescriptor<Inquiry>()),
+                    answers: try ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>()),
+                    sources: try ctx.fetch(FetchDescriptor<WatchedSource>()),
+                    refusals: ContactRefusal.ledger(in: ctx), overrides: ProducerOverrideEditing.overrides(in: ctx))
+                let geo = GeoRefusals(
+                    userExcludedTowns: Set(try ctx.fetch(FetchDescriptor<ExcludedTown>()).map(\.town)),
+                    allowedSeedTowns: Set(try ctx.fetch(FetchDescriptor<AllowedSeedTown>()).map(\.town)))
+                let context = StageContext(now: Date(), geo: geo, clients: .none)
+                let wholeClone = label == "live clone"
+                let focuses: [StageFocus?] = wholeClone ? StageFocus.allCases.map { $0 } + [nil]
+                                                        : [.scout, .review, .reachedOut]
+                let cards: Set<String>? = wholeClone
+                    ? nil : Set(QueueModel.queueScope(shows).prefix(60).map(\.naturalKey))
+                let started = Phase0.now()
+                let (findings, passes) = TermsOverFacts.wholePassFindings(store, context: context, focuses: focuses,
+                                                                          cards: cards)
+                print("whole pass over facts, \(label): \(shows.count) show(s), \(store.inquiries.count) inquiry(s), "
+                      + "\(store.answers.count) answer(s), \(store.sources.count) source(s), \(passes.count) stage(s), "
+                      + "\(passes.first?.cards.builtCount ?? 0) card(s) on the first, \(findings.count) finding(s), "
+                      + String(format: "%.0f ms", Phase0.ms(since: started)))
+                #expect(passes.contains { !$0.rows.isEmpty }, "no pass over the \(label) built a row")
+                #expect(findings.isEmpty, Comment(rawValue: "\(label):\n" + findings.joined(separator: "\n")))
+            }
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+}
+
 // #4358 slice E4a: what the queue's MEMO PATH derivation costs on the live clone and on its fourfold copy, so a
 // change to `QueueRenderPass.make` is priced against main rather than argued (the milestone's "no slower" rule).
 // The pass is handed what `QueueView.makeRenderData` hands it on a memo miss: every table read from the clone,

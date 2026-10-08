@@ -637,7 +637,7 @@ extension QueueEnginePhase0cRowsProbeTests {
             let sLoop = Phase0.median5 { _ = loop() }
             let looped = loop()
             let sCheck = Phase0.median5 {
-                _ = QueueModel.checkOneCardAgainstAFreshBuild(cards: [:], contactsByKey: looped.contacts,
+                _ = QueueModel.checkOneCardAgainstAFreshBuild(cards: [:], contactsByKey: looped.contacts, draftBodies: [:],
                                                               corpus: inQueue, preamble: pre)
             }
             let sCardStore = Phase0.median5 {

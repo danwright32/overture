@@ -53,7 +53,8 @@ struct TheAppChecksItsOwnCardsTests {
         try ctx.save()
         let contacts = Dictionary(uniqueKeysWithValues: shows.map { ($0.naturalKey, $0.recipients) })
 
-        let picked = QueueModel.riskiestKey(among: shows.map(\.naturalKey), contactsByKey: contacts)
+        let picked = QueueModel.riskiestKey(among: shows.map(\.naturalKey), contactsByKey: contacts,
+                                            draftBodies: Dictionary(uniqueKeysWithValues: shows.map { ($0.naturalKey, $0.draftBody) }))
 
         #expect(picked == "k8", "the sampler did not find the one show with a pending body-carrying contact")
     }
@@ -120,7 +121,8 @@ struct TheAppChecksItsOwnCardsTests {
         stale.presenterLine = "a card left over from an earlier pass"
 
         let found = try #require(QueueModel.checkOneCardAgainstAFreshBuild(
-            cards: ["k8": stale], contactsByKey: ["k8": show.recipients], corpus: shows, preamble: pre))
+            cards: ["k8": stale], contactsByKey: ["k8": show.recipients], draftBodies: ["k8": show.draftBody],
+            corpus: shows, preamble: pre))
 
         #expect(found.key == "k8")
         #expect(found.fields == ["presenterLine"])

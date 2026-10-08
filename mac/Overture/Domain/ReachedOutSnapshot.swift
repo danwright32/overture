@@ -39,7 +39,9 @@ struct ReachedOutSnapshot: Equatable, Identifiable, Sendable {
 
     var id: String { "\(show.naturalKey)#\(contactId)" }
 
-    init(show: Prospect, contact: Recipient, next: Date) {
+    // #4358 slice E4a: over any facts conformer, so the pass takes it from a model today and from a retained
+    // show after the cutover.
+    init<Row: ProspectFacts>(show: Row, contact: Row.Contact, next: Date) {
         self.show = ShowIdentity(show)
         self.contactID = contact.persistentModelID
         self.contactId = contact.id

@@ -10,7 +10,7 @@ import SwiftData
 //
 // BY VALUE, three ways, and never by description:
 //   - a member that is already a value with real equality is compared with `==`;
-//   - a member that holds MODELS (the Reached out list's show rows, until #4371) is
+//   - a member that held MODELS (none since #4358 slice E4a gave the Reached out list identities) would be
 //     compared through a projection onto store identifiers and the values beside them, because a model's
 //     equality is object identity and two passes over one store hold different objects for the same row;
 //   - the one class, `CardStore`, is compared through `contents`, the value it holds.
@@ -64,7 +64,8 @@ enum RenderDataComparison {
         Field(name: "inquiryGroups", how: .value) { $0.inquiryGroups == $1.inquiryGroups },
         // #4579: identities now, so compared as the values they are.
         Field(name: "inquiriesByRowID", how: .value) { $0.inquiriesByRowID == $1.inquiriesByRowID },
-        Field(name: "reachedOutList", how: .projection) { list($0.reachedOutList) == list($1.reachedOutList) },
+        // #4371 and #4358 slice E4a: identities now, so compared as the values they are.
+        Field(name: "reachedOutList", how: .value) { $0.reachedOutList == $1.reachedOutList },
         Field(name: "dateProbeHeadings", how: .value) { $0.dateProbeHeadings == $1.dateProbeHeadings },
         Field(name: "stageCounts", how: .value) { $0.stageCounts == $1.stageCounts },
         Field(name: "geo", how: .value) { $0.geo == $1.geo },
@@ -109,40 +110,4 @@ enum RenderDataComparison {
         "expectedFirstFrameMisses": "left out: counted by the surfaces that read the store after the pass",
         "unexpectedCardMisses": "left out: counted by the surfaces that read the store after the pass",
     ]
-
-    private enum EntryKey: Equatable {
-        case show(PersistentIdentifier, PersistentIdentifier, Date)
-        case inquiry(InquiryIdentity, InquiryRow, Date)
-    }
-
-    private struct GroupKey: Equatable {
-        let id: String
-        let weekday: String
-        let monthDay: String
-        let year: String
-        let rows: [EntryKey]
-    }
-
-    private struct ListKey: Equatable {
-        let entries: [EntryKey]
-        let groups: [GroupKey]
-        let sourceCalendars: [String: String]
-        let now: Date
-    }
-
-    private static func entry(_ e: ReachedOutEntry) -> EntryKey {
-        switch e {
-        case .prospect(let show, let contact, let next):
-            return .show(show.persistentModelID, contact.persistentModelID, next)
-        case .inquiry(let identity, let row, let next):
-            return .inquiry(identity, row, next)
-        }
-    }
-
-    private static func list(_ l: QueueModel.ReachedOutList) -> ListKey {
-        ListKey(entries: l.entries.map(entry),
-                groups: l.groups.map { GroupKey(id: $0.id, weekday: $0.weekday, monthDay: $0.monthDay,
-                                                 year: $0.year, rows: $0.rows.map(entry)) },
-                sourceCalendars: l.sourceCalendars, now: l.now)
-    }
 }

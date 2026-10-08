@@ -76,8 +76,12 @@ enum QueueRow: Identifiable, Equatable {
 // this next needs Dan), which is what lets them share one grouping and therefore one heading. Before
 // this, an inquiry block sat above the "Grouped by when to reach out next" caption carrying its EVENT
 // date, so two identical-looking headings in one view answered different questions.
-enum ReachedOutEntry: Identifiable {
-    case prospect(prospect: Prospect, recipient: Recipient, next: Date)
+enum ReachedOutEntry: Identifiable, Equatable, Sendable {
+    // #4371 (B2) and #4358 slice E4a: the show and the contact by IDENTITY (`ReachedOutSnapshot`: the show's
+    // identifier with its key as witness, the contact's identifier, and when to reach out), never the models, so
+    // the published pass holds values whichever rows it was made over. The list resolves the live show and
+    // contact as it draws the row, through the same resolver a press on it uses (`ReachedOutSnapshot.resolve`).
+    case show(ReachedOutSnapshot)
     // #4579: carries the inquiry's IDENTITY beside its display row, never the model. A press resolves it
     // against the view's live query at the moment of the press (`InquiryIdentity.inquiry(for:...)`), so the
     // published pass holds values. The identity is taken from each inquiry beside its own row rather than
@@ -86,7 +90,7 @@ enum ReachedOutEntry: Identifiable {
 
     var next: Date {
         switch self {
-        case .prospect(_, _, let next): return next
+        case .show(let snapshot): return snapshot.next
         case .inquiry(_, _, let next): return next
         }
     }
@@ -97,7 +101,7 @@ enum ReachedOutEntry: Identifiable {
     // stage's cards do.
     var showKey: String? {
         switch self {
-        case .prospect(let prospect, _, _): return prospect.naturalKey
+        case .show(let snapshot): return snapshot.show.naturalKey
         case .inquiry: return nil
         }
     }
@@ -107,7 +111,7 @@ enum ReachedOutEntry: Identifiable {
         // #4062: the SHOW, never the contact. `Recipient.id` is deliberately not unique (the same address
         // pitched about two performances shares one), so a contact keyed id gave two rows one identity,
         // and it was never the key a jump carries either.
-        case .prospect(let prospect, _, _): return "p:\(prospect.naturalKey)"
+        case .show(let snapshot): return "p:\(snapshot.show.naturalKey)"
         case .inquiry(_, let row, _): return "i:\(row.id)"
         }
     }

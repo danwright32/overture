@@ -49,10 +49,6 @@ enum QueueInputSource: Equatable, Sendable {
         "checkRunSince": .signal,
         "checkLookups": .signal,
         "replyRunAlive": .signal,
-        "trace": .notAnInput(reason: """
-            A Debug only fingerprint of the caller's own state, recorded beside a derivation and read by \
-            nothing in the pass.
-            """),
         "requestedCardKeys": .viewInput,
         "cardKeyRegistry": .notAnInput(reason: """
             Where the surface records which cards it drew, for the next pass. Written by the render and \

@@ -136,6 +136,41 @@ struct RowFactsSchemaCoverageTests {
         #expect(contactExtra.isEmpty, Comment(rawValue: "RecipientRecord carries fields ContactFacts does "
             + "not declare: " + contactExtra.joined(separator: ", ")))
     }
+
+    // #4358 slice E4a: the queue pass's other inputs, each protocol held to the record the engine keeps in BOTH
+    // directions, so a field one carries and the other does not declare is a red test rather than a pass that
+    // reads it on one family of rows only. The records are held to the schema by
+    // `QueueEngineRecordsCoverTheSchemaTests`, so together the three are held to the stored models.
+    @Test func theInquiryAnswerAndSourceProtocolsDeclareExactlyWhatTheirRecordsCarry() throws {
+        let container = try TestModelContainer.inMemory(AppSchema.models)
+        let ctx = ModelContext(container)
+        let inquiry = Inquiry(source: .directEmail, inquirerName: "Wren Halloway", inquirerEmail: nil,
+                              eventName: "Lamplight Gala")
+        let answer = OrgReachabilityAnswer(orgKey: "wexcombe", result: .emailFound, probedAt: Date(),
+                                           sourceNaturalKey: "lantern", sourceGroupName: "Lantern Parade",
+                                           presenterName: "Wexcombe Touring Players")
+        let source = WatchedSource(sourceId: "quillon-calendar", orgName: "Quillon Room", kind: .html)
+        ctx.insert(inquiry)
+        ctx.insert(answer)
+        ctx.insert(source)
+        let pairs: [(proto: String, record: Any)] = [
+            ("InquiryFacts", InquiryRecord(copying: inquiry)),
+            ("OrgAnswerFacts", OrgAnswerRecord(copying: answer)),
+            ("WatchedSourceFacts", WatchedSourceRecord(copying: source)),
+        ]
+        for (proto, record) in pairs {
+            let declared = try Self.requirements(of: proto)
+            let carried = Self.labels(of: record)
+            #expect(declared.count >= 8 && carried.count >= 8, "\(proto) or its record read as too small to compare")
+            let undeclared = carried.subtracting(declared).sorted()
+            let uncarried = declared.subtracting(carried).sorted()
+            #expect(undeclared.isEmpty, Comment(rawValue: "the record carries fields \(proto) does not declare: "
+                + undeclared.joined(separator: ", ")))
+            #expect(uncarried.isEmpty, Comment(rawValue: "\(proto) declares fields its record does not carry: "
+                + uncarried.joined(separator: ", ")))
+        }
+        withExtendedLifetime(container) {}
+    }
 }
 
 // #4356 (plan v7 Phase 2, "no-model walk"): a retained row holds VALUES, never a live model.
@@ -268,12 +303,11 @@ struct RowFactsHoldNoModelTests {
 // (`aPopulatedPassHoldsAModelOnlyWhereItIsStillAllowed`), because that is where the fixture lives in which
 // every pill and stage counts something.
 //
-// TWO MEMBERS STILL HOLD A MODEL, named below with the issue that takes each out, and nothing else may.
-// Each is a reason, not a convenience: the card store needs a value for every row in scope and only the
-// engine retains them (a store over facts built by today's pass would extract every row on every pass, which
-// the live store cost probe prices); the Reached out list's show rows draw from the live show and contact
-// until #4371 gives them value snapshots. Its inquiry rows, and the inquiry block's lookup, hold
-// `InquiryIdentity` values since #4579, so that exemption is narrowed to the show rows.
+// ONE MEMBER STILL HOLDS A MODEL, named below with the issue that takes it out, and nothing else may. It is a
+// reason, not a convenience: the card store needs a value for every row in scope and only the engine retains
+// them (a store over facts built by today's pass would extract every row on every pass, which the live store
+// cost probe prices). The Reached out list's exemption went with #4358 slice E4a (#4371): its show rows hold
+// a `ReachedOutSnapshot`, as its inquiry rows have held an `InquiryIdentity` since #4579.
 @Suite("What the queue pass publishes holds no model (#4357)")
 @MainActor
 struct OutputsHoldNoModelTests {
@@ -281,18 +315,11 @@ struct OutputsHoldNoModelTests {
     /// The RenderData members still allowed a model, each with the issue that takes it out.
     static let stillHoldingAModel: [String: String] = [
         "cards": "#4358: today's pass hands the card store its models; the engine's pass hands it RowFacts",
-        "reachedOutList": "#4371: its SHOW rows draw from the live show and contact (its inquiry rows hold an "
-            + "identity since #4579)",
-    ]
-
-    /// #4579: an exemption NARROWED to part of its member. A model found in that member is allowed only on a
-    /// path through this segment, so the Reached out list may still hold its show rows' models and no other.
-    /// The segment is the enum case's own label, which is how Mirror names an associated value.
-    static let allowedOnlyThrough: [String: String] = [
-        "reachedOutList": ".prospect.",
     ]
 
     @Test func thePublishedValueTypesAreSendable() {
+        RowFactsHoldNoModelTests.requireSendable(ReachedOutEntry.self)
+        RowFactsHoldNoModelTests.requireSendable(QueueModel.ReachedOutList.self)
         RowFactsHoldNoModelTests.requireSendable(QueueItem.self)
         RowFactsHoldNoModelTests.requireSendable(RecipientSnapshot.self)
         RowFactsHoldNoModelTests.requireSendable(QueueScopeRow.self)

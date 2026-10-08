@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 // #1922: the two views that READ what a send is doing, so QueueView does not.
@@ -221,7 +222,37 @@ struct ScoutCardInputs: Equatable {
 // replaced a row since cannot send its write to the deleted one (#3690's failure, by another route).
 final class LiveProspects {
     private(set) var rows: [Prospect] = []
-    func adopt(_ rows: [Prospect]) { self.rows = rows }
+    // #4358 slice E4a: the same shows by store identifier, built the first time a drawn row asks and kept until
+    // a DIFFERENT array is adopted. The Reached out list resolves each drawn row's identity here (its pass holds
+    // no model, #4371), and a walk of every show per drawn row would cost the whole store once per row.
+    private var byID: [PersistentIdentifier: Prospect]?
+
+    func adopt(_ rows: [Prospect]) {
+        // The same storage is the same shows: an array's buffer is never written while another array shares it.
+        // Both arrays are alive here, so equal addresses cannot be a freed buffer reused.
+        if !Self.sameStorage(self.rows, rows) { byID = nil }
+        self.rows = rows
+    }
+
+    private static func sameStorage(_ a: [Prospect], _ b: [Prospect]) -> Bool {
+        a.count == b.count && a.withUnsafeBufferPointer { x in b.withUnsafeBufferPointer { $0.baseAddress == x.baseAddress } }
+    }
+}
+
+extension LiveProspects: ShowResolver {
+    @MainActor
+    func liveShow(_ id: PersistentIdentifier) -> Prospect? {
+        if byID == nil {
+            byID = Dictionary(rows.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+        return byID?[id]
+    }
+
+    @MainActor
+    func identities(forKeys keys: Set<String>) -> [String: ShowIdentity] { rows.identities(forKeys: keys) }
+
+    @MainActor
+    var everyShow: [Prospect] { rows }
 }
 
 // #4062: what makes a row something a jump can land on and mark: the show's key as its scroll identity,

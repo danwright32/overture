@@ -1139,15 +1139,12 @@ extension TermsOverFactsTests {
             Issue.record(Comment(rawValue: "\(name) is populated now, so take it off the list of members left empty"))
         }
 
-        // #4579: the narrowed exemption reaches something only if the Reached out pass draws an inquiry row
-        // beside its show rows, so a model left in an inquiry row would be in reach of the walk (L159).
+        // #4358 slice E4a: the Reached out list holds no exemption at all, so the walk reaches a model left in it
+        // only if the Reached out pass draws a show row AND an inquiry row (L159).
         let reachedOutList = try #require(passes.first { $0.0 == .reachedOut }?.1.reachedOutList)
         #expect(reachedOutList.entries.contains { if case .inquiry = $0 { return true }; return false }
-                    && reachedOutList.entries.contains { if case .prospect = $0 { return true }; return false },
-                "the Reached out pass draws no inquiry row beside a show row, so the narrowing checks nothing")
-        let narrowedWithoutExemption = Set(OutputsHoldNoModelTests.allowedOnlyThrough.keys)
-            .subtracting(OutputsHoldNoModelTests.stillHoldingAModel.keys)
-        #expect(narrowedWithoutExemption.isEmpty, "a narrowing names a member that holds no exemption")
+                    && reachedOutList.entries.contains { if case .show = $0 { return true }; return false },
+                "the Reached out pass draws no inquiry row beside a show row, so the walk checks less than it says")
 
         var holding = Set<String>()
         var offenders: [String] = []
@@ -1159,8 +1156,6 @@ extension TermsOverFactsTests {
                 holding.insert(label)
                 if OutputsHoldNoModelTests.stillHoldingAModel[label] == nil {
                     offenders += found.map { "\(focus.rawValue): \($0)" }
-                } else if let through = OutputsHoldNoModelTests.allowedOnlyThrough[label] {
-                    offenders += found.filter { !$0.contains(through) }.map { "\(focus.rawValue): \($0)" }
                 }
             }
         }
@@ -1171,5 +1166,128 @@ extension TermsOverFactsTests {
         let stale = OutputsHoldNoModelTests.stillHoldingAModel.keys.filter { !holding.contains($0) }.sorted()
         #expect(stale.isEmpty, Comment(rawValue: "these members no longer hold a model, so take them off "
             + "`OutputsHoldNoModelTests.stillHoldingAModel`: " + stale.joined(separator: ", ")))
+    }
+}
+
+// MARK: #4358 slice E4a, the whole pass over facts against the whole pass over models (plan item 14)
+
+// The RenderData comparator's populated fixture, COMMITTED here rather than found on the live store, which holds
+// none of several things it compares (#4357's 2026-10-06 note: G3's oracle compared several pill counts only at
+// zero). On top of the pill fixture above: the long tail's merge survivor and fan out, the producers' stored
+// answer and the shows that inherit it, a watched calendar a show is listed on, a show a check missed, and a
+// booking suggestion on a high fit show. Every inquiry is saved, so both arms name its row by its store
+// identifier. Invented names throughout (L155, L222).
+extension TermsOverFactsTests {
+
+    @MainActor
+    private func comparatorFixture() throws -> (store: TermsOverFacts.PassStore, container: ModelContainer) {
+        let container = try TestModelContainer.inMemory(AppSchema.models)
+        let ctx = ModelContext(container)
+        let (seeded, inquiries) = try seedAgentInputsFrom(ctx)
+        for inquiry in inquiries { ctx.insert(inquiry) }
+        let ledger = try seedProducers(ctx, seeded)
+        _ = try seedLongTail(ctx)
+        // A source-wide break of its own: the pill seeds above clear the misses on some of `seed`'s three.
+        for (n, night) in ["2026-10-27", "2026-10-28", "2026-10-29"].enumerated() {
+            row(ctx, key: "fernhollow \(n)", title: "Fernhollow Act \(n)", venue: "Fernhollow Hall", opens: night,
+                missed: 5)
+        }
+        let noon = TermsOverFacts.stageContext(for: seeded, asOf: asOf).now
+        let missed = row(ctx, key: "missed by a check", title: "Quietwater Trio", venue: "Quillon Room",
+                         opens: "2026-10-24")
+        missed.reachabilityUnansweredAt = noon.addingTimeInterval(-3600)
+        let suggested = row(ctx, key: "booking suggested", title: "Bellwether Duo", venue: "Quillon Room",
+                            opens: "2026-10-25")
+        suggested.bookingSuggested = true
+        suggested.tier = "high"
+        suggested.sourceIds = ["quillon-calendar"]
+        let source = WatchedSource(sourceId: "quillon-calendar", orgName: "Quillon Room",
+                                   listingsURL: "https://quillon.example.invalid/calendar", kind: .html)
+        ctx.insert(source)
+        try ctx.save()
+        let store = TermsOverFacts.PassStore(shows: try ctx.fetch(FetchDescriptor<Prospect>()), inquiries: inquiries,
+                                             answers: ledger.answers, sources: [source])
+        return (store, container)
+    }
+
+    private static let everyFocus: [StageFocus?] = StageFocus.allCases.map { $0 } + [nil]
+
+    @MainActor
+    @Test func theWholePassAnswersTheSameOverFactsAsOverModelsWithEveryCountItComparesNonZero() throws {
+        let (store, container) = try comparatorFixture()
+        let context = TermsOverFacts.stageContext(for: store.shows, asOf: asOf)
+        let (findings, passes) = TermsOverFacts.wholePassFindings(store, context: context, focuses: Self.everyFocus,
+                                                                  cards: nil)
+
+        // Positive control (L159): every member the comparator compares holds something in at least one pass, and
+        // every count it compares is non zero in the pass that states it, so no comparison below agreed at zero.
+        var populated = Set<String>()
+        for data in passes {
+            for child in Mirror(reflecting: data).children where RowFactsHoldNoModelTests.isPopulated(child.value) {
+                if let label = child.label { populated.insert(label) }
+            }
+        }
+        let empty = RenderDataComparison.fields.map(\.name).filter { !populated.contains($0) }
+        #expect(empty.isEmpty, Comment(rawValue: "these compared members are empty in every pass: "
+            + empty.joined(separator: ", ")))
+        let first = try #require(passes.first)
+        let zeroPills = Mirror(reflecting: first.agentInputs).children.compactMap { ($0.value as? Int) == 0 ? $0.label : nil }
+        #expect(zeroPills.isEmpty, Comment(rawValue: "pills at zero: " + zeroPills.joined(separator: ", ")))
+        // Reached out and Follow ups are never placement counts: their pills come from `ReachedOutQueue` and
+        // `DueWork` (StageNavigation's own note), which the pill check above already holds non zero.
+        let zeroStages = StageFocus.allCases.filter { ![.reachedOut, .followUps].contains($0) }
+            .filter { (first.stageCounts[$0] ?? 0) == 0 }.map(\.rawValue)
+        #expect(zeroStages.isEmpty, Comment(rawValue: "stages counting nothing: " + zeroStages.joined(separator: ", ")))
+        #expect(first.summary.high > 0 && first.pendingBookings > 0 && first.missedByACheckKeys.count > 0
+                    && first.feedBreaks.count > 0 && first.mergeSurvivorsDropped.count > 0 && first.fanOutLine != nil,
+                "a masthead count the comparator checks is zero or empty in the fixture")
+        #expect(first.cards.preamble.tables.inherited("saltmarsh a") != nil
+                    && !first.cards.preamble.calendarBySourceId.isEmpty,
+                "no card inherits an answer or reads a calendar, so the preamble compared nothing")
+
+        #expect(findings.isEmpty, Comment(rawValue: findings.joined(separator: "\n")))
+        withExtendedLifetime(container) {}
+    }
+
+    // The comparison's own control (L1): facts taken BEFORE a contact's send moved are a different store, and the
+    // whole pass over them must say so by member name, never by a title or an address.
+    @MainActor
+    @Test func theWholePassComparisonSeesARowThatChangedAfterItWasExtracted() throws {
+        let (store, container) = try comparatorFixture()
+        let context = TermsOverFacts.stageContext(for: store.shows, asOf: asOf)
+        let stale = store.shows.map(RowFacts.extract)
+        let quiet = try #require(store.shows.first { $0.naturalKey == "degraded" }?.recipients.first)
+        quiet.sendState = .sending
+        quiet.sendClaimedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let (findings, _) = TermsOverFacts.wholePassFindings(store, facts: stale, context: context,
+                                                             focuses: [.review], cards: nil)
+        #expect(findings.contains { $0.contains("agentInputs") }, Comment(rawValue: "a send claimed after extraction "
+            + "was not seen by the whole pass comparison: " + findings.joined(separator: "\n")))
+        #expect(!findings.contains { $0.contains("example.invalid") || $0.contains("Quillon") },
+                "a finding named an address or a room rather than a member")
+        withExtendedLifetime(container) {}
+    }
+
+    // #4358 slice E4a: the pass runs over retained facts OFF the main actor and answers as it does on it, which is
+    // what lets the engine's verifier build a pass on its own thread (#4357 step 8).
+    @MainActor
+    @Test func thePassOverFactsRunsOffTheMainActorAndAnswersAlike() async throws {
+        let (store, container) = try comparatorFixture()
+        let context = TermsOverFacts.stageContext(for: store.shows, asOf: asOf)
+        let facts = store.shows.map(RowFacts.extract)
+        let inquiries = store.inquiries.map(InquiryRecord.init(copying:))
+        let answers = store.answers.map(OrgAnswerRecord.init(copying:))
+        let sources = store.sources.map(WatchedSourceRecord.init(copying:))
+        let refusals = store.refusals, overrides = store.overrides
+        let onMain = TermsOverFacts.factsPass(facts, inquiries, answers, sources, refusals, overrides, context).data
+        let offMain = await Task.detached {
+            #expect(pthread_main_np() == 0, "the detached pass ran on the main thread, so it proved nothing")
+            return TermsOverFacts.factsPass(facts, inquiries, answers, sources, refusals, overrides, context)
+        }.value.data
+        #expect(!onMain.reachedOutList.entries.isEmpty, "the Reached out pass drew nothing, so little was compared")
+        let differing = RenderDataComparison.differingFields(onMain, offMain)
+        #expect(differing.isEmpty, Comment(rawValue: "off the main actor the pass differs in: "
+            + differing.joined(separator: ", ")))
+        withExtendedLifetime(container) {}
     }
 }

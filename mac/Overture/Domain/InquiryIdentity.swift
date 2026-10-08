@@ -33,7 +33,9 @@ struct InquiryIdentity: Equatable, Hashable, Sendable {
         self.createdAt = createdAt
     }
 
-    init(_ inquiry: Inquiry) {
+    // #4358 slice E4a: over any `InquiryFacts`, so the queue pass takes an identity from the model today and from
+    // the engine's retained record after the cutover.
+    init(_ inquiry: some InquiryFacts) {
         self.init(inquiryID: inquiry.persistentModelID, createdAt: inquiry.createdAt)
     }
 
@@ -42,10 +44,15 @@ struct InquiryIdentity: Equatable, Hashable, Sendable {
     /// itself exactly as every other unsaved one's does (see above), so it is named by the object instead,
     /// which is distinct for as long as the object is alive; its first save gives it a permanent identifier and
     /// the next pass draws it under that.
-    static func rowID(of inquiry: Inquiry) -> String {
+    ///
+    /// #4358 slice E4a: over any `InquiryFacts`. The unsaved branch needs an OBJECT, and only the live model is one,
+    /// so it is found by type rather than by a member a value would have to fake. A retained record of an unsaved
+    /// inquiry has no object to be named by and keeps the identifier's description, which `identitiesByRowID`
+    /// then leaves out when two claim it (L521): refused, never handed to the wrong inquiry.
+    static func rowID(of inquiry: some InquiryFacts) -> String {
         let id = inquiry.persistentModelID
-        guard id.storeIdentifier == nil else { return String(describing: id) }
-        return "unsaved-\(UInt(bitPattern: ObjectIdentifier(inquiry)))"
+        guard id.storeIdentifier == nil, let object = inquiry as? Inquiry else { return String(describing: id) }
+        return "unsaved-\(UInt(bitPattern: ObjectIdentifier(object)))"
     }
 
     // WHY A PRESS FINDS NOTHING. Three causes, three sentences, on `ShowIdentity.Refusal`'s rule (L11, L260).

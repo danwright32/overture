@@ -51,15 +51,8 @@ final class OrgReachabilityAnswer {
         self.foundEmailsRaw = foundEmails.joined(separator: "\n")
     }
 
-    // nil when a future version wrote a verdict this build cannot read. An unreadable value must never be
-    // reported as one of today's answers (#1596's own rule, kept here).
-    var result: Reachability.ProbeResult? {
-        Reachability.ProbeResult(rawValue: resultRaw)
-    }
-
-    var foundEmails: [String] {
-        foundEmailsRaw.split(separator: "\n").map(String.init)
-    }
+    // `result` and `foundEmails` are on `OrgAnswerFacts` (QueueFacts.swift) since #4358 slice E4a, so the queue
+    // pass reads one definition of each over this model and over the engine's retained record.
 
     // Move an organisation's answer forward when a newer check settles. Older evidence never overwrites
     // newer: a re-settle of a run that already landed, or a stale results file consumed twice, must not

@@ -116,14 +116,14 @@ extension AgentInputs {
     // row's contacts every term below walks, and it is handed to each of them rather than read here: the model
     // entry point above hands in `recipients`, the uncounted relationship those terms always read through their
     // own model entry points, so no `WorkTally.recipientReaches` pin moves; a facts caller hands in
-    // `factContacts`. Nothing here reads a show or a contact member itself. Inquiries are a separate model with
-    // no facts counterpart and pass through unchanged.
+    // `factContacts`. Nothing here reads a show or a contact member itself. #4358 slice E4a: the inquiries are the
+    // row family's own (`QueuePassRow.PassInquiry`), the models beside models and the records beside facts.
     //
     // `inquiries` carries no default here, unlike the model entry point's, which keeps it for the test call
     // sites that have none: a generic caller is new code, and a forgotten list would silently drop the
     // inquiry halves of two pills (L168).
-    static func from<Row: ProspectFacts>(
-        prospects: [Row], allProspects: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry],
+    static func from<Row: QueuePassRow>(
+        prospects: [Row], allProspects: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Row.PassInquiry],
         context: StageContext, gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool,
         placement: StageNavigation.Placement? = nil,
         reachedOut: [(prospect: Row, recipient: Row.Contact, next: Date)]? = nil) -> AgentInputs {

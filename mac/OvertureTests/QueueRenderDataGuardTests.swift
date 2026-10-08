@@ -132,7 +132,7 @@ struct QueueRenderDataGuardTests {
         // #4357 slice G3: the rule lives in the generic body, and the model entry point the pass calls hands
         // its rows to it. Both halves are held, so neither a body that stopped counting in one pass nor an
         // entry point that stopped reaching that body is green.
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "from<Row: ProspectFacts>", in: agentRoster),
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "from<Row: QueuePassRow>", in: agentRoster),
               let entry = SourceGuardHelper.bodyOfFunction(named: "from", in: agentRoster) else {
             Issue.record("expected to find AgentInputs.from's body and its model entry point")
             return

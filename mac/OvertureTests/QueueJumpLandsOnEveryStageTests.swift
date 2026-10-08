@@ -70,7 +70,7 @@ struct QueueJumpLandsOnEveryStageTests {
         let p = prospect(key: key, performanceDate: "2026-09-25", recipient: r)
         ctx.insert(p)
         let items = [item(key: "other", date: "2026-09-02"), item(key: key, date: "2026-09-25")]
-        let reachedOut = [ReachedOutEntry.prospect(prospect: p, recipient: r, next: day("2026-09-17"))]
+        let reachedOut = [ReachedOutEntry.show(ReachedOutSnapshot(show: p, contact: r, next: day("2026-09-17")))]
 
         for stage in landableStages {
             guard let group = QueueModel.jumpScrollGroupID(for: key, onStage: stage, items: items,
@@ -98,7 +98,7 @@ struct QueueJumpLandsOnEveryStageTests {
         let r = Recipient(id: "a@contact.example", email: "a@contact.example", name: "A", provenance: .act)
         let p = prospect(key: "k", performanceDate: "2026-10-01", recipient: r)
         ctx.insert(p)
-        let reachedOut = [ReachedOutEntry.prospect(prospect: p, recipient: r, next: day("2026-09-17"))]
+        let reachedOut = [ReachedOutEntry.show(ReachedOutSnapshot(show: p, contact: r, next: day("2026-09-17")))]
         for stage in landableStages {
             #expect(QueueModel.jumpScrollGroupID(for: "absent", onStage: stage, items: [],
                                                  reachedOut: reachedOut) == nil)
@@ -124,8 +124,8 @@ struct QueueJumpLandsOnEveryStageTests {
         let b = prospect(key: "b|2026-10-08|v", performanceDate: "2026-10-08", recipient: r2)
         ctx.insert(a)
         ctx.insert(b)
-        let first = ReachedOutEntry.prospect(prospect: a, recipient: r1, next: day("2026-09-17"))
-        let second = ReachedOutEntry.prospect(prospect: b, recipient: r2, next: day("2026-09-17"))
+        let first = ReachedOutEntry.show(ReachedOutSnapshot(show: a, contact: r1, next: day("2026-09-17")))
+        let second = ReachedOutEntry.show(ReachedOutSnapshot(show: b, contact: r2, next: day("2026-09-17")))
         #expect(first.id != second.id)
         #expect(first.showKey == "a|2026-10-01|v")
         #expect(second.showKey == "b|2026-10-08|v")

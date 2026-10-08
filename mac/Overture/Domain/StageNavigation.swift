@@ -258,7 +258,8 @@ enum StageNavigation {
     // Once he has replied and is awaiting a response it moves to .reachedOut. A booked or hand-lost
     // inquiry is closed and in no stage. Pure and tested; the view and the counts both read it so they
     // cannot drift.
-    static func stage(for inquiry: Inquiry) -> StageFocus? {
+    // #4358 slice E4a: over any `InquiryFacts`, the model's or the engine's retained record.
+    static func stage(for inquiry: some InquiryFacts) -> StageFocus? {
         guard inquiry.isOpen else { return nil }
         return inquiry.sentAt == nil ? .review : .reachedOut
     }

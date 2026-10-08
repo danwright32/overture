@@ -249,7 +249,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
               answers: "which shows the global search bar is allowed to find",
               mustCall: ["stagedKeys"]),
         .init(path: "Overture/UI/QueueRenderPass.swift",
-              marker: "static func make(_ i: Inputs) -> QueueView.RenderData {",
+              marker: "static func make(_ i: PassInputs<some QueuePassRow>) -> QueueView.RenderData {",
               answers: "the masthead's N in the queue, and the rows the focused stage renders",
               mustCall: ["queueKeys", "focusedKeys"]),
         .init(path: "Overture/UI/QueueView.swift",

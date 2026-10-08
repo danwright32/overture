@@ -75,7 +75,7 @@ struct OneNextReachOutRuleTests {
         var inquiry: Date?
         for entry in entries {
             switch entry {
-            case .prospect(_, _, let next): show = next
+            case .show(let snapshot): show = snapshot.next
             case .inquiry(_, _, let next): inquiry = next
             }
         }

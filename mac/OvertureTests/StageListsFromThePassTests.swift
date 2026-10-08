@@ -114,7 +114,7 @@ struct StageListsFromThePassTests {
         let oldCalendars = QueueModel.sourceCalendarIndex(store.sources)
 
         // The fixture reaches every branch, or the equality is vacuous.
-        #expect(old.contains { if case .prospect = $0 { true } else { false } }, "no show on the list")
+        #expect(old.contains { if case .show = $0 { true } else { false } }, "no show on the list")
         #expect(old.contains { if case .inquiry = $0 { true } else { false } }, "no inquiry on the list")
         #expect(oldGroups.count > 1, "every row falls on one day, so the grouping is not exercised")
         #expect(oldCalendars == ["src-thornbury": "https://thornbury.example/calendar"])

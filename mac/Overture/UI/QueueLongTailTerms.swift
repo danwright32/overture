@@ -95,7 +95,7 @@ extension QueueRenderPass {
 
     // #4357 slice I3 (plan v7 Phase 3, step 6): in key order rather than the corpus's, which is the unsorted
     // query's (L343). The notice's control carries these keys, so its value moved with the store's order.
-    private static func unseenSurvivors<Row: ProspectFacts>(of rows: [Row], today: String,
+    static func unseenSurvivors<Row: ProspectFacts>(of rows: [Row], today: String,
                                                             closed: (Row) -> Bool) -> [String] {
         rows.filter { p in
             guard p.mergeSurvivorUnseenAt != nil, !closed(p) else { return false }
