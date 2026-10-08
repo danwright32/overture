@@ -94,7 +94,7 @@ enum DueWork {
     // #4357 slice E2: the five lists over any rows, with the contacts handed in, so the model entry point
     // above walks the recipients it always did and a retained row answers by the one body. Each list keeps
     // its term's own row shape; the model entry point wraps them in the structs the sheet draws.
-    struct Due<Row: ProspectFacts> {
+    struct Due<Row: QueuePassRow> {
         var afterTheShow: [(prospect: Row, recipient: Row.Contact, prompt: PostEventPrompt.Prompt)]
         var silent: [(prospect: Row, recipient: Row.Contact)]
         var stalledReplyDrafts: [(prospect: Row, recipient: Row.Contact, requestedAt: Date)]
@@ -109,7 +109,7 @@ enum DueWork {
         }
     }
 
-    static func rows<Row: ProspectFacts>(from shows: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry],
+    static func rows<Row: QueuePassRow>(from shows: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Row.PassInquiry],
                                          now: Date, replyRunAlive: Bool,
                                          followUp: FollowUpConfig = .init()) -> Due<Row> {
         // #2967 state 2: one form pitch on a show that has been and gone is owed BOTH questions at
@@ -173,7 +173,7 @@ enum DueWork {
     // model entry point above. Slice E2 left it out because nothing read it yet. Counted off the generic lists
     // directly: the model entry point used to wrap every row in the sheet's structs only to count them, and the
     // counts of a wrapped list and of the list it wraps are the same numbers.
-    static func counts<Row: ProspectFacts>(from shows: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry],
+    static func counts<Row: QueuePassRow>(from shows: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Row.PassInquiry],
                                            now: Date, replyRunAlive: Bool,
                                            followUp: FollowUpConfig = .init()) -> Counts {
         rows(from: shows, contacts: contacts, inquiries: inquiries, now: now, replyRunAlive: replyRunAlive,

@@ -70,7 +70,7 @@ struct QueueJumpLandsOnEveryStageTests {
         let p = prospect(key: key, performanceDate: "2026-09-25", recipient: r)
         ctx.insert(p)
         let items = [item(key: "other", date: "2026-09-02"), item(key: key, date: "2026-09-25")]
-        let reachedOut = [ReachedOutEntry.prospect(prospect: p, recipient: r, next: day("2026-09-17"))]
+        let reachedOut = [ReachedOutEntry.show(ReachedOutSnapshot(show: p, contact: r, next: day("2026-09-17")))]
 
         for stage in landableStages {
             guard let group = QueueModel.jumpScrollGroupID(for: key, onStage: stage, items: items,
@@ -98,7 +98,7 @@ struct QueueJumpLandsOnEveryStageTests {
         let r = Recipient(id: "a@contact.example", email: "a@contact.example", name: "A", provenance: .act)
         let p = prospect(key: "k", performanceDate: "2026-10-01", recipient: r)
         ctx.insert(p)
-        let reachedOut = [ReachedOutEntry.prospect(prospect: p, recipient: r, next: day("2026-09-17"))]
+        let reachedOut = [ReachedOutEntry.show(ReachedOutSnapshot(show: p, contact: r, next: day("2026-09-17")))]
         for stage in landableStages {
             #expect(QueueModel.jumpScrollGroupID(for: "absent", onStage: stage, items: [],
                                                  reachedOut: reachedOut) == nil)
@@ -124,8 +124,8 @@ struct QueueJumpLandsOnEveryStageTests {
         let b = prospect(key: "b|2026-10-08|v", performanceDate: "2026-10-08", recipient: r2)
         ctx.insert(a)
         ctx.insert(b)
-        let first = ReachedOutEntry.prospect(prospect: a, recipient: r1, next: day("2026-09-17"))
-        let second = ReachedOutEntry.prospect(prospect: b, recipient: r2, next: day("2026-09-17"))
+        let first = ReachedOutEntry.show(ReachedOutSnapshot(show: a, contact: r1, next: day("2026-09-17")))
+        let second = ReachedOutEntry.show(ReachedOutSnapshot(show: b, contact: r2, next: day("2026-09-17")))
         #expect(first.id != second.id)
         #expect(first.showKey == "a|2026-10-01|v")
         #expect(second.showKey == "b|2026-10-08|v")
@@ -178,6 +178,28 @@ struct QueueJumpIdentityWiringGuardTests {
                 "the groups must be scroll targets, or the scroll position cannot be driven to one")
         #expect(list.contains(".jumpMark(key:"),
                 "each show row must carry the show's key and draw the jump mark")
+    }
+
+    // #4358 slice E4a: a show row resolves its live show as it draws and draws NOTHING when the show or contact
+    // went since the pass, so its divider belongs to the row, never to the loop. One divider per kind of row,
+    // each after the row it closes: a divider left after the switch draws a stray rule for a refused row.
+    @Test func eachReachedOutRowDrawsItsOwnDivider() {
+        guard let list = SourceGuardHelper.bodyOfFunction(named: "reachedOutList", in: queueView),
+              let show = list.range(of: "case .show(let snapshot):"),
+              let inquiry = list.range(of: "case .inquiry(let identity, let row, _):") else {
+            Issue.record("expected the Reached out list's two cases")
+            return
+        }
+        let showBranch = list[show.upperBound..<inquiry.lowerBound]
+        // The inquiry case is the switch's last, so its branch runs to the case's own row and divider; the
+        // count above is what keeps a third divider after the switch from being read as the inquiry's.
+        let inquiryBranch = list[inquiry.upperBound...]
+        let inquiryRow = inquiryBranch.range(of: "inquiryRowView(")
+        #expect(list.components(separatedBy: "Divider()").count - 1 == 2,
+                "the Reached out list should draw exactly one divider per kind of row")
+        #expect(showBranch.contains("Divider()")
+                    && inquiryRow.map { inquiryBranch[$0.upperBound...].prefix(120).contains("Divider()") } == true,
+                "each kind of row must draw its own divider, right after its own row")
     }
 
     @Test func theDateGroupedCardsUseTheSameMark() {

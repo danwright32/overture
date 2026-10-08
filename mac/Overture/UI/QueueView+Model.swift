@@ -1425,7 +1425,7 @@ enum QueueModel {
     // read per row, never rebuilt per card (#1121). Lifted out of `items(from:)` by #2816 so the rows on
     // Reached out and Follow-ups resolve their links against the same table the queue card does rather
     // than a second copy of it.
-    static func sourceCalendarIndex(_ sources: [WatchedSource]) -> [String: String] {
+    static func sourceCalendarIndex(_ sources: [some WatchedSourceFacts]) -> [String: String] {
         QueueRenderPass.WorkTally.recordSourceCalendarIndexBuild()
         return Dictionary(
             sources.compactMap { s -> (String, String)? in
@@ -1995,11 +1995,11 @@ enum QueueModel {
     // grouping below produces a single sequence of headings that all answer the same question. An
     // inquiry with no reach-out date is left out rather than dated arbitrarily; it has nothing to be due
     // about, and inventing a date would put a row under a heading that lies about it.
-    static func reachedOutEntries(prospects: [(prospect: Prospect, recipient: Recipient, next: Date)],
-                                  inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+    static func reachedOutEntries<Row: QueuePassRow>(prospects: [(prospect: Row, recipient: Row.Contact, next: Date)],
+                                                     inquiries: [Row.PassInquiry], now: Date) -> [ReachedOutEntry] {
         QueueRenderPass.WorkTally.recordStageListRows(prospects.count + inquiries.count)
         let prospectEntries = prospects.map {
-            ReachedOutEntry.prospect(prospect: $0.prospect, recipient: $0.recipient, next: $0.next)
+            ReachedOutEntry.show(ReachedOutSnapshot(show: $0.prospect, contact: $0.recipient, next: $0.next))
         }
         // Each inquiry is paired with ITS OWN row rather than matched back by id: a row's id comes from
         // the persistent model id, which is temporary and not yet distinct for an object that has not
@@ -2021,9 +2021,9 @@ enum QueueModel {
     static func reachedOutEntryOrder(_ a: ReachedOutEntry, _ b: ReachedOutEntry) -> Bool {
         if a.next != b.next { return a.next < b.next }
         switch (a, b) {
-        case let (.prospect(p, _, _), .prospect(q, _, _)): return p.naturalKey < q.naturalKey
-        case (.prospect, .inquiry): return true
-        case (.inquiry, .prospect): return false
+        case let (.show(p), .show(q)): return p.show.naturalKey < q.show.naturalKey
+        case (.show, .inquiry): return true
+        case (.inquiry, .show): return false
         // #4579: from the values the entry holds, the row's key and the identity's identifier, which are the
         // model's own key and identifier taken when the row was drawn.
         case let (.inquiry(i, r, _), .inquiry(j, s, _)):
@@ -2034,7 +2034,7 @@ enum QueueModel {
     // #4357 slice I3: two inquiries that tie on everything a list sorts them by, by the event's natural key and
     // then the store's own identifier. The key alone is not enough: two people can write about one event, and
     // their inquiries then share it.
-    static func inquiryKeyThenIdentifier(_ a: Inquiry, _ b: Inquiry) -> Bool {
+    static func inquiryKeyThenIdentifier<I: InquiryFacts>(_ a: I, _ b: I) -> Bool {
         inquiryKeyThenIdentifier((a.naturalKey, a.persistentModelID), (b.naturalKey, b.persistentModelID))
     }
 
@@ -2050,8 +2050,8 @@ enum QueueModel {
     // #4311: the Reached out stage's rows, both kinds: the pass's shows and the inquiries ON that stage.
     // One declaration for the list and the deep link that resolves a group against it (#4062), so the two
     // cannot merge different sets.
-    static func reachedOutStageEntries(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
-                                       inquiries: [Inquiry], now: Date) -> [ReachedOutEntry] {
+    static func reachedOutStageEntries<Row: QueuePassRow>(_ dated: [(prospect: Row, recipient: Row.Contact, next: Date)],
+                                                          inquiries: [Row.PassInquiry], now: Date) -> [ReachedOutEntry] {
         reachedOutEntries(prospects: dated,
                           inquiries: inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut },
                           now: now)
@@ -2061,7 +2061,7 @@ enum QueueModel {
     // It used to be derived inside the list's body on every evaluation, and a body runs on events that
     // change no data (L471). The calendar table is built only when there is a row to resolve a link for,
     // as the body did (#2816).
-    struct ReachedOutList {
+    struct ReachedOutList: Equatable, Sendable {
         let entries: [ReachedOutEntry]
         let groups: [ReachOutDateGroup<ReachedOutEntry>]
         let sourceCalendars: [String: String]
@@ -2076,8 +2076,8 @@ enum QueueModel {
     }
 
     // `sourceCalendars` is asked only when there is a row, so an empty stage builds no table.
-    static func reachedOutList(_ dated: [(prospect: Prospect, recipient: Recipient, next: Date)],
-                               inquiries: [Inquiry], now: Date,
+    static func reachedOutList<Row: QueuePassRow>(_ dated: [(prospect: Row, recipient: Row.Contact, next: Date)],
+                                                  inquiries: [Row.PassInquiry], now: Date,
                                sourceCalendars: () -> [String: String]) -> ReachedOutList {
         let entries = reachedOutStageEntries(dated, inquiries: inquiries, now: now)
         guard !entries.isEmpty else { return .none }
@@ -2093,7 +2093,7 @@ enum QueueModel {
     // string for every unsaved inquiry, so this kept the FIRST under all of their rows (L131). A key that
     // more than one inquiry still claims is LEFT OUT rather than given to either (L521): a press on that row
     // then says no inquiry stands behind it, rather than acting on whichever came first.
-    static func inquiriesByRowID(_ inquiries: [Inquiry]) -> [String: InquiryIdentity] {
+    static func inquiriesByRowID(_ inquiries: [some InquiryFacts]) -> [String: InquiryIdentity] {
         QueueRenderPass.WorkTally.recordStageListRows(inquiries.count)
         return identitiesByRowID(inquiries.map { (InquiryIdentity.rowID(of: $0), InquiryIdentity($0)) })
     }
@@ -2461,7 +2461,7 @@ enum QueueModel {
     // unsorted query's (L343). #1436 drew them by date with the undated last, through `combinedQueueRows`;
     // #2348 deleted that function and its sort went with it, so this puts that order back and gives it the
     // ties it never had (`inquiryOrder`).
-    static func inquiryRows(_ inquiries: [Inquiry], now: Date) -> [InquiryRow] {
+    static func inquiryRows(_ inquiries: [some InquiryFacts], now: Date) -> [InquiryRow] {
         inquiries.filter { $0.isOpen }.sorted(by: inquiryOrder).map { inquiry in
             InquiryRow(
                 id: InquiryIdentity.rowID(of: inquiry),
@@ -2489,7 +2489,7 @@ enum QueueModel {
 
     // The event's night ascending, an undated inquiry after every dated one (#1436's "undated groups last"),
     // then `inquiryKeyThenIdentifier`.
-    static func inquiryOrder(_ a: Inquiry, _ b: Inquiry) -> Bool {
+    static func inquiryOrder<I: InquiryFacts>(_ a: I, _ b: I) -> Bool {
         switch (a.performanceDate, b.performanceDate) {
         case let (x?, y?) where x != y: return x < y
         case (.some, nil): return true
@@ -3367,8 +3367,8 @@ enum QueueModel {
         }
     }
 
-    static func scope(from prospects: [Prospect],
-                      answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
+    static func scope<Row: QueuePassRow>(from prospects: [Row],
+                      answers: [Row.PassAnswer] = [], corpus: [Row]? = nil,
                       // #3652: the rows the cross-venue engagement link is CLUSTERED over, which is not
                       // the same question as which rows are being built. `EngagementLink.group` can only
                       // link what it is handed, so a show whose sibling engagement is not in this list
@@ -3380,9 +3380,9 @@ enum QueueModel {
                       // the full set here. It is NOT defaulted to `corpus`: that would newly link
                       // siblings sitting on DISMISSED rows, which is a product question rather than a
                       // performance one and is deliberately left alone inside a performance change.
-                      rowsForLinking: [Prospect]? = nil,
+                      rowsForLinking: [Row]? = nil,
                       overrides: ProducerOverrides = .none,
-                      sources: [WatchedSource] = [],
+                      sources: [Row.PassSource] = [],
                       // #2392: the addresses Dan has struck, read once by the caller and handed in.
                       // Defaulted empty so every call site that only wants rows is unaffected.
                       refusals: ContactRefusal.Ledger = .none,
@@ -3514,7 +3514,10 @@ enum QueueModel {
         let pre = tableLog.map { built.reading(through: built.tables.recording(into: $0)) } ?? built
 
         var rows: [QueueScopeRow] = []
-        var contactsByKey: [String: [Recipient]] = [:]
+        var contactsByKey: [String: [Row.Contact]] = [:]
+        // #4358 slice E4a: each built card's show draft, which is what its contacts send (`effectiveBody`), so the
+        // check below weighs a card's risk over any rows without walking back from a contact to its show.
+        var draftBodies: [String: String?] = [:]
         var cards: [String: QueueItem] = [:]
         rows.reserveCapacity(prospects.count)
         contactsByKey.reserveCapacity(prospects.count)
@@ -3530,14 +3533,15 @@ enum QueueModel {
             if pre.tables.isCollapsedHidden(p.naturalKey) { continue }
             // #3653 Phase 3: the contacts, read ONCE for this show, whatever is built from them.
             //
-            // `Prospect.countedRecipients` is the accessor that records `WorkTally.recipientReaches`, so
-            // this is the line the pass-level pin measures. The array is KEPT, because #3654 builds a
+            // `factContacts` is, on a model, `Prospect.countedRecipients`, the accessor that records
+            // `WorkTally.recipientReaches`, so this is the line the pass-level pin measures (#4358 slice E4a:
+            // over retained facts it is the list the row already holds, and counts nothing). The array is KEPT, because #3654 builds a
             // card for a show minutes after its row, when the person scrolls to it, and reading the
             // contacts again then would make the pin a function of how far Dan scrolled rather than of
             // the code (L63). It costs nothing to keep: SwiftData already faulted and cached the
             // relationship on the object, so these are references to objects the context is holding
             // anyway.
-            let contacts = p.countedRecipients
+            let contacts = p.factContacts
             let key = p.naturalKey
             contactsByKey[key] = contacts
             rows.append(QueueScopeRow(p, facts: RecipientFacts.of(p, contacts: contacts),
@@ -3545,7 +3549,8 @@ enum QueueModel {
             // #3654: a card ONLY for a show something is going to draw. `nil` means every one of them,
             // which is what `items(from:)` and Archive still ask for.
             if cardKeys?.contains(key) ?? true {
-                cards[key] = card(p, contacts: contacts, preamble: pre)
+                cards[key] = card(p, among: contacts, preamble: pre)
+                draftBodies[key] = p.draftBody
             }
         }
         // #3654 step 4c. Run on EVERY pass and never behind a `#if DEBUG`: the one instrument of this
@@ -3553,6 +3558,7 @@ enum QueueModel {
         // would be code nobody has ever executed (L535, C3). `CardCheckShipsInReleaseTests` holds it.
         var divergence: Scope.Divergence?
         if let found = checkOneCardAgainstAFreshBuild(cards: cards, contactsByKey: contactsByKey,
+                                                      draftBodies: draftBodies,
                                                       corpus: prospects, preamble: pre) {
             // CORRECTION C1: the CORRECT card wins the render. The finding is recorded; the person is not
             // shown a card the app has just proved wrong.
@@ -3650,15 +3656,19 @@ enum QueueModel {
     // CORRECTION C1: on a divergence the FRESH card is put into the store, so the render draws the
     // correct one. Reporting a card wrong and then drawing it anyway is a finding the person cannot act
     // on standing beside the defect it names (L272).
-    static func checkOneCardAgainstAFreshBuild(
-        cards: [String: QueueItem], contactsByKey: [String: [Recipient]], corpus: [Prospect],
+    // #4358 slice E4a: over any rows, each card weighed by its show's draft (`draftBodies`, taken where the card
+    // was built), which is what a contact's `effectiveBody` reads; the fresh card is built over the show's own
+    // contacts read again, which on a model is the counted read the model entry point always took.
+    static func checkOneCardAgainstAFreshBuild<Row: ProspectFacts>(
+        cards: [String: QueueItem], contactsByKey: [String: [Row.Contact]], draftBodies: [String: String?],
+        corpus: [Row],
         preamble pre: CardPreamble) -> (key: String, fields: [String], fresh: QueueItem)? {
-        guard let key = riskiestKey(among: cards.keys, contactsByKey: contactsByKey),
+        guard let key = riskiestKey(among: cards.keys, contactsByKey: contactsByKey, draftBodies: draftBodies),
               let mine = cards[key] else { return nil }
         // Independently resolved: `first(where:)` over the corpus, not the store's own index.
         guard let show = corpus.first(where: { $0.naturalKey == key }) else { return nil }
         let fresh = QueueRenderPass.WorkTally.$asOracle.withValue(true) {
-            card(show, contacts: nil, preamble: pre)
+            card(show, among: show.factContacts, preamble: pre)
         }
         let differing = differingFieldNames(mine, fresh)
         guard !differing.isEmpty else { return nil }
@@ -3666,17 +3676,20 @@ enum QueueModel {
     }
 
     // The most pending body-carrying contacts, ties broken by key so a pass is deterministic.
-    static func riskiestKey(among keys: some Collection<String>,
-                            contactsByKey: [String: [Recipient]]) -> String? {
+    static func riskiestKey<C: ContactFacts>(among keys: some Collection<String>,
+                                             contactsByKey: [String: [C]],
+                                             draftBodies: [String: String?]) -> String? {
         keys.max { a, b in
-            let (ra, rb) = (riskWeight(contactsByKey[a]), riskWeight(contactsByKey[b]))
+            let (ra, rb) = (riskWeight(contactsByKey[a], body: draftBodies[a] ?? nil),
+                            riskWeight(contactsByKey[b], body: draftBodies[b] ?? nil))
             if ra != rb { return ra < rb }
             return a > b
         }
     }
 
-    private static func riskWeight(_ contacts: [Recipient]?) -> Int {
-        (contacts ?? []).filter { $0.sendState == .pending && !($0.effectiveBody ?? "").isEmpty }.count
+    private static func riskWeight<C: ContactFacts>(_ contacts: [C]?, body: String?) -> Int {
+        guard !(body ?? "").isEmpty else { return 0 }
+        return (contacts ?? []).filter { $0.sendState == .pending }.count
     }
 
     // Which fields differ, BY NAME and never by value. The names are constants of this app; the values
@@ -4037,7 +4050,7 @@ enum QueueModel {
     // #4357 slice B: generic over `ProspectFacts`, so the pass hands it live models today and the engine
     // (Phase 4) retained `RowFacts`, through one body. `some` rather than a named parameter so the
     // declaration still reads `static func inheritedAnswers(`, which `ScopeCallsTheLedgerOnceTests` keys on.
-    static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [some ProspectFacts],
+    static func inheritedAnswers(_ answers: [some OrgAnswerFacts], corpus: [some ProspectFacts],
                                          overrides: ProducerOverrides,
                                          refusals: ContactRefusal.Ledger,
                                          heldKeys: Set<String>,
@@ -4572,3 +4585,7 @@ enum GenreControlCopy {
         return "Genre: \(read.label). Change it."
     }
 }
+
+// #4358 slice E4a: a group of values is a value, so a published Reached out list compares and travels as one.
+extension QueueModel.ReachOutDateGroup: Equatable where Row: Equatable {}
+extension QueueModel.ReachOutDateGroup: Sendable where Row: Sendable {}

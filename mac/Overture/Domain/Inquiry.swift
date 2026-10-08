@@ -192,8 +192,6 @@ final class Inquiry {
         self.createdAt = createdAt
     }
 
-    var source: InquirySource { InquirySource(rawValue: sourceRaw) ?? .directEmail }
-
     // nil when it has not ended, or when a later version wrote an ending this build doesn't know. A raw
     // value it can't read must never be reported as one of today's endings.
     var showOutcome: ShowOutcome? {
@@ -218,6 +216,7 @@ final class Inquiry {
         return true
     }
 
+    // Settable here; the reading half is `InquiryFacts.outcome`'s rule, `Outcome.fromStored`, so the two read alike.
     var outcome: Outcome {
         get { Outcome.fromStored(outcomeRaw) }
         set { outcomeRaw = newValue.rawValue }
@@ -226,12 +225,6 @@ final class Inquiry {
     // Booking ids Dan has rejected as wrong matches (#203 idiom, reused).
     var rejectedBookingIds: Set<String> {
         Set(rejectedBookingIdsRaw.split(separator: "\n").map(String.init))
-    }
-
-    // The EVENT key (performance / date / venue), canonicalized exactly as a Prospect's is so the two
-    // stay comparable. Computed, so editing the event re-keys the inquiry.
-    var naturalKey: String {
-        Inquiry.makeNaturalKey(eventName: eventName, performanceDate: performanceDate, venue: venue)
     }
 
     // A real send stamps a message id (mirrors Prospect.wasProvablyContacted, #963), so a record with
@@ -253,6 +246,39 @@ extension Inquiry {
     // the instant a reply lands or Dan closes the inquiry.
     static let followUpNudgeBusinessDays = 3
     static let closingSuggestionBusinessDays = 30
+
+    // #2943: the answer, recorded. Never moves backwards, exactly as `Recipient.markReplyAnswered` does
+    // not, so a later answer on this conversation cannot be undone by an earlier one arriving out of
+    // order.
+    func markReplyAnswered(now: Date) {
+        guard let existing = replyHandledAt else { replyHandledAt = now; return }
+        if now > existing { replyHandledAt = now }
+    }
+
+    // Dan's own call on the outcome (booked or a lost close): manual source so auto reply/booking
+    // detection never overwrites it, timestamped, and any booking suggestion cleared. Mirrors
+    // Prospect.markOutcomeManually.
+    func markOutcomeManually(_ outcome: Outcome, now: Date) {
+        self.outcome = outcome
+        outcomeSourceRaw = OutcomeSource.manual.rawValue
+        outcomeAt = now
+        bookingSuggested = false
+    }
+}
+
+// #4358 slice E4a: the rules an inquiry is READ by, over `InquiryFacts`, so the queue pass asks them of the live
+// model today and of the engine's retained `InquiryRecord` after the cutover, through one definition each (L263).
+// Moved here unchanged from `Inquiry`, which still answers every one of them as a conformer.
+extension InquiryFacts {
+    var source: InquirySource { InquirySource(rawValue: sourceRaw) ?? .directEmail }
+
+    var outcome: Outcome { Outcome.fromStored(outcomeRaw) }
+
+    // The EVENT key (performance / date / venue), canonicalized exactly as a Prospect's is so the two
+    // stay comparable. Computed, so editing the event re-keys the inquiry.
+    var naturalKey: String {
+        Inquiry.makeNaturalKey(eventName: eventName, performanceDate: performanceDate, venue: venue)
+    }
 
     // Still live: not booked and not closed to a lost state. Keyed on the OUTCOME alone, deliberately.
     //
@@ -295,14 +321,6 @@ extension Inquiry {
     // bounced, and one Dan closed out. A line may claim only what its check actually measured (L11).
     var replyIsAnswered: Bool {
         replied && !bounced && isOpen && replyHandledAt != nil && !hasUnhandledReply
-    }
-
-    // #2943: the answer, recorded. Never moves backwards, exactly as `Recipient.markReplyAnswered` does
-    // not, so a later answer on this conversation cannot be undone by an earlier one arriving out of
-    // order.
-    func markReplyAnswered(now: Date) {
-        guard let existing = replyHandledAt else { replyHandledAt = now; return }
-        if now > existing { replyHandledAt = now }
     }
 
     // #1513: when this inquiry next needs Dan, so it can be grouped in Reached out under the SAME date
@@ -351,16 +369,6 @@ extension Inquiry {
     func shouldSuggestClosing(now: Date) -> Bool {
         guard isOpen, !hasUnhandledReply, let sentAt else { return false }
         return BusinessDay.count(after: sentAt, through: now) >= Inquiry.closingSuggestionBusinessDays
-    }
-
-    // Dan's own call on the outcome (booked or a lost close): manual source so auto reply/booking
-    // detection never overwrites it, timestamped, and any booking suggestion cleared. Mirrors
-    // Prospect.markOutcomeManually.
-    func markOutcomeManually(_ outcome: Outcome, now: Date) {
-        self.outcome = outcome
-        outcomeSourceRaw = OutcomeSource.manual.rawValue
-        outcomeAt = now
-        bookingSuggested = false
     }
 }
 

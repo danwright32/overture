@@ -69,8 +69,8 @@ enum TermsOverFacts {
 
     /// `AgentInputs.from` over models and over facts, asked as the pass asks it: over the queue's own rows, with the
     /// whole store for the Follow-ups number, the stage context `stageContext(for:asOf:)` builds, and the same
-    /// inquiries on both arms (a separate model with no facts counterpart). Each comparison is made twice, with the
-    /// pass's own placement and reached-out list handed in and with neither, so the term decides them itself.
+    /// inquiries on both arms, as the model over models and as its retained record over facts (#4358 slice E4a). Each
+    /// comparison is made twice, with the pass's own placement and reached-out list handed in and with neither, so the term decides them itself.
     /// `thorough` adds a month on and a live reply run; the 4x arm asks the base case alone, which is the shape
     /// of every other whole-corpus term there. The pill counts carry no title or address, so a finding names
     /// each differing field.
@@ -87,7 +87,8 @@ enum TermsOverFacts {
                 for handed in [false, true] {
                     let onModels = agentInputs(scopeModels, all: models, inquiries: inquiries, context: context,
                                                replyRunAlive: alive, handed: handed)
-                    let onFacts = agentInputs(scopeFacts, all: facts, inquiries: inquiries, context: context,
+                    let onFacts = agentInputs(scopeFacts, all: facts,
+                                              inquiries: inquiries.map(InquiryRecord.init(copying:)), context: context,
                                               replyRunAlive: alive, handed: handed)
                     guard onModels != onFacts else { continue }
                     out.append("AgentInputs.from \(differingLabels(onModels, onFacts).joined(separator: ", ")) differ "
@@ -101,7 +102,8 @@ enum TermsOverFacts {
 
     /// One arm of the comparison above: the term over `scope` and `all`, each row's contacts read through
     /// `factContacts` on both conformers, as every other finding here reads them.
-    static func agentInputs<Row: ProspectFacts>(_ scope: [Row], all: [Row], inquiries: [Inquiry], context: StageContext,
+    static func agentInputs<Row: QueuePassRow>(_ scope: [Row], all: [Row], inquiries: [Row.PassInquiry],
+                                               context: StageContext,
                                                replyRunAlive: Bool, handed: Bool) -> AgentInputs {
         let contacts: (Row) -> [Row.Contact] = { $0.factContacts }
         return AgentInputs.from(
@@ -686,7 +688,7 @@ enum TermsOverFacts {
 
     /// Each due list as lines of identifiers and the value the list carries, in its order, keyed by list.
     /// The lines carry a candidate's address, so they are compared and never printed.
-    static func dueLines<Row: ProspectFacts>(_ due: DueWork.Due<Row>) -> [String: [String]] {
+    static func dueLines<Row: QueuePassRow>(_ due: DueWork.Due<Row>) -> [String: [String]] {
         func id(_ p: Row, _ r: Row.Contact) -> String { "\(p.persistentModelID) \(r.persistentModelID)" }
         return [
             "afterTheShow": due.afterTheShow.map { "\(id($0.prospect, $0.recipient)) \($0.prompt)" },
@@ -907,5 +909,83 @@ enum TermsOverFacts {
             if a.coveredByAnotherCard != b.coveredByAnotherCard { out.append("\(at): coveredByAnotherCard differs") }
         }
         return out
+    }
+}
+
+// #4358 slice E4a: oracle part two for the WHOLE pass. `QueueRenderPass.make` over the live models, and over the
+// same store as the engine will hold it (each show as `RowFacts.extract` hands it back, each inquiry, answer and
+// source as its record), compared member by member through the RenderData comparator. Both arms run the one
+// generic pass, so what this sees is everything between a model and its value, at the level of what the screen
+// is handed. The findings name a stage and a RenderData member, never a title or an address (L222).
+extension TermsOverFacts {
+
+    /// The store one comparison is made over, as the models the memo path holds.
+    struct PassStore {
+        var shows: [Prospect]
+        var inquiries: [Inquiry] = []
+        var answers: [OrgReachabilityAnswer] = []
+        var sources: [WatchedSource] = []
+        var refusals: ContactRefusal.Ledger = .none
+        var overrides: ProducerOverrides = .none
+    }
+
+    /// One pass over `rows`, with every input the app sets set the same way whichever rows it is over, so two
+    /// passes differ only in what they were made over.
+    static func wholePass<Row: QueuePassRow>(_ rows: [Row], inquiries: [Row.PassInquiry], answers: [Row.PassAnswer],
+                                             sources: [Row.PassSource], refusals: ContactRefusal.Ledger,
+                                             overrides: ProducerOverrides, context: StageContext,
+                                             focus: StageFocus?, cards: Set<String>?) -> QueueView.RenderData {
+        var inputs = QueueRenderPass.PassInputs<Row>(
+            allProspects: QueueRenderPass.RowCorpus(rows), inquiries: inquiries, orgAnswers: answers,
+            sources: sources, refusals: refusals, overrides: overrides, context: context,
+            focusedStage: focus)
+        inputs.gmailConnected = true
+        inputs.checkRunSince = Date(timeIntervalSince1970: 1_790_000_000)
+        inputs.checkLookups = 3
+        inputs.requestedCardKeys = cards
+        return QueueRenderPass.make(inputs)
+    }
+
+    /// The pass over models and over facts at every focus in `focuses`, one finding per focus whose two passes
+    /// differ, naming the members. `facts` is the facts arm's shows, extracted by the caller so a test can hand
+    /// in rows taken BEFORE a model changed and see the comparison say so.
+    static func wholePassFindings(_ store: PassStore, facts: [RowFacts]? = nil, context: StageContext,
+                                  focuses: [StageFocus?], cards: Set<String>?) -> (findings: [String],
+                                                                                   passes: [QueueView.RenderData]) {
+        let facts = facts ?? store.shows.map(RowFacts.extract)
+        let inquiries = store.inquiries.map(InquiryRecord.init(copying:))
+        let answers = store.answers.map(OrgAnswerRecord.init(copying:))
+        let sources = store.sources.map(WatchedSourceRecord.init(copying:))
+        var findings: [String] = []
+        var passes: [QueueView.RenderData] = []
+        for focus in focuses {
+            let overModels = wholePass(store.shows, inquiries: store.inquiries, answers: store.answers,
+                                       sources: store.sources, refusals: store.refusals, overrides: store.overrides,
+                                       context: context, focus: focus,
+                                       cards: cards)
+            let overFacts = wholePass(facts, inquiries: inquiries, answers: answers, sources: sources,
+                                      refusals: store.refusals, overrides: store.overrides,
+                                      context: context, focus: focus, cards: cards)
+            passes.append(overModels)
+            let differing = RenderDataComparison.differingFields(overModels, overFacts)
+            if !differing.isEmpty {
+                findings.append("the whole pass on \(focus?.rawValue ?? "no stage") differs over facts in: "
+                                + differing.joined(separator: ", "))
+            }
+        }
+        return (findings, passes)
+    }
+
+    /// A pass's output carried across a thread hop in a test. `RenderData` is not `Sendable` (its card store is a
+    /// class that builds a missed card while drawing); the hop hands it over whole and nothing reads it on both
+    /// sides at once.
+    struct HandedOver: @unchecked Sendable { let data: QueueView.RenderData }
+
+    /// The Reached out pass over retained values alone, every input `Sendable`, so a test can run it on any thread.
+    static func factsPass(_ facts: [RowFacts], _ inquiries: [InquiryRecord], _ answers: [OrgAnswerRecord],
+                          _ sources: [WatchedSourceRecord], _ refusals: ContactRefusal.Ledger,
+                          _ overrides: ProducerOverrides, _ context: StageContext) -> HandedOver {
+        HandedOver(data: wholePass(facts, inquiries: inquiries, answers: answers, sources: sources, refusals: refusals,
+                                   overrides: overrides, context: context, focus: .reachedOut, cards: nil))
     }
 }

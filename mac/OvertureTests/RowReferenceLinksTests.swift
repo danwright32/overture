@@ -156,7 +156,7 @@ struct ListingLinkLabelWiringTests {
         // nil, which every `contains` below is quietly false against (#2192). The name is the thing this
         // guard is actually about.
         // #3653: `scope`, not `items`. See PresenterLineTests for why the rename moved this needle.
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope", in: model) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope<Row: QueuePassRow>", in: model) else {
             Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }

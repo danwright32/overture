@@ -218,7 +218,7 @@ struct PresenterLineWiringTests {
         // scope rows beside the cards, and `items` is now a one-line forwarder onto it, so a guard left
         // on that name reads a body containing nothing but the forwarding call and every `contains`
         // below is quietly false against it (L135, and #2192's lesson one name over).
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope", in: model) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "scope<Row: QueuePassRow>", in: model) else {
             Issue.record("QueueModel.scope(from:) is gone, so this guard is asking nothing")
             return
         }

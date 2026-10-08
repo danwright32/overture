@@ -74,7 +74,7 @@ enum AnsweredReplyNote {
     // sets of words on two rows that sit under one set of date headings (L118). No send group to resolve,
     // because an inquiry is its own single thread (`Inquiry+Watchable`), so the peer lookup above has
     // nothing to do here and the predicate is asked of the row itself.
-    static func line(for inquiry: Inquiry, now: Date) -> String? {
+    static func line(for inquiry: some InquiryFacts, now: Date) -> String? {
         guard inquiry.replyIsAnswered,
               let arrived = inquiry.replyArrivedAt,
               let answered = inquiry.replyHandledAt else { return nil }

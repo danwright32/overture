@@ -17,12 +17,13 @@ enum ReplyToAnswer {
     // (AGENTS.md), so they are two cases rather than one record pretending to be both.
     //
     // #4357 slice E2: generic over the row, so a retained show and its contacts answer it by the same body;
-    // the screens hold the model one, `DueConversation`.
-    enum Conversation<Row: ProspectFacts> {
+    // the screens hold the model one, `DueConversation`. #4358 slice E4a: and its inquiry is the row family's own
+    // (`QueuePassRow.PassInquiry`), the model beside a model and the retained record beside a retained show.
+    enum Conversation<Row: QueuePassRow> {
         // `recipient` is the contact who WROTE (`ReplyIdentity.answering`), which is who the answer goes
         // to and who the row names, never whichever member of a joint email sorts first.
         case show(prospect: Row, recipient: Row.Contact)
-        case inquiry(Inquiry)
+        case inquiry(Row.PassInquiry)
 
         // When their message arrived, which orders the list: whoever has waited longest is first.
         var arrivedAt: Date? {
@@ -56,8 +57,8 @@ enum ReplyToAnswer {
     // #4357 slice E2: the same over any rows, with the contacts handed in, so the model entry point above walks
     // the recipients it always did. Each show's contacts are read once and that one list answers all three
     // questions, which is what `Prospect.hasUnhandledReply` and `ReplyIdentity.answering(for:in:)` read too.
-    static func dueConversations<Row: ProspectFacts>(
-        prospects: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Inquiry]
+    static func dueConversations<Row: QueuePassRow>(
+        prospects: [Row], contacts: (Row) -> [Row.Contact], inquiries: [Row.PassInquiry]
     ) -> [Conversation<Row>] {
         var due: [Conversation<Row>] = []
         for p in prospects {
@@ -75,7 +76,7 @@ enum ReplyToAnswer {
     // #4531: whoever has waited longest first. At one instant a show comes before an inquiry, as on the
     // Reached out list; two shows by `DueWork.showThenContact`; two inquiries by the event's natural key and
     // then the store's identifier, since two people can write about one event. Never arrival order (L419).
-    static func waitedLonger<Row: ProspectFacts>(_ a: Conversation<Row>, _ b: Conversation<Row>) -> Bool {
+    static func waitedLonger<Row: QueuePassRow>(_ a: Conversation<Row>, _ b: Conversation<Row>) -> Bool {
         let (ta, tb) = (a.arrivedAt ?? .distantPast, b.arrivedAt ?? .distantPast)
         if ta != tb { return ta < tb }
         switch (a, b) {

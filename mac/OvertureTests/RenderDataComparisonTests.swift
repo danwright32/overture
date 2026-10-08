@@ -97,14 +97,14 @@ struct RenderDataComparisonCoversEveryFieldTests {
         let byName = Dictionary(uniqueKeysWithValues: RenderDataComparison.fields.map { ($0.name, $0.how) })
         let objectMembers = members.filter { Self.holdsAnObject($0.value) }.map(\.label)
         // The premise: RenderData still holds the card store (a class, whose sources are the models until the
-        // engine builds the pass, #4358) and the Reached out list, whose type names no model and whose entries
-        // carry them in enum payloads (#4371). A walk that did not find both measured less than it claims.
-        // `queueScope` and `reachedOut` hold identities since #4357 step 5, which `OutputsHoldNoModelTests`
-        // holds them to.
-        for member in ["cards", "reachedOutList"] {
-            #expect(objectMembers.contains(member), Comment(rawValue: "the walk did not see \(member) holding a "
-                + "model, so the fixture or the walk is too thin to check it"))
-        }
+        // engine builds the pass, #4358). A walk that did not find it measured less than it claims.
+        // `queueScope` and `reachedOut` hold identities since #4357 step 5, and the Reached out list since #4358
+        // slice E4a (#4371), which `OutputsHoldNoModelTests` holds them to; the list is populated here, so its
+        // absence from the walk's findings is a finding rather than an empty list.
+        #expect(objectMembers.contains("cards"), Comment(rawValue: "the walk did not see the card store holding a "
+            + "class, so the fixture or the walk is too thin to check it"))
+        #expect(!populated.data.reachedOutList.entries.isEmpty && !objectMembers.contains("reachedOutList"),
+                "the Reached out list is empty, or still holds a model")
         withExtendedLifetime(populated.container) {}
         let wrong = objectMembers.filter { byName[$0] != .projection }
         #expect(wrong.isEmpty, Comment(rawValue: "these members hold a class or a model and are compared "

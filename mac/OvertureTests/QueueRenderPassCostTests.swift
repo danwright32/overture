@@ -111,32 +111,49 @@ struct QueueRenderPassCostTests {
         return rows
     }
 
-    private func inputs(_ rows: [Prospect], tally: QueueRenderPass.CostTally) -> QueueRenderPass.Inputs {
-        QueueRenderPass.Inputs(
-            allProspects: QueueRenderPass.Corpus(rows, tally: tally),
+    private func inputs<Row: QueuePassRow>(_ rows: [Row],
+                                           tally: QueueRenderPass.CostTally) -> QueueRenderPass.PassInputs<Row> {
+        QueueRenderPass.PassInputs(
+            allProspects: QueueRenderPass.RowCorpus(rows, tally: tally),
             inquiries: [], orgAnswers: [],
             context: .at("2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000)),
             focusedStage: .scout, focusedKeys: nil)
+    }
+
+    // #4358 slice E4a (plan v2 Phase 4 step 10): every pin below is taken over the FACTS pass, the one the engine
+    // will run, and over the models pass the app runs today, from one seeded store. The sweep count is a property
+    // of the pass's code rather than of what it is made over, so the two arms must agree, and each is pinned.
+    private func eachArm(_ rows: [Prospect],
+                         _ check: (String, QueueRenderPass.CostTally, QueueView.RenderData) -> Void,
+                         change: (inout QueueRenderPass.PassInputs<Prospect>) -> Void = { _ in },
+                         changeFacts: (inout QueueRenderPass.PassInputs<RowFacts>) -> Void = { _ in }) {
+        let overModels = QueueRenderPass.CostTally()
+        var i = inputs(rows, tally: overModels)
+        change(&i)
+        check("over models", overModels, QueueRenderPass.make(i))
+        let overFacts = QueueRenderPass.CostTally()
+        var f = inputs(rows.map(RowFacts.extract), tally: overFacts)
+        changeFacts(&f)
+        check("over facts", overFacts, QueueRenderPass.make(f))
     }
 
     // The measurement. One pass over a realistic store sweeps it a pinned number of times.
     @Test func onePassSweepsTheStoreAPinnedNumberOfTimes() throws {
         let ctx = ModelContext(try container())
         let rows = seed(ctx)
-        let tally = QueueRenderPass.CostTally()
 
-        let data = QueueRenderPass.make(inputs(rows, tally: tally))
-
-        // The list at the top of this file names every one of them. Raising the number is a decision
-        // about how much a keystroke, a dismiss and a scroll are allowed to cost Dan.
-        #expect(tally.sweeps == Self.allowedSweeps)
-        // And it really did derive the whole store, so the count above is not the cost of doing nothing.
-        // #3654: over the ROWS, because a card is now built only for a show something is about to draw
-        // and this pass drew nothing. The claim is unchanged: the pass derived the whole store.
-        // #4030: minus the copies the collapse folds. This fixture contains them by arithmetic rather
-        // than by design (see `collapsedCopies`), and a same show group is now ONE card.
-        #expect(data.rows.count == Self.corpusSize - Self.collapsedCopies)
-        #expect(!data.visibleRows.isEmpty)
+        eachArm(rows) { arm, tally, data in
+            // The list at the top of this file names every one of them. Raising the number is a decision
+            // about how much a keystroke, a dismiss and a scroll are allowed to cost Dan.
+            #expect(tally.sweeps == Self.allowedSweeps, "the pass \(arm) swept the store \(tally.sweeps) times")
+            // And it really did derive the whole store, so the count above is not the cost of doing nothing.
+            // #3654: over the ROWS, because a card is now built only for a show something is about to draw
+            // and this pass drew nothing. The claim is unchanged: the pass derived the whole store.
+            // #4030: minus the copies the collapse folds. This fixture contains them by arithmetic rather
+            // than by design (see `collapsedCopies`), and a same show group is now ONE card.
+            #expect(data.rows.count == Self.corpusSize - Self.collapsedCopies, "the pass \(arm) built too few rows")
+            #expect(!data.visibleRows.isEmpty, "the pass \(arm) put nothing in a stage")
+        }
     }
 
     // The cost does not grow with what Dan is looking at. A stage focus, a frozen key set and a deep link
@@ -146,11 +163,9 @@ struct QueueRenderPassCostTests {
         let rows = seed(ctx)
 
         for stage in [StageFocus.scout, .review, .prep, .sendApproved, .followUps] {
-            let tally = QueueRenderPass.CostTally()
-            var i = inputs(rows, tally: tally)
-            i.focusedStage = stage
-            _ = QueueRenderPass.make(i)
-            #expect(tally.sweeps == Self.allowedSweeps, "the \(stage) stage cost a different number")
+            eachArm(rows, { arm, tally, _ in
+                #expect(tally.sweeps == Self.allowedSweeps, "the \(stage) stage \(arm) cost a different number")
+            }, change: { $0.focusedStage = stage }, changeFacts: { $0.focusedStage = stage })
         }
     }
 
@@ -159,26 +174,26 @@ struct QueueRenderPassCostTests {
     @Test func aFrozenKeySetCostsTheSameSweeps() throws {
         let ctx = ModelContext(try container())
         let rows = seed(ctx)
-        let tally = QueueRenderPass.CostTally()
-        var i = inputs(rows, tally: tally)
-        i.focusedStage = nil
         // Taken from the middle of the corpus on purpose: the first 144 rows and the last 144 are the
         // duplicate pairs this fixture creates by arithmetic (see `collapsedCopies`), and half of each
         // pair is not drawn, so a slice from either end would be asking how many of 20 keys survive the
         // collapse rather than what this test is about.
-        i.focusedKeys = rows[200..<220].map(\.naturalKey)
+        let keys = rows[200..<220].map(\.naturalKey)
 
-        let data = QueueRenderPass.make(i)
-
-        #expect(tally.sweeps == Self.allowedSweeps)
-        #expect(data.focusedRows.count == 20)
+        eachArm(rows, { arm, tally, data in
+            #expect(tally.sweeps == Self.allowedSweeps, "the frozen key set \(arm) cost a different number")
+            #expect(data.focusedRows.count == 20, "the frozen key set \(arm) drew the wrong rows")
+        }, change: { $0.focusedStage = nil; $0.focusedKeys = keys },
+           changeFacts: { $0.focusedStage = nil; $0.focusedKeys = keys })
     }
 }
 
 // The other half of the cost, and the one a sweep count cannot see: a file read on the render path. The
 // pass takes every file-backed answer as a value, so it cannot reach the filesystem at all, and this is
 // what holds it to that.
-@Suite("A render pass reads no files (#1913)")
+// `.sharesTheRenderCounter`: `thePassRecordsNothingAndIsBoundToNoActor` names the counter in a string it searches
+// for, and `SharedStateWiringTests` reads that as a use, so this suite takes the counter's lock rather than argue.
+@Suite("A render pass reads no files (#1913)", .sharesTheRenderCounter)
 struct QueueRenderPassIsPureTests {
     private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
@@ -200,12 +215,25 @@ struct QueueRenderPassIsPureTests {
     // The counting is not optional. If the rows could be reached around the corpus, a new sweep would be
     // invisible to the measurement above and the guard would quietly stop guarding.
     @Test func theRowsCanOnlyBeReachedThroughTheCountedAccessor() {
-        guard let corpus = SourceGuardHelper.propertyBody("struct Corpus {", in: renderPass) else {
+        guard let corpus = SourceGuardHelper.propertyBody("struct RowCorpus<Row: QueuePassRow> {", in: renderPass) else {
             Issue.record("expected to find the corpus")
             return
         }
-        #expect(corpus.contains("private let rows: [Prospect]"))
+        #expect(corpus.contains("private let rows: [Row]"))
         #expect(corpus.contains("tally?.recordSweep()"))
+    }
+
+    // #4358 slice E4a (#4357 step 8): the pass writes nothing outside the value it returns, so the engine can run
+    // it on its own thread. The Debug derivation record and the freeze watch are the caller's, and nothing in the
+    // file is bound to the main actor. Read from the CODE, comments stripped, because the comments name both.
+    @Test func thePassRecordsNothingAndIsBoundToNoActor() {
+        let code = SwiftSource.scannableLines(in: renderPass).map(\.code)
+        #expect(code.count > 100, "too few lines of the pass were read for this to have checked anything")
+        for side in ["QueueRenderCounter", "freezeWatch", "FreezeWatch", "@MainActor", "UserDefaults"] {
+            let found = code.filter { $0.contains(side) }
+            #expect(found.isEmpty, Comment(rawValue: "the render pass names \(side), a side effect or an actor "
+                + "the pass may not have: " + found.joined(separator: " | ")))
+        }
     }
 }
 

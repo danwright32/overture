@@ -17,8 +17,6 @@ import Foundation
 @Suite("The queue counts its own whole-store derivations (#1774)", .sharesTheRenderCounter)
 struct QueueDerivationCounterTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
-    // #1913: the derivation moved here, so the guards on its shape moved with it.
-    private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
     // #1933: the log is bounded, by the same rotation every other log in this app uses.
     //
@@ -96,11 +94,15 @@ struct QueueDerivationCounterTests {
 
     // The one place that may count is the one place that derives. Counting anywhere else would report a
     // number that is not the thing under test.
+    // #4358 slice E4a (#4357 step 8): that place is the CALLER now, the memo path's build in `makeRenderData`,
+    // which runs the pass and records it beside it, once per build, because the pass itself records nothing
+    // (`QueueRenderPassIsPureTests` holds the pass to that).
     @Test func onlyTheWholeStoreDerivationIsCounted() {
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
-            Issue.record("expected to find the render pass")
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "makeRenderData", in: queueView) else {
+            Issue.record("expected to find the memo path that runs the render pass")
             return
         }
+        #expect(body.contains("QueueRenderPass.make("), "the counted body does not run the pass")
         #expect(body.contains("QueueRenderCounter.recordDerivation("))
         // Once per derivation, not once per field of the snapshot.
         #expect(body.components(separatedBy: "QueueRenderCounter.recordDerivation(").count - 1 == 1)
@@ -108,9 +110,8 @@ struct QueueDerivationCounterTests {
 
     // Gated out of Release, at both ends: the counter itself and the call that feeds it.
     @Test func theCounterIsDebugOnly() {
-        #expect(renderPass.contains("#if DEBUG"))
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
-            Issue.record("expected to find the render pass")
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "makeRenderData", in: queueView) else {
+            Issue.record("expected to find the memo path that runs the render pass")
             return
         }
         guard let callIndex = body.range(of: "QueueRenderCounter.recordDerivation(")?.lowerBound else {

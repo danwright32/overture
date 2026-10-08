@@ -598,7 +598,9 @@ struct QueueView: View {
                                 // #4252: a whole-store pass (364 ms on the live store, 2026-09-25) against
                                 // 134 ms to re-arm observation, so the refetch after a save is served.
                                 onRefetch: .serveWhenNothingChanged) { cardKeysForMemo in
-            QueueRenderPass.make(QueueRenderPass.Inputs(
+            // #4358 slice E4a (#4357 step 8): the pass is pure, so its Debug record is taken HERE, beside the
+            // derivation it describes, exactly once per build as it was inside the pass.
+            let data = QueueRenderPass.make(QueueRenderPass.Inputs(
                 allProspects: QueueRenderPass.Corpus(allProspects),
                 inquiries: inquiryRows,
                 orgAnswers: orgAnswerRows,
@@ -616,7 +618,6 @@ struct QueueView: View {
                 checkRunSince: checkRunSince,
                 checkLookups: checkLookups,
                 replyRunAlive: replyRunAlive,
-                trace: trace,
                 // #3654: the rows the LAST frame drew, and the register this one writes into. Taken
                 // rather than read, so the set is what the last frame drew and not everything Dan has
                 // scrolled past since the app opened.
@@ -625,6 +626,10 @@ struct QueueView: View {
                 producerTables: producerTables(overrides: ProducerOverrides(promotedRows: promoted,
                                                                             demotedRows: demoted),
                                                now: now)))
+            #if DEBUG
+            QueueRenderCounter.recordDerivation(inputs: trace, rows: data.rows)
+            #endif
+            return data
         }
     }
 
@@ -1569,7 +1574,15 @@ struct QueueView: View {
                         reachOutDateHeader(group)
                         ForEach(group.rows) { entry in
                             switch entry {
-                            case .prospect(let prospect, let recipient, let next):
+                            // #4371 (B2) and #4358 slice E4a: the pass publishes the row by identity, and the
+                            // live show and contact are found here, through the resolver a press on the row
+                            // uses, by identifier rather than by walking the store. A row whose show or contact
+                            // went between the pass and this draw (a merge, a strike) draws nothing: the next
+                            // pass, which that change caused, no longer lists it.
+                            case .show(let snapshot):
+                                if case .found(let prospect, let recipient) = ReachedOutSnapshot.resolve(
+                                    snapshot, in: liveProspects) {
+                                let next = snapshot.next
                                 // #2644: the row is wrapped so it can SEE a send of its own in flight.
                                 // Without this it took (pair, now) only, so pressing "Send a closing
                                 // note" left the same button on screen for the whole second the Gmail
@@ -1609,13 +1622,16 @@ struct QueueView: View {
                                     .jumpMark(key: prospect.naturalKey, highlighted: highlighted)
                                 }
                                 .equatable()
+                                // Inside the resolved branch, so a row that draws nothing leaves no divider.
+                                Divider()
+                                }
                             case .inquiry(let identity, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
                                 // source capsule and lifecycle line stay, because they say what an
                                 // inquiry is; the card box and its own typography are gone.
                                 inquiryRowView(row, identity: identity, style: .listRow)
+                                Divider()
                             }
-                            Divider()
                         }
                     }
                     // #4062: the id a deep link resolves to (QueueModel.jumpScrollGroupID), namespaced

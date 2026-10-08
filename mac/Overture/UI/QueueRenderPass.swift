@@ -20,18 +20,21 @@ enum QueueRenderPass {
     // Nothing inside the pass can reach the rows except through `all`, so a sweep added later is counted
     // whether or not whoever adds it thinks about the cost. That is the whole point: a counter the new
     // code has to opt into would measure only the costs somebody already knew about.
-    @MainActor
-    struct Corpus {
-        private let rows: [Prospect]
+    //
+    // #4358 slice E4a: over any row the pass can be made over (`QueuePassRow`), and nonisolated with the pass,
+    // so the engine can hand it retained facts on its own thread. `Corpus` is the models' one, which is every
+    // caller the app has today.
+    struct RowCorpus<Row: QueuePassRow> {
+        private let rows: [Row]
         private let tally: CostTally?
 
-        init(_ rows: [Prospect], tally: CostTally? = nil) {
+        init(_ rows: [Row], tally: CostTally? = nil) {
             self.rows = rows
             self.tally = tally
         }
 
         // One whole-store sweep. Counted.
-        var all: [Prospect] {
+        var all: [Row] {
             tally?.recordSweep()
             return rows
         }
@@ -51,14 +54,16 @@ enum QueueRenderPass {
         // It goes through `all`, so the walk is COUNTED like every other. That is the point: deriving the
         // narrower list in the view instead would have moved a whole-store walk to where the sweep
         // counter cannot see it, which is how a pass gets cheaper on paper and not in the app.
-        func narrowed(_ transform: ([Prospect]) -> [Prospect]) -> Corpus {
-            Corpus(transform(all), tally: tally)
+        func narrowed(_ transform: ([Row]) -> [Row]) -> RowCorpus {
+            RowCorpus(transform(all), tally: tally)
         }
     }
 
+    typealias Corpus = RowCorpus<Prospect>
+
     // What one pass spent. A class so the corpus values handed around a single pass all report to one
-    // tally; test-only in practice, since the app builds a pass without one.
-    @MainActor
+    // tally; test-only in practice, since the app builds a pass without one. #4358 slice E4a: nonisolated with
+    // the pass it counts; a test builds one and reads it on the thread that ran the pass.
     final class CostTally {
         private(set) var sweeps = 0
         func recordSweep() { sweeps += 1 }
@@ -341,16 +346,20 @@ enum QueueRenderPass {
     // Everything one pass derives FROM. Values only: every file-backed answer (the Gmail connection,
     // whether a detached run is alive) is READ BY THE CALLER and handed in, so the pass itself cannot
     // reach the filesystem. QueueRenderPassCostTests holds it to that.
-    @MainActor
-    struct Inputs {
+    //
+    // #4358 slice E4a: over one family of rows (`QueuePassRow`), the shows and the inquiries, answers and
+    // sources beside them, so today's memo path hands it the live models and the engine its retained values,
+    // through one `make`. Nonisolated, so the engine can build a pass on its own thread. `Inputs` is the models'
+    // one, which is every caller the app has today.
+    struct PassInputs<Row: QueuePassRow> {
         // #3507: ONE corpus, the whole table. The queue's own scope (every show but the dismissed ones,
         // date then fit) is derived from it inside `make` rather than arriving as a second `@Query`,
         // which is what makes "the table is read once per store change" true by construction rather than
         // by everyone remembering.
-        var allProspects: Corpus
-        var inquiries: [Inquiry]
-        var orgAnswers: [OrgReachabilityAnswer]
-        var sources: [WatchedSource] = []
+        var allProspects: RowCorpus<Row>
+        var inquiries: [Row.PassInquiry]
+        var orgAnswers: [Row.PassAnswer]
+        var sources: [Row.PassSource] = []
         // #2392: the addresses Dan has struck, as a value. Read by the CALLER from its own @Query, on the
         // same rule as everything else here: this pass may not reach the store or the filesystem itself.
         var refusals: ContactRefusal.Ledger = .none
@@ -381,9 +390,9 @@ enum QueueRenderPass {
         var checkRunSince: Date? = nil
         var checkLookups: Int? = nil
         var replyRunAlive: Bool = false
-        // #1930's fingerprint of what this view derives FROM, gathered by the caller because it describes
-        // the caller's own state. DEBUG only in effect: the pass records it and nothing else reads it.
-        var trace: [String: String] = [:]
+        // #1930's fingerprint of what the view derives from lived here until #4358 slice E4a, which moved its
+        // one reader, the Debug derivation record, out of the pass and into the caller (#4357 step 8): the
+        // caller hands it to `QueueRenderCounter.recordDerivation` beside the pass rather than through it.
         // #3654: the shows the LAST frame actually drew, plus whatever else a surface asked for, or nil
         // for every row in scope.
         //
@@ -405,8 +414,18 @@ enum QueueRenderPass {
         var producerTables: QueueModel.ProducerTables? = nil
     }
 
-    @MainActor
-    static func make(_ i: Inputs) -> QueueView.RenderData {
+    typealias Inputs = PassInputs<Prospect>
+
+    // #4358 slice E4a (#4357 step 8): PURE, and nonisolated. It records nothing outside the value it returns:
+    // the Debug derivation record and the freeze watch's pass count and cost are the CALLER's
+    // (`QueueView.makeRenderData`), which runs this and then records it. What stays inside are the `WorkTally`
+    // counters, deliberately: each counts work done inside a term, a no-op unless a test has bound a tally on
+    // the task that runs the pass, and lock-guarded so it is safe from any thread. Moved to the caller, each
+    // would become a constant written once per pass, which counts nothing (L63).
+    //
+    // Over models, the stage, reached out and pill terms walk each show's `recipients` uncounted, as the model
+    // entry points they replace did (`QueuePassRow.passContacts`), so no pin moves.
+    static func make(_ i: PassInputs<some QueuePassRow>) -> QueueView.RenderData {
         // #2968: the whole store, INCLUDING the dismissed shows the queue's own scope drops, taken once
         // and read several times. `QueueModel.items` already needed it as its corpus; the Follow-ups
         // count is a second READER of that same list rather than a second reason to walk the store, and
@@ -435,10 +454,8 @@ enum QueueRenderPass {
         // every whole-scope sweep below reads, and they cost one contacts walk between them rather than
         // one each.
         let rows = scope.rows
-        #if DEBUG
-        QueueRenderCounter.recordDerivation(inputs: i.trace, rows: rows)
-        #endif
-        let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue.all, now: context.now)
+        let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue.all, contacts: { $0.passContacts },
+                                                         now: context.now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
         // #3738: every show's stages, decided ONCE for this pass and read by all four answers below.
         //
@@ -446,7 +463,7 @@ enum QueueRenderPass {
         // the focused stage's rows. `matches` faults a prospect's recipients and was being evaluated
         // about 23,000 times per render on the live store, which #3736 measured at 152.1 ms of the pass's
         // floor. One table, four readers.
-        let placement = StageNavigation.placements(in: inQueue.all, context: context)
+        let placement = StageNavigation.placements(of: inQueue.all, contacts: { $0.passContacts }, context: context)
         // #1567: counted through StageNavigation, the same predicate as the pills beneath it, so the
         // masthead can no longer state a smaller backlog than the pills it sits above.
         let inAStage = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
@@ -473,7 +490,8 @@ enum QueueRenderPass {
         let today = EasternDate.today(i.context.now)
         // #4357 slice H: one term over any `ProspectFacts` (QueueLongTailTerms.swift); the models' entry reads
         // each show's own `isClosed`, uncounted, as this did.
-        let unseenSurvivors = QueueRenderPass.unseenSurvivors(among: everyProspect, today: today)
+        let unseenSurvivors = QueueRenderPass.unseenSurvivors(of: everyProspect, today: today,
+                                                              closed: { $0.passIsClosed })
         let mergeSurvivorsDropped = AppNotices.mergeSurvivorsTheFeedDropped(
             unseenSurvivors, shownInQueue: { inAStage.contains($0) })
         // #4106 view workstream: the masthead's two whole-queue answers, taken HERE and nowhere else
@@ -525,6 +543,9 @@ enum QueueRenderPass {
                                           // behind that pill query everything, and this list
                                           // drops dismissed shows.
                                           allProspects: everyProspect,
+                                          // #4358 slice E4a: the uncounted `recipients` over models, as the
+                                          // model entry point walked; the retained list over facts.
+                                          contacts: { $0.passContacts },
                                           inquiries: i.inquiries,
                                           context: context, gmailConnected: i.gmailConnected,
                                           runInFlight: i.runInFlight, replyRunAlive: i.replyRunAlive,
@@ -586,7 +607,7 @@ enum QueueRenderPass {
     }
 
     // #1436: the stage's inquiries, as their own date-grouped block.
-    static func inquiryRows(_ inquiries: [Inquiry], stage: StageFocus?, now: Date) -> [InquiryRow] {
+    static func inquiryRows(_ inquiries: [some InquiryFacts], stage: StageFocus?, now: Date) -> [InquiryRow] {
         guard let stage else { return [] }
         return QueueModel.inquiryRows(inquiries.filter { StageNavigation.stage(for: $0) == stage }, now: now)
     }

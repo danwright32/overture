@@ -336,3 +336,180 @@ extension Prospect: ProspectFacts {
 }
 
 extension Recipient: ContactFacts {}
+
+// #4358 slice E4a (plan v7 Phase 4, B2 "every pass input is a value"): the queue pass's OTHER inputs as protocols
+// too, so `QueueRenderPass.make` reads them through one generic body: the live models in today's memo path, the
+// engine's retained records (`QueueEngineRecords.swift`) once it hands the pass in (#4358, slice E4b). Each
+// declares every stored property its record carries, under the model's own names, on `ProspectFacts`' rule
+// (`RowFactsSchemaCoverageTests` holds each to its record), so a term written over one reads either.
+//
+// WHY PROTOCOLS AND NOT RECORDS BUILT BY THE CALLER. The memo path builds its pass inside an observation scope
+// (`ScopeMemo`), and a record copies EVERY stored field, so building one there would observe every field of every
+// inquiry and source: a write to one the pass never reads (a reply check stamping `replyTextCheckedAt`) would
+// rebuild the whole queue. Over the protocol the memo path reads exactly the fields it read before.
+
+/// One direct hire inquiry's facts: every stored `Inquiry` property, as `InquiryRecord` carries them.
+protocol InquiryFacts: ReplyArrivalFacts, SendableMetatype {
+    var persistentModelID: PersistentIdentifier { get }
+    var attachWroteSentAt: Bool { get }
+    var autoBookingRejectedWithoutId: Bool { get }
+    var bookingSuggested: Bool { get }
+    var bookingSuggestionDismissed: Bool { get }
+    var bounced: Bool { get }
+    var conversationAttachedAt: Date? { get }
+    var conversationSubject: String? { get }
+    var createdAt: Date { get }
+    var delayNoticeAt: Date? { get }
+    var dismissedBounceId: String? { get }
+    var dismissedReplyId: String? { get }
+    var downbeatClientId: String? { get }
+    var eventName: String { get }
+    var gmailMessageId: String? { get }
+    var gmailReferences: String? { get }
+    var gmailThreadId: String? { get }
+    var inboundReplyMessageId: String? { get }
+    var inboundReplySentAt: Date? { get }
+    var inquirerEmail: String? { get }
+    var inquirerName: String { get }
+    var lastBounceId: String? { get }
+    var lastDelayMessageId: String? { get }
+    var lastReplyId: String? { get }
+    var lastReplyText: String? { get }
+    var lostReasonRaw: String? { get }
+    var notes: String? { get }
+    var outcomeAt: Date? { get }
+    var outcomeRaw: String { get }
+    var outcomeSourceRaw: String? { get }
+    var performanceDate: String? { get }
+    var rejectedBookingIdsRaw: String { get }
+    var replied: Bool { get }
+    var repliedAt: Date? { get }
+    var replyAudience: [String]? { get }
+    var replyCandidateSearchedAt: Date? { get }
+    var replyFromAddress: String? { get }
+    var replyFromName: String? { get }
+    var replyHandledAt: Date? { get }
+    var replyTextCheckedAt: Date? { get }
+    var runEndDate: String? { get }
+    var sendError: String? { get }
+    var sentAt: Date? { get }
+    var showOutcomeAt: Date? { get }
+    var showOutcomeRaw: String? { get }
+    var sourceRaw: String { get }
+    var threadIdDegraded: Bool { get }
+    var threadingDegraded: Bool { get }
+    var venue: String? { get }
+}
+
+/// One organisation's stored reachability answer: every stored `OrgReachabilityAnswer` property.
+protocol OrgAnswerFacts: SendableMetatype {
+    var persistentModelID: PersistentIdentifier { get }
+    var foundEmailsRaw: String { get }
+    var orgKey: String { get }
+    var presenterName: String { get }
+    var probedAt: Date { get }
+    var resultRaw: String { get }
+    var sourceGroupName: String { get }
+    var sourceNaturalKey: String { get }
+}
+
+/// One watched calendar's facts: every stored `WatchedSource` property.
+protocol WatchedSourceFacts: SendableMetatype {
+    var persistentModelID: PersistentIdentifier { get }
+    var addedAt: Date { get }
+    var baselineFeedCount: Int { get }
+    var clientTagClientId: String? { get }
+    var clientTagOverride: Bool? { get }
+    var confirmedEmptyHash: String? { get }
+    var degradedStreak: Int { get }
+    var emptyStreak: Int { get }
+    var failedReadStreak: Int { get }
+    var hadPlacedBeforeLastRun: Bool { get }
+    var hasUnreadChanges: Bool { get }
+    var healthRaw: String { get }
+    var inactiveReasonRaw: String? { get }
+    var isActive: Bool { get }
+    var kindRaw: String { get }
+    var lastCheckedAt: Date? { get }
+    var lastContentHash: String? { get }
+    var lastDegradedCount: Int { get }
+    var lastDroppedShowLabelsRaw: String { get }
+    var lastErrorRaw: String? { get }
+    var lastFetchWasInsecure: Bool { get }
+    var lastLandedRunID: String? { get }
+    var lastLandedSequence: Int { get }
+    var lastManualReadAt: Date? { get }
+    var lastNonEmptyAt: Date? { get }
+    var lastObservedContentHash: String? { get }
+    var lastPlacedCount: Int { get }
+    var lastReadableCount: Int { get }
+    var lastStructuralGapCount: Int { get }
+    var lastSucceededAt: Date? { get }
+    var lastTouchedSequence: Int { get }
+    var lastUnreadableCount: Int { get }
+    var lastUnreadableTitleCount: Int { get }
+    var listingsURL: String? { get }
+    var mergeSameDateVenue: Bool { get }
+    var notes: String? { get }
+    var orgName: String { get }
+    var pageCount: Int { get }
+    var pendingContentHash: String? { get }
+    var pendingPageMonthsRaw: String { get }
+    var sourceId: String { get }
+    var successfulCheckCount: Int { get }
+    var ticketingFeedURL: String? { get }
+    var venueLocation: String? { get }
+    var venueName: String? { get }
+}
+
+extension Inquiry: InquiryFacts {}
+extension InquiryRecord: InquiryFacts {}
+extension OrgReachabilityAnswer: OrgAnswerFacts {}
+extension OrgAnswerRecord: OrgAnswerFacts {}
+extension WatchedSource: WatchedSourceFacts {}
+extension WatchedSourceRecord: WatchedSourceFacts {}
+
+extension OrgAnswerFacts {
+    // nil when a future version wrote a verdict this build cannot read. An unreadable value must never be
+    // reported as one of today's answers (#1596's own rule, kept here).
+    var result: Reachability.ProbeResult? { Reachability.ProbeResult(rawValue: resultRaw) }
+
+    var foundEmails: [String] { foundEmailsRaw.split(separator: "\n").map(String.init) }
+}
+
+// #4358 slice E4a: the ONE family of rows a queue pass is made over, as its row type: a show, and the inquiry,
+// answer and source types beside it. Today's memo path is made over the live models (`Prospect`); the engine's
+// over its retained values (`RowFacts`). A pass never mixes the two, and naming the family through the row keeps
+// `QueueRenderPass.Inputs` one generic parameter rather than four that could be crossed.
+//
+// THE TWO MEMBERS ARE HOW EACH FAMILY READS WHAT IT HOLDS, and they are why this is more than `ProspectFacts`.
+// The stage, reached out and pill terms walk a show's contacts and ask whether it is closed. Over the models the
+// pass has always read the uncounted `recipients` relationship for them, and the model's own `isClosed` over it,
+// so no `WorkTally.recipientReaches` pin moves and no contact list is sorted twice; over facts it reads the
+// retained list, which is already in canonical order and counts nothing.
+protocol QueuePassRow: ProspectFacts {
+    associatedtype PassInquiry: InquiryFacts
+    associatedtype PassAnswer: OrgAnswerFacts
+    associatedtype PassSource: WatchedSourceFacts
+
+    /// The contacts the stage, reached out and pill terms walk.
+    var passContacts: [Contact] { get }
+    /// Whether the show is closed for routine follow ups, read as the pass has always read it.
+    var passIsClosed: Bool { get }
+}
+
+extension Prospect: QueuePassRow {
+    typealias PassInquiry = Inquiry
+    typealias PassAnswer = OrgReachabilityAnswer
+    typealias PassSource = WatchedSource
+    var passContacts: [Recipient] { recipients }
+    var passIsClosed: Bool { isClosed }
+}
+
+extension RowFacts: QueuePassRow {
+    typealias PassInquiry = InquiryRecord
+    typealias PassAnswer = OrgAnswerRecord
+    typealias PassSource = WatchedSourceRecord
+    var passContacts: [RecipientRecord] { factContacts }
+    var passIsClosed: Bool { isClosed }
+}

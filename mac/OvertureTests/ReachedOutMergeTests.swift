@@ -150,7 +150,8 @@ struct ReachedOutMergeTests {
         let unsent = inquiry(sentAt: nil)
         ctx.insert(unsent)
 
-        let entries = QueueModel.reachedOutEntries(prospects: [], inquiries: [unsent],
+        let entries = QueueModel.reachedOutEntries(prospects: [(prospect: Prospect, recipient: Recipient, next: Date)](),
+                                                   inquiries: [unsent],
                                                    now: day("2026-01-05"))
 
         #expect(entries.isEmpty)
