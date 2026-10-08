@@ -130,7 +130,10 @@ engine_gate_allows() {
     echo "ALLOW_ENGINE_GATE_SKIP=1: PR #${pr_number} was NOT checked by the queue engine's merge gate. Tell Dan why it was skipped." >&2
     return 0
   fi
-  files="$(gh_as_danwright32 pr view "${pr_number}" -R "${REPO}" --json files --jq '.files[].path' 2>/dev/null)" || files=""
+  # Every page of the PR's files: `gh pr view --json files` stops at the first 100, so a large PR whose app Swift
+  # sits past them read as touching none and skipped the gate in silence (the lessons review of E4d1).
+  files="$(gh_as_danwright32 api --paginate "repos/${REPO}/pulls/${pr_number}/files" --jq '.[].filename' \
+    2>/dev/null)" || files=""
   if [[ -z "${files}" ]]; then
     echo "Refusing to merge PR #${pr_number}: its changed files could not be read, so whether it touches the queue engine is unknown." >&2
     return 1
