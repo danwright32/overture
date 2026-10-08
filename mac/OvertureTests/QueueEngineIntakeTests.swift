@@ -235,6 +235,16 @@ enum EngineDerivations {
 /// The engine every test builds unless it asks for another derivation.
 typealias CountsEngine = QueueEngine<EngineDerivations.Counts>
 
+extension QueueEngineVerifierCounts {
+    /// Every verification that ended, whatever it found. ONE sum for every suite that waits on a verdict, so a new
+    /// outcome is added in one place: three hand-written copies of it each left out
+    /// `cardMismatches` when #4358 slice E4b added it, so a verification ending in one read as still running.
+    var ended: Int {
+        matches + factMismatches + outputMismatches + cardMismatches + superseded + cancelled
+            + unmeasured.values.reduce(0, +)
+    }
+}
+
 /// Engines built the way every test builds them: the store's main context, a private save counter, the hand
 /// run schedule, the hand moved clock, and notification centres of the test's own, never the app's.
 @MainActor

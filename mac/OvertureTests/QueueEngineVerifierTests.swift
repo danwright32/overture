@@ -99,9 +99,7 @@ enum VerifierRig {
     }
 
     static func outcomes(_ engine: CountsEngine) -> Int {
-        let c = engine.verifierCounts
-        return c.matches + c.factMismatches + c.outputMismatches + c.superseded + c.cancelled
-            + c.unmeasured.values.reduce(0, +)
+        engine.verifierCounts.ended
     }
 }
 
