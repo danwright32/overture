@@ -437,6 +437,6 @@ final class FailurePathRevertProbeTests {
                              + "\(LandingProbe.f1(ms)) ms: \(report); shows still differing from the store \(differing); "
                              + wait.text + ", " + Phase0.load())
         }
-        LandingProbe.say("revert x4 median of \(timings.count): " + Phase0.Reading(runs: timings).text)
+        LandingProbe.say("revert x4 median of \(timings.count): " + Phase0.reading("revert-x4", runs: timings).text)
     }
 }

@@ -59,16 +59,6 @@ struct ScopeRefetchCostTests {
         return rows
     }
 
-    private static func median(_ work: () -> Void) -> Double {
-        var runs: [Double] = []
-        for _ in 0..<5 {
-            let start = DispatchTime.now().uptimeNanoseconds
-            work()
-            runs.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
-        }
-        return runs.sorted()[2]
-    }
-
     private struct Costs {
         let arm: Double
         let queue: Double
@@ -79,7 +69,7 @@ struct ScopeRefetchCostTests {
 
     // Every surface's derivation, as its call site runs it, and what re-arming its inputs costs.
     private func measure(_ rows: [Prospect], sources: [WatchedSource], inquiries: [Inquiry],
-                         now: Date) -> Costs {
+                         now: Date, label: String) -> Costs {
         var key = ScopeFingerprint()
         key.add(rows)
         func arm() { withObservationTracking { key.sources.armAll() } onChange: {} }
@@ -100,8 +90,14 @@ struct ScopeRefetchCostTests {
         }
         // Warm every path once, so no reading below is the one that faults the rows in.
         arm(); queue(); archive(); due(); sourcesSheet()
-        return Costs(arm: Self.median(arm), queue: Self.median(queue), archive: Self.median(archive),
-                     due: Self.median(due), sources: Self.median(sourcesSheet))
+        // #4617: the surfaces are compared with each other below, so they alternate which goes first, sample by
+        // sample (each leads once in five): timed one after another, the later ones carried the order effect.
+        let r = Phase0.alternating([
+            ("scoperefetch-arm-\(label)", arm), ("scoperefetch-queue-\(label)", queue),
+            ("scoperefetch-archive-\(label)", archive), ("scoperefetch-due-\(label)", due),
+            ("scoperefetch-sources-\(label)", sourcesSheet),
+        ])
+        return Costs(arm: r[0].median, queue: r[1].median, archive: r[2].median, due: r[3].median, sources: r[4].median)
     }
 
     @Test func eachSurfacesChoiceIsTheCheaperOne() throws {
@@ -116,7 +112,7 @@ struct ScopeRefetchCostTests {
         }
         try ctx.save()
         let costs = measure(rows, sources: sources, inquiries: [],
-                            now: Date(timeIntervalSince1970: 1_785_000_000))
+                            now: Date(timeIntervalSince1970: 1_785_000_000), label: "synthetic")
         print("scope-refetch-cost: arm \(costs.arm) ms, queue \(costs.queue) ms, archive \(costs.archive) ms, "
               + "due \(costs.due) ms, sources \(costs.sources) ms over \(rows.count) shows")
 
@@ -158,12 +154,12 @@ struct ScopeRefetchCostTests {
         let rows = try ctx.fetch(FetchDescriptor<Prospect>())
         let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
         let inquiries = try ctx.fetch(FetchDescriptor<Inquiry>())
-        let costs = measure(rows, sources: sources, inquiries: inquiries, now: Date())
+        let costs = measure(rows, sources: sources, inquiries: inquiries, now: Date(), label: "live")
         let recipients = rows.reduce(0) { $0 + $1.recipients.count }
 
         // #4252 item 2: the refetch after a save, in the SAME context the way `@Query` does it, against a
         // narrow fetch that reads three columns and none of the archived lists.
-        func refetchAfterSave(_ descriptor: FetchDescriptor<Prospect>) -> Double {
+        func refetchAfterSave(_ metric: String, _ descriptor: FetchDescriptor<Prospect>) -> Double {
             var runs: [Double] = []
             for i in 0..<5 {
                 rows[i].fitReason += " "
@@ -172,19 +168,19 @@ struct ScopeRefetchCostTests {
                 _ = ((try? ctx.fetch(descriptor)) ?? []).count
                 runs.append(Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
             }
-            return runs.sorted()[2]
+            return Phase0.reading(metric, runs: runs).median
         }
-        let full = refetchAfterSave(FetchDescriptor<Prospect>())
+        let full = refetchAfterSave("scoperefetch-refetchFull", FetchDescriptor<Prospect>())
         var narrow = FetchDescriptor<Prospect>()
         narrow.propertiesToFetch = [\Prospect.naturalKey, \Prospect.statusRaw, \Prospect.performanceDate]
-        let narrowMs = refetchAfterSave(narrow)
-        let archived = Self.median {
+        let narrowMs = refetchAfterSave("scoperefetch-refetchNarrow", narrow)
+        let archived = Phase0.median5("scoperefetch-archivedLists") {
             for p in rows {
                 _ = p.runNights.count; _ = p.sourceIds.count; _ = p.runSourceURLs.count
                 _ = p.nightStartTimes.count; _ = p.droppedRunNights.count; _ = p.pitchedRunNights.count
                 _ = p.skippedRunNights.count; _ = p.performanceStartTimes.count
             }
-        }
+        }.median
         print("""
             scope-refetch-cost-live: \(rows.count) shows, \(recipients) recipients, \(sources.count) sources
               re-arming every stored property   \(costs.arm) ms

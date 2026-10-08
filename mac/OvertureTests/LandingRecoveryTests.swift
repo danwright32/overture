@@ -727,9 +727,10 @@ final class LandingRecoveryTests {
             starts.append(Double((t1 - t0).components.attoseconds) / 1e15 + Double((t1 - t0).components.seconds) * 1000)
             retires.append(Double((t2 - t1).components.attoseconds) / 1e15 + Double((t2 - t1).components.seconds) * 1000)
         }
-        func median(_ v: [Double]) -> Double { v.sorted()[v.count / 2] }
+        // #4617: each median through Phase0.reading, which prints the line the before and after comparison reads.
+        let start = Phase0.reading("journal-start", runs: starts), retire = Phase0.reading("journal-retire", runs: retires)
         print(String(format: "journal-cost: 39 sources, 21 rounds: start (write, fsync, rename, fsync folder) median %.2f ms, max %.2f ms; retire (remove, fsync folder) median %.2f ms, max %.2f ms",
-                     median(starts), starts.max() ?? 0, median(retires), retires.max() ?? 0))
+                     start.median, starts.max() ?? 0, retire.median, retires.max() ?? 0))
         #expect(try f.journals.list().isEmpty)
     }
 

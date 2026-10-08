@@ -152,11 +152,14 @@ struct QueueRenderPassLiveStoreCostTests {
     ///
     /// It also returns the spread, because a median quoted without one is a number nobody can tell a
     /// stable reading from a noisy one by (L172, L395).
-    private func medianSeconds(_ work: () -> Void) -> (median: Double, low: Double, high: Double) {
+    ///
+    /// #4617: taken through `Phase0.reading`, which prints the median's `probe reading:` line under `metric`, in
+    /// milliseconds, so the before and after comparison reads it. Returned in seconds, as every caller reads it.
+    private func secondsReading(_ metric: String, _ work: () -> Void) -> (median: Double, low: Double, high: Double) {
         var runs: [Double] = []
         for _ in 0..<Self.samples { runs.append(seconds(work)) }
-        runs.sort()
-        return (runs[runs.count / 2], runs.first ?? 0, runs.last ?? 0)
+        let reading = Phase0.reading(metric, runs: runs.map { $0 * 1000 })
+        return (reading.median / 1000, reading.low / 1000, reading.high / 1000)
     }
 
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
@@ -214,25 +217,25 @@ struct QueueRenderPassLiveStoreCostTests {
         // a table already read is served from the context's row cache, so timing the three in one context
         // measures the ORDER they were written in rather than what each costs. The container is shared,
         // so what is being told apart is the context's work rather than the file's.
-        func timedInAFreshContext(_ work: (ModelContext) -> Void) -> (median: Double, low: Double, high: Double) {
-            medianSeconds {
+        func timedInAFreshContext(_ metric: String, _ work: (ModelContext) -> Void) -> (median: Double, low: Double, high: Double) {
+            secondsReading(metric) {
                 let fresh = ModelContext(container)
                 work(fresh)
             }
         }
-        let prospectFetch = timedInAFreshContext { c in
+        let prospectFetch = timedInAFreshContext("qlive-prospectFetch") { c in
             _ = (try? c.fetch(FetchDescriptor<Prospect>())) ?? []
         }
-        let answersFetch = timedInAFreshContext { c in
+        let answersFetch = timedInAFreshContext("qlive-answersFetch") { c in
             _ = (try? c.fetch(FetchDescriptor<OrgReachabilityAnswer>())) ?? []
         }
-        let sourcesFetch = timedInAFreshContext { c in
+        let sourcesFetch = timedInAFreshContext("qlive-sourcesFetch") { c in
             _ = (try? c.fetch(FetchDescriptor<WatchedSource>())) ?? []
         }
         // #3849: the three above, read the same way. Reported together rather than one line each: each is
         // a small table beside the prospect one, and three lines of near-zero in a block whose point is
         // where the time goes would bury the line that matters (L629).
-        let otherTablesFetch = timedInAFreshContext { c in
+        let otherTablesFetch = timedInAFreshContext("qlive-otherTablesFetch") { c in
             _ = (try? c.fetch(FetchDescriptor<RefusedContactAddress>())) ?? []
             _ = (try? c.fetch(FetchDescriptor<PromotedProducer>())) ?? []
             _ = (try? c.fetch(FetchDescriptor<DemotedHouse>())) ?? []
@@ -241,7 +244,7 @@ struct QueueRenderPassLiveStoreCostTests {
         // stage decision reaches a show's `recipients`, and SwiftData faults that on first touch. Timed
         // apart from the fetch because they are two different costs that a single `fetch and materialise`
         // line has always folded into one (L118).
-        let faultRecipients = timedInAFreshContext { c in
+        let faultRecipients = timedInAFreshContext("qlive-faultRecipients") { c in
             let rows = (try? c.fetch(FetchDescriptor<Prospect>())) ?? []
             for row in rows { _ = row.recipients.count }
         }
@@ -267,7 +270,7 @@ struct QueueRenderPassLiveStoreCostTests {
             \Prospect.draftBody, \Prospect.reachabilityProbedAt, \Prospect.reachabilityUnansweredAt,
             \Prospect.reachabilityRecheckRequestedAt, \Prospect.runEndDate,
         ]
-        let partialFetch = timedInAFreshContext { c in
+        let partialFetch = timedInAFreshContext("qlive-partialFetch") { c in
             var descriptor = FetchDescriptor<Prospect>()
             descriptor.propertiesToFetch = rowFields
             _ = (try? c.fetch(descriptor)) ?? []
@@ -288,9 +291,9 @@ struct QueueRenderPassLiveStoreCostTests {
         // that runs on Dan's Mac: the producer gate reads the overrides, so the default also changed
         // which presenters the pass admits.
         _ = ContactRefusal.ledger(from: refusedRows)
-        let refusalLedgerTerm = medianSeconds { _ = ContactRefusal.ledger(from: refusedRows) }
+        let refusalLedgerTerm = secondsReading("qlive-refusalLedgerTerm") { _ = ContactRefusal.ledger(from: refusedRows) }
         _ = ProducerOverrides(promotedRows: promoted, demotedRows: demoted)
-        let overridesTerm = medianSeconds { _ = ProducerOverrides(promotedRows: promoted, demotedRows: demoted) }
+        let overridesTerm = secondsReading("qlive-overridesTerm") { _ = ProducerOverrides(promotedRows: promoted, demotedRows: demoted) }
         let refusals = ContactRefusal.ledger(from: refusedRows)
         let overrides = ProducerOverrides(promotedRows: promoted, demotedRows: demoted)
 
@@ -318,15 +321,18 @@ struct QueueRenderPassLiveStoreCostTests {
         // only honest statement about what the correction cost; the absolute numbers move with whatever
         // else the Mac is doing.
         _ = makePass(cardKeys: nil, refusals: .none, overrides: .none)
-        let asItWasMeasured = medianSeconds { _ = makePass(cardKeys: nil, refusals: .none, overrides: .none) }
+        let asItWasMeasured = secondsReading("qlive-asItWasMeasured") { _ = makePass(cardKeys: nil, refusals: .none, overrides: .none) }
         // Both counts taken once, here, rather than inside the report string: a pass costs hundreds of
         // milliseconds and a call in a print statement is a whole derivation that reads as a field access
         // (L383).
         let emptyArmRows = makePass(cardKeys: nil, refusals: .none, overrides: .none).rows.count
         let realArmRows = makePass(cardKeys: nil).rows.count
         let work = QueueRenderPass.WorkTally.measure { _ = makePass(cardKeys: nil) }
-        let pass = medianSeconds { _ = makePass(cardKeys: nil) }
+        let pass = secondsReading("qlive-pass") { _ = makePass(cardKeys: nil) }
         let passSeconds = pass.median
+        // #4617: the empty arm and the real one are read against each other, the empty arm timed first in every run
+        // with other work between them, so that difference inside a run carries the order effect, said here.
+        Phase0.fixedOrder(["qlive-asItWasMeasured", "qlive-pass"])
 
         // 4. #3660 Phase 10: THE PASS THE APP ACTUALLY RUNS, which is the one nothing here measured.
         //
@@ -352,7 +358,7 @@ struct QueueRenderPassLiveStoreCostTests {
         // never could (L507, a remainder nobody records is where the unexplained cost accumulates).
         _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
                              now: Date(), cardKeys: [])
-        let preamble = medianSeconds {
+        let preamble = secondsReading("qlive-preamble") {
             _ = QueueModel.scope(from: prospects, answers: answers, corpus: prospects, sources: sources,
                                  now: Date(), cardKeys: [])
         }
@@ -362,7 +368,7 @@ struct QueueRenderPassLiveStoreCostTests {
         let viewport = Set(focused.prefix(Self.viewportRows).map(\.id))
         _ = makePass(cardKeys: viewport)                    // warm, as above
         let narrowedWork = QueueRenderPass.WorkTally.measure { _ = makePass(cardKeys: viewport) }
-        let narrowed = medianSeconds { _ = makePass(cardKeys: viewport) }
+        let narrowed = secondsReading("qlive-narrowed") { _ = makePass(cardKeys: viewport) }
         let narrowedSeconds = narrowed.median
 
         // #4357 step 5: what a card store over FACTS would cost if THIS pass built it, which is the reason
@@ -371,7 +377,7 @@ struct QueueRenderPassLiveStoreCostTests {
         // extract every one on every pass. The engine (#4358) retains its facts and pays nothing for it.
         let scopeRows = QueueRenderPass.Corpus(prospects).narrowed(QueueModel.queueScope).all
         _ = scopeRows.map(RowFacts.extract)
-        let factsStore = medianSeconds { _ = scopeRows.map(RowFacts.extract) }
+        let factsStore = secondsReading("qlive-factsStore") { _ = scopeRows.map(RowFacts.extract) }
 
         // 6. THE FLOOR: the same pass with NO card at all.
         //
@@ -382,7 +388,7 @@ struct QueueRenderPassLiveStoreCostTests {
         // grouping. Measured over the pass's OWN corpus rather than over a differently scoped one, so it
         // is a component of the readings above rather than a number beside them (L118).
         _ = makePass(cardKeys: [])
-        let floor = medianSeconds { _ = makePass(cardKeys: []) }
+        let floor = secondsReading("qlive-floor") { _ = makePass(cardKeys: []) }
         let floorSeconds = floor.median
 
         // 7. #3660 Phase 10: WHERE INSIDE THE FLOOR the time goes.
@@ -400,15 +406,15 @@ struct QueueRenderPassLiveStoreCostTests {
         let inQueue = QueueRenderPass.Corpus(prospects).narrowed(QueueModel.queueScope)
         let baseContext = StageContext.at(QueueModel.easternToday(), now: Date())
         _ = baseContext.resolvingPlaces(of: inQueue.all)
-        let geoTerm = medianSeconds { _ = baseContext.resolvingPlaces(of: inQueue.all) }
+        let geoTerm = secondsReading("qlive-geoTerm") { _ = baseContext.resolvingPlaces(of: inQueue.all) }
         let resolved = baseContext.resolvingPlaces(of: inQueue.all)
 
-        let scopeTerm = medianSeconds {
+        let scopeTerm = secondsReading("qlive-scopeTerm") {
             _ = QueueModel.scope(from: inQueue.all, answers: answers, corpus: everyProspect,
                                  sources: sources, clients: resolved.clients, now: resolved.now,
                                  cardKeys: [], today: resolved.today)
         }
-        let reachedOutTerm = medianSeconds {
+        let reachedOutTerm = secondsReading("qlive-reachedOutTerm") {
             _ = ReachedOutQueue.activeWithDates(from: inQueue.all, now: resolved.now)
         }
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: inQueue.all,
@@ -418,14 +424,14 @@ struct QueueRenderPassLiveStoreCostTests {
         // decomposition is the table plus its projections rather than four independent sweeps. Timed the
         // other way the four lines each rebuilt the table and their sum exceeded the floor they are
         // components of, which is the arithmetic saying the split was wrong rather than the floor (L118).
-        let placeTerm = medianSeconds { _ = StageNavigation.placements(in: inQueue.all, context: resolved) }
+        let placeTerm = secondsReading("qlive-placeTerm") { _ = StageNavigation.placements(in: inQueue.all, context: resolved) }
         // #3742: the SCOUT arm of the stage rule, which is 32.3 ms of the placement's 59.1 ms, measured by
         // reducing `countedFocuses` to one focus at a time. It walks no recipients; what it does is ask
         // whether each show is inside the lead-time window, and that runs `EasternDate.daysUntil`, which
         // is TWO `DateFormatter` parses per show. One of the two is `today`, the same string every time.
         //
         // Timed here so the claim is a number rather than a reading of the code (L107).
-        let leadTimeTerm = medianSeconds {
+        let leadTimeTerm = secondsReading("qlive-leadTimeTerm") {
             for p in inQueue.all {
                 _ = QueueModel.isWithinOrdinaryLeadTime(performanceDate: p.performanceDate,
                                                         today: resolved.today)
@@ -433,21 +439,21 @@ struct QueueRenderPassLiveStoreCostTests {
         }
         // And one parse on its own, over the same count, so the term above can be read as parses rather
         // than as an unexplained cost.
-        let dayParseTerm = medianSeconds {
+        let dayParseTerm = secondsReading("qlive-dayParseTerm") {
             for p in inQueue.all { _ = EasternDate.date(from: p.performanceDate ?? "2027-01-01") }
         }
         let placement = StageNavigation.placements(in: inQueue.all, context: resolved)
-        let stageTerm = medianSeconds {
+        let stageTerm = secondsReading("qlive-stageTerm") {
             _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
         }
-        let fanOutTerm = medianSeconds { _ = QueueRenderPass.fanOutWarning(inQueue.all) }
+        let fanOutTerm = secondsReading("qlive-fanOutTerm") { _ = QueueRenderPass.fanOutWarning(inQueue.all) }
 
         // INSIDE `QueueModel.scope`, which is the largest term left once #3737 and #3738 landed.
         //
         // Same rule as the floor above: a remainder nobody decomposes is where the unexplained cost sits
         // (L507). These are the pieces reachable from a test; `inheritedAnswers` and the card build are
         // not, and what they cost shows up as this block's own remainder rather than being guessed at.
-        let engagementTerm = medianSeconds {
+        let engagementTerm = secondsReading("qlive-engagementTerm") {
             _ = EngagementLink.group(inQueue.all.map(EngagementLink.Row.init))
         }
         // #3743: the index is SHARED now, so the two terms that need it are timed with one in hand and
@@ -456,20 +462,20 @@ struct QueueRenderPassLiveStoreCostTests {
         let producerIndex = ProducerGate.Corpus(everyProspect.map {
             ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
         })
-        let brandsTerm = medianSeconds {
+        let brandsTerm = secondsReading("qlive-brandsTerm") {
             _ = ProducerGate.VenueBrands(corpus: producerIndex, overrides: .none)
         }
-        let rowCountsTerm = medianSeconds {
+        let rowCountsTerm = secondsReading("qlive-rowCountsTerm") {
             _ = QueueModel.organisationRowCounts(everyProspect.map(\.presenter))
         }
         // The row loop: one contacts walk and one `QueueScopeRow` per show, which is what `scope` does
         // for every show whatever the card set says.
-        let rowsTerm = medianSeconds {
+        let rowsTerm = secondsReading("qlive-rowsTerm") {
             for p in inQueue.all { _ = QueueScopeRow(p, facts: RecipientFacts.of(p)) }
         }
         // And the contacts walk ALONE, so the row's own cost can be told from the cost of reaching its
         // contacts. They are one line in the loop and two very different things to fix.
-        let contactsTerm = medianSeconds {
+        let contactsTerm = secondsReading("qlive-contactsTerm") {
             for p in inQueue.all { _ = RecipientFacts.of(p) }
         }
         // #3743: the term #3741 could not reach, which was almost all of that block's 41.3 ms remainder.
@@ -481,7 +487,7 @@ struct QueueRenderPassLiveStoreCostTests {
         // used to build one each; `QueueModel.scope` builds it once and hands it to both now. Timed on
         // its own so the shared part is a line rather than something folded into whichever term happens
         // to be measured first (L370, L118).
-        let producerCorpusTerm = medianSeconds {
+        let producerCorpusTerm = secondsReading("qlive-producerCorpusTerm") {
             _ = ProducerGate.Corpus(everyProspect.map {
                 ProducerGate.Show(presenter: $0.presenter, venue: $0.venue)
             })
@@ -500,7 +506,7 @@ struct QueueRenderPassLiveStoreCostTests {
         //
         // Hashing is the CHEAPEST honest key: it reads both fields of every row exactly as the index
         // does, and does strictly less with them.
-        let indexKeyTerm = medianSeconds {
+        let indexKeyTerm = secondsReading("qlive-indexKeyTerm") {
             var hasher = Hasher()
             for p in everyProspect {
                 hasher.combine(p.presenter)
@@ -509,7 +515,7 @@ struct QueueRenderPassLiveStoreCostTests {
             _ = hasher.finalize()
         }
 
-        let inheritedTerm = medianSeconds {
+        let inheritedTerm = secondsReading("qlive-inheritedTerm") {
             _ = QueueModel.inheritedAnswers(answers, corpus: everyProspect, overrides: .none,
                                             refusals: .none, heldKeys: [], now: resolved.now,
                                             producerCorpus: producerIndex)
@@ -523,17 +529,17 @@ struct QueueRenderPassLiveStoreCostTests {
         let rowsForTerms = QueueModel.scope(from: inQueue.all, answers: answers, corpus: everyProspect,
                                             sources: sources, clients: resolved.clients,
                                             now: resolved.now, cardKeys: [], today: resolved.today).rows
-        let agentTerm = medianSeconds {
+        let agentTerm = secondsReading("qlive-agentTerm") {
             _ = AgentInputs.from(prospects: inQueue.all, allProspects: everyProspect, inquiries: [],
                                  context: resolved, gmailConnected: false,
                                  runInFlight: nil, replyRunAlive: false, placement: placement)
         }
-        let focusedTerm = medianSeconds {
+        let focusedTerm = secondsReading("qlive-focusedTerm") {
             _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement))
         }
-        let selfBookingTerm = medianSeconds { _ = QueueModel.selfBookingIndex(rowsForTerms) }
-        let pendingTerm = medianSeconds { _ = QueueModel.pendingBookingCount(rowsForTerms) }
-        let groupTerm = medianSeconds { _ = QueueModel.groupByDate(rowsForTerms) }
+        let selfBookingTerm = secondsReading("qlive-selfBookingTerm") { _ = QueueModel.selfBookingIndex(rowsForTerms) }
+        let pendingTerm = secondsReading("qlive-pendingTerm") { _ = QueueModel.pendingBookingCount(rowsForTerms) }
+        let groupTerm = secondsReading("qlive-groupTerm") { _ = QueueModel.groupByDate(rowsForTerms) }
 
         let named = geoTerm.median + scopeTerm.median + reachedOutTerm.median + stageTerm.median
             + placeTerm.median
@@ -1282,7 +1288,7 @@ struct QueueRenderPassLiveStoreCostTests {
         // report the fetch's cost a second time and credit it to this scan (L102).
         for r in rows { _ = r.recipients.isEmpty }
 
-        let warm = medianSeconds { _ = BounceDetection.unresolvedBounces(in: rows) }
+        let warm = secondsReading("qlive-warm") { _ = BounceDetection.unresolvedBounces(in: rows) }
         let found = BounceDetection.unresolvedBounces(in: rows).count
 
         print("""

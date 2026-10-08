@@ -231,16 +231,17 @@ struct ScopeMemoTests {
         // Not a threshold on the machine: an absolute millisecond figure here would be measuring
         // whatever else is running (L224). The claim is a RATIO against work of the same shape in the
         // same run, which is what makes it a statement about this code.
-        func seconds(_ work: () -> Void) -> Double {
-            let start = DispatchTime.now().uptimeNanoseconds
-            work()
-            return Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
-        }
         _ = Self.fingerprint(rows)
-        let fingerprint = (0..<5).map { _ in seconds { _ = Self.fingerprint(rows) } }.sorted()[2]
         // The cheapest whole-store thing the real derivation does: read one field from every row.
         _ = rows.map(\.groupName)
-        let oneFieldRead = (0..<5).map { _ in seconds { _ = rows.map(\.groupName) } }.sorted()[2]
+        // #4617: the two arms of the ratio alternate which goes first, sample by sample, and each is the median
+        // of five; timed one after the other, the second carried the order effect into the ratio. Seconds, as
+        // the message reads them.
+        let arms = Phase0.alternating([
+            ("scopememo-fingerprint", { _ = Self.fingerprint(rows) }),
+            ("scopememo-oneFieldRead", { _ = rows.map(\.groupName) }),
+        ])
+        let (fingerprint, oneFieldRead) = (arms[0].median / 1000, arms[1].median / 1000)
 
         #expect(fingerprint < oneFieldRead * 3, """
             hashing \(rows.count) identities took \(fingerprint)s against \(oneFieldRead)s to read one \

@@ -456,10 +456,30 @@ the measurement it came from lives here. Read the entry before the rule decides 
   `--analyse <readings.tsv>` re-reads a kept comparison without running anything.
   A probe takes part by printing `Phase0.Reading.probeLine(<metric>)` beside its human readable line;
   `fixtures/probe-reading/lines.txt` is the one line shape both `Phase0ProbeLineTests` and the script's
-  fixture read (L26). `MemoPathDerivationCostProbeTests` is the first probe that does; its header holds the
-  exact command. Every run builds and takes the lock, so six rounds are twelve runs of it: the report states
-  each one's duration, including any wait for the lock, and the total, so read the cost there rather than
-  from a figure written here.
+  fixture read (L26). `MemoPathDerivationCostProbeTests`'s header holds an exact command. Every run builds
+  and takes the lock, so six rounds are twelve runs of it: the report states each one's duration, including
+  any wait for the lock, and the total, so read the cost there rather than from a figure written here.
+- **Every probe reading prints that line, because the only ways to make one print it (#4617).** A reading
+  comes from `Phase0.median5(<metric>)`, `Phase0.reading(<metric>, runs:)` or `Phase0.alternating(...)`,
+  each of which prints the line as it makes the reading, so every probe that takes Phase0 readings or reports a
+  median (the Phase 0, 0b and 0c probes, the landing, launch, scope, view and journal cost probes, 24 files in
+  all on 2026-10-08) can be compared without any probe being taught to. `ProbeReadingLineGuardTests` scans the
+  three test roots and fails on a `Reading(runs:` built directly, a constructor whose line is thrown away
+  (`emit: { _ in }`), or a median taken by hand (an index at half a count, a fixed index into a fresh sort, a
+  `func median...` helper); a line carrying `probe-reading-exempt:` and a reason is let through, which is how
+  an inner per key median feeding a reported distribution, or a middle ROW picked to time, is written. A
+  metric names the probe, the reading and the corpus label (`p1-fetch-4x`), is made one word by
+  `Phase0.metricWord`, and must be unique within one run, or the script says UNMEASURED for it. A median of a
+  COUNT goes through `Phase0.medianCount`, which prints nothing: the comparison reads milliseconds.
+- **Rivals timed inside one run say how they were ordered (#4617).** Where a probe times two ways of doing one
+  thing in one run, `Phase0.alternating` rotates which arm goes first sample by sample and prints
+  `probe order: alternated <metrics>`; where the probe keeps a fixed order (because the figures a decision
+  quotes were taken in it, or the arms cannot be interleaved), `Phase0.fixedOrder` prints `probe order: fixed
+  <metrics>`, and the script reports it as `ORDER INSIDE A RUN: UNBALANCED`. Neither biases the before and
+  after comparison, since both sides run the same order; a fixed one biases a comparison BETWEEN the rivals
+  inside a run. Alternated on 2026-10-08: p7's generic arms, 0b.1's and 0c.3's cold builds (0c.3's ratio is
+  its stop rule), 0c.7's conflict sweep and its dry run, #4332's two corpus reads, ShowLink's grouping against
+  its neighbour, the scope surfaces, the scope memo's ratio and the scout match arms.
 
 ## Seeing a guard fail
 

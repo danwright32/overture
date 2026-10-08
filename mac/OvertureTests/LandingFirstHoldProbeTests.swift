@@ -168,7 +168,7 @@ final class LandingFirstHoldProbeTests {
                     try work()
                     runs.append(Phase0.ms(since: t0))
                 }
-                Self.say(String(format: "x\(factor) member %@: %.1f ms (runs %@)", name, runs.sorted()[1],
+                Self.say(String(format: "x\(factor) member %@: %.1f ms (runs %@)", name, Phase0.reading("hold-x\(factor)-member-\(name)", runs: runs).median,
                                 runs.map { String(format: "%.1f", $0) }.joined(separator: ", ")))
             }
             member("results file read and decode") { _ = LandingInputs.readResultsFile(at: resultsURL) }
@@ -363,7 +363,7 @@ final class LandingFirstHoldProbeTests {
                     }
                 }
                 for (name, runs) in parts.sorted(by: { $0.key < $1.key }) {
-                    Self.say(String(format: "x\(factor) poison term, %@: %.1f ms (runs %@)", name, runs.sorted()[1],
+                    Self.say(String(format: "x\(factor) poison term, %@: %.1f ms (runs %@)", name, Phase0.reading("hold-x\(factor)-poison-\(name)", runs: runs).median,
                                     runs.map { String(format: "%.1f", $0) }.joined(separator: ", ")))
                 }
                 Self.say("x\(factor) poison term: \(builds) table build per working set")

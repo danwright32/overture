@@ -212,3 +212,90 @@ struct Phase0ProbeLineTests {
         #expect(Phase0.medianCount([]) == 0)
     }
 }
+
+// #4617: every probe reading reaches the before and after comparison. A reading is made ONLY by
+// `Phase0.median5(_:)`, `Phase0.reading(_:runs:)` or `Phase0.alternating(_:)`, each of which prints its
+// `probe reading:` line as it makes it, so these two scans are what keeps it that way: a `Reading` built
+// directly, or a median a probe takes of its own, prints the human text and nothing the script reads, and the
+// comparison of that probe says UNMEASURED for ever (L621). Derived from the tree rather than a list of probes,
+// so the next probe is covered without anybody adding it (L96).
+//
+// A line may carry `probe-reading-exempt:` followed by its reason, which must begin with a word (L675): the
+// line builder's own test, and a probe picking the middle ROW to time, which is not a median of anything.
+@Suite("Every probe reading prints the line the before and after comparison reads (#4617)")
+struct ProbeReadingLineGuardTests {
+    static let constructors = "mac/OvertureTests/Phase0Corpus.swift"
+
+    /// A reading built directly, or through a constructor whose line is thrown away: both print no line.
+    static let directReading = #"Reading\(\s*runs\s*:|emit:\s*\{\s*_\s*in\s*\}"#
+
+    /// A median taken by hand: an index at half a count (`s[s.count / 2]`, `s[s.count / 2 - 1]`), the same
+    /// through `dropFirst`, or half a sample count passed on (`at(Self.samples / 2)`); a fixed index into a
+    /// fresh sort (`runs.sorted()[1]` of three); and a helper declared to take one (`func median`, `median3`),
+    /// which is how a fixed middle index into a sorted list (`runs[2]` of five) hides.
+    static let ownMedian = #"(count|samples)\s*/\s*2(\s*-\s*1)?\s*\]|samples\s*/\s*2\s*\)|dropFirst\([^)]*count\s*/\s*2\s*\)|sorted\(\)\[\s*[0-9]+\s*\]|func\s+[Mm]edian\w*\s*[(<]"#
+
+    static let exemption = #"probe-reading-exempt:\s*[A-Za-z]"#
+
+    static func matches(_ line: String, _ pattern: String) -> Bool {
+        line.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// Every `path:line` in `files`, outside the constructors' own file, whose CODE (a comment line is prose)
+    /// matches `pattern` and carries no exemption.
+    static func sites(_ pattern: String, in files: [(path: String, source: String)]) -> [String] {
+        files.filter { $0.path != constructors }.flatMap { file in
+            file.source.components(separatedBy: "\n").enumerated().compactMap { index, line -> String? in
+                let code = line.trimmingCharacters(in: .whitespaces)
+                guard !code.hasPrefix("//"), matches(code, pattern), !matches(code, exemption) else { return nil }
+                return "\(file.path):\(index + 1)"
+            }
+        }
+    }
+
+    @Test func theScansFindEachShapeAndPassAnExemptedLineOrAComment() {
+        let files: [(path: String, source: String)] = [
+            ("A.swift", "let x = 1\n    print(Phase0.Reading(runs: walls).text)"), // probe-reading-exempt: the scan's own fixture
+            ("B.swift", "    // Phase0.Reading(runs: walls) in prose"), // probe-reading-exempt: the scan's own fixture
+            ("C.swift", "    let m = sorted[sorted.count / 2]\n    let e = (s[s.count / 2 - 1] + s[s.count / 2]) / 2"), // probe-reading-exempt: the scan's own fixture
+            ("D.swift", "    x.sorted().dropFirst(x.count / 2).first\n    at(Self.samples / 2)"), // probe-reading-exempt: the scan's own fixture
+            ("E.swift", "    _ = rows[rows.count / 2] // probe-reading-exempt: picks the middle row to time"),
+            ("F.swift", "    #expect(moved.count < rows.count / 2)\n    let edited = rows.count / 2"), // probe-reading-exempt: the scan's own fixture
+            ("G.swift", "    _ = Phase0.reading(\"x\", runs: r, emit: { _ in })"), // probe-reading-exempt: the scan's own fixture
+            ("H.swift", "    private static func median(_ work: () -> Void) -> Double {"), // probe-reading-exempt: the scan's own fixture
+            ("I.swift", "    let m = runs.sorted()[1]"), // probe-reading-exempt: the scan's own fixture
+            (Self.constructors, "    Reading(runs: runs)\n    runs.sorted()[runs.count / 2]"), // probe-reading-exempt: the scan's own fixture
+        ]
+        #expect(Self.sites(Self.directReading, in: files) == ["A.swift:2", "G.swift:1"])
+        #expect(Self.sites(Self.ownMedian, in: files) == ["C.swift:1", "C.swift:2", "D.swift:1", "D.swift:2", "H.swift:1", "I.swift:1"])
+    }
+
+    @Test func anExemptionWithoutAReasonExemptsNothing() {
+        let files: [(path: String, source: String)] = [("A.swift", "    _ = s[s.count / 2] // probe-reading-exempt: ")] // probe-reading-exempt: the scan's own fixture
+        #expect(Self.sites(Self.ownMedian, in: files) == ["A.swift:1"])
+    }
+
+    @Test func noProbeBuildsAReadingThatPrintsNoLine() {
+        let sources = Phase0LoadReaderTests.testSources()
+        #expect(sources.count > 100, "scanned only \(sources.count) Swift files in the test targets")
+        #expect(sources.contains { $0.path == Self.constructors }, "the scan never read \(Self.constructors)")
+        let found = Self.sites(Self.directReading, in: sources)
+        #expect(found.isEmpty, """
+            these build a Phase0.Reading directly, so the reading prints no `probe reading:` line and the before \
+            and after comparison of that probe can never measure it: \(found). Use Phase0.median5(_:), \
+            Phase0.reading(_:runs:) or Phase0.alternating(_:) (#4617).
+            """)
+    }
+
+    @Test func noProbeTakesAMedianOfItsOwn() {
+        let sources = Phase0LoadReaderTests.testSources()
+        #expect(sources.count > 100, "scanned only \(sources.count) Swift files in the test targets")
+        let found = Self.sites(Self.ownMedian, in: sources)
+        #expect(found.isEmpty, """
+            these take a median by hand, which prints no `probe reading:` line, so the before and after \
+            comparison of that probe can never measure it: \(found). Time through Phase0.median5(_:), \
+            Phase0.reading(_:runs:) or Phase0.alternating(_:); a median of a COUNT goes through \
+            Phase0.medianCount(_:) (#4617).
+            """)
+    }
+}

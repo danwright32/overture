@@ -168,6 +168,39 @@ assert_contains "the shared fixture's lines are read as readings" "$(cat "${WORK
   "$(printf '1\tfirst\tbefore\tfirst-draw-4x\t2.000')"
 assert_contains "every line of it" "$(cat "${WORK}/out-echoed/readings.tsv")" \
   "$(printf '1\tfirst\tbefore\tmemo-derivation-1x\t314.750')"
+# #4617: the fixture's order lines, written by Phase0.orderLine, reach the report through the real log parser.
+assert_contains "an order line is kept beside the readings, with the side that said it" \
+  "$(cat "${WORK}/out-echoed/readings.tsv")" "$(printf '#order\talternated\ttoday-1x,generic-value-1x\tbefore')"
+assert_contains "an alternated group is reported once, as balanced" "${ECHOED}" \
+  "ORDER INSIDE A RUN: alternated for today-1x, generic-value-1x (said by both sides): their samples were taken in rotating order"
+assert_contains "a fixed group is reported as unbalanced, never left silent" "${ECHOED}" \
+  "ORDER INSIDE A RUN: UNBALANCED for whole-live-clone, dry-run-live-clone (said by both sides): timed one after another in the same order"
+assert_equals "each group is reported once however many runs said it" "2" \
+  "$(grep -c '^ORDER INSIDE A RUN' <<< "${ECHOED}")"
+assert_contains "and an order line is not counted as a reading" "${ECHOED}" "round 1, before, run first: started 2026-10-08 02:13 ET, took 300 s, 2 reading(s)"
+
+# A probe whose order changed between the two checkouts says so per side, and a malformed line is dropped.
+ORDERS="${WORK}/orders.tsv"
+{
+  printf '#rounds\t4\n'
+  printf '%s\t%s\t%s\tarm-a\t%s\n' 1 first before 10 1 second after 10 2 first after 10 2 second before 10 \
+    3 first before 10 3 second after 10 4 first after 10 4 second before 10
+  printf '#order\tfixed\tarm-a,arm-b\tbefore\n#order\talternated\tarm-a,arm-b\tafter\n'
+} > "${ORDERS}"
+ORDERS_ANALYSED="$("${SCRIPT}" --analyse "${ORDERS}" 2>&1; echo "exit=$?")"
+assert_contains "the before side's fixed order is named as the before side's" "${ORDERS_ANALYSED}" \
+  "ORDER INSIDE A RUN: UNBALANCED for arm-a, arm-b (said by the before side only)"
+assert_contains "and the after side's alternation as the after side's" "${ORDERS_ANALYSED}" \
+  "ORDER INSIDE A RUN: alternated for arm-a, arm-b (said by the after side only)"
+assert_contains "the order lines change no verdict" "${ORDERS_ANALYSED}" "exit=0"
+MALFORMED="${WORK}/malformed.log"
+printf 'probe reading: a 1.0\nprobe order: sideways a,b\nprobe order: fixed lonely\nprobe order: fixed a b\nprobe order: fixed a,b\n' \
+  > "${MALFORMED}"
+STUB_BEFORE=0 STUB_AFTER=0 STUB_ECHO_FILE="${MALFORMED}" run_compare malformed --rounds 4 > /dev/null
+assert_equals "only a well formed order line is read, once per run" "8" \
+  "$(grep -c '^#order' "${WORK}/out-malformed/readings.tsv")"
+assert_equals "and it is the well formed one" "0" \
+  "$(grep '^#order' "${WORK}/out-malformed/readings.tsv" | grep -vc "$(printf '^#order\tfixed\ta,b\t')")"
 
 # --- the analysis on #4614's own six rounds, first draw at 4x (L48: measured, not shaped) ------------------
 PR4614="${WORK}/pr4614.tsv"

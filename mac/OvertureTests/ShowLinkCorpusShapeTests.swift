@@ -282,21 +282,6 @@ struct ShowLinkCorpusShapeTests {
 
     // MARK: what the pass costs, against the one already sitting beside it
 
-    /// The MEDIAN of five runs with its spread. One reading is not a yardstick: measured on this Mac
-    /// 2026-09-19, the whole live-store pass came out 644.9 ms and then 1184.9 ms on IDENTICAL code, and
-    /// the prospect fetch inside it read 182.7, 242.0 and 447.1 ms across three runs of the same bytes.
-    /// A difference smaller than that is not visible to any single reading (L224, L395, L656).
-    private func medianMilliseconds(_ work: () -> Void) -> (median: Double, low: Double, high: Double) {
-        var runs: [Double] = []
-        for _ in 0..<5 {
-            let started = DispatchTime.now().uptimeNanoseconds
-            work()
-            runs.append(Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000)
-        }
-        runs.sort()
-        return (runs[runs.count / 2], runs[0], runs[runs.count - 1])
-    }
-
     // `QueueModel.scope` now builds this table on every queue rebuild, over the whole corpus, so what it
     // costs is a fair question and "it is only string folding" is not an answer (L353).
     //
@@ -322,8 +307,19 @@ struct ShowLinkCorpusShapeTests {
 
             // Mapping the rows is part of what the scope builder pays, so it is inside the measured work
             // rather than hoisted out of it, which would measure a cheaper thing than the app runs.
-            let mine = medianMilliseconds { _ = ShowLink.group(all.map(ShowLink.Row.init)) }
-            let neighbour = medianMilliseconds { _ = ContradictedCancellation.contradictedKeys(among: all) }
+            //
+            // The MEDIAN of five runs each with its spread. One reading is not a yardstick: measured on this Mac
+            // 2026-09-19, the whole live-store pass came out 644.9 ms and then 1184.9 ms on IDENTICAL code, and
+            // the prospect fetch inside it read 182.7, 242.0 and 447.1 ms across three runs of the same bytes.
+            // A difference smaller than that is not visible to any single reading (L224, L395, L656).
+            //
+            // #4617: the two arms alternate which goes first, sample by sample. Timed one after the other, the
+            // neighbour always ran second and carried the order effect into the ratio this asserts on.
+            let arms = Phase0.alternating([
+                ("showlink-group", { _ = ShowLink.group(all.map(ShowLink.Row.init)) }),
+                ("showlink-contradictedNeighbour", { _ = ContradictedCancellation.contradictedKeys(among: all) }),
+            ])
+            let (mine, neighbour) = (arms[0], arms[1])
 
             print("""
             ShowLink pass cost, over \(all.count) rows
