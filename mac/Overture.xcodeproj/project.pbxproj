@@ -1279,6 +1279,7 @@
 		7E79D5D46DC847BBB4D02CC2 /* SourceSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124B319867628CB8A16842F8 /* SourceSearchTests.swift */; };
 		7E7B8A744D25F28D54DFFDB2 /* OmniFocusSyncRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3904520A713106DFBD49967F /* OmniFocusSyncRunner.swift */; };
 		7E8F41B7FE1EB2C71ED1D74F /* RootViewSearchFieldGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6169A59939A12B04CF35120 /* RootViewSearchFieldGuardTests.swift */; };
+		7E9BA281EB025C93138E41D2 /* QueueEngineFullReadNetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7BBA4B1CF8A76FD0F402E1C /* QueueEngineFullReadNetsTests.swift */; };
 		7E9CB8E9E82C47C03E7C8A7A /* SourceExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB3048B879A5577B5C68D54 /* SourceExtractor.swift */; };
 		7ED3F570EF7AD21912379342 /* ReachedOutRowSlots.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79FF8A826134A5B487313B6 /* ReachedOutRowSlots.swift */; };
 		7F2549806FB2BF63E2F9B908 /* RunWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58D17DC1074893CC29A3EB58 /* RunWindowTests.swift */; };
@@ -3963,6 +3964,7 @@
 		A737FE2816AF825D551B3A21 /* SelfBookingWorkableNightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfBookingWorkableNightTests.swift; sourceTree = "<group>"; };
 		A79FF8A826134A5B487313B6 /* ReachedOutRowSlots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachedOutRowSlots.swift; sourceTree = "<group>"; };
 		A7A884C226A24FC552372DA9 /* ConflictSurfacedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConflictSurfacedTests.swift; sourceTree = "<group>"; };
+		A7BBA4B1CF8A76FD0F402E1C /* QueueEngineFullReadNetsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueEngineFullReadNetsTests.swift; sourceTree = "<group>"; };
 		A7D100C389AC787054842278 /* ListingOrganiserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListingOrganiserTests.swift; sourceTree = "<group>"; };
 		A84298B6C8EA1E8A89770772 /* OmniFocusSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSync.swift; sourceTree = "<group>"; };
 		A845FED20A605560CC21DB4A /* EventClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventClassifier.swift; sourceTree = "<group>"; };
@@ -5568,6 +5570,7 @@
 				5215E42CBAD77A95F94C8966 /* QueueDepartingFoldTests.swift */,
 				DA14434886B6CC5AF9B91D46 /* QueueDerivationCounterTests.swift */,
 				3802AA2883BE11846616F4A0 /* QueueDerivationReasonTests.swift */,
+				A7BBA4B1CF8A76FD0F402E1C /* QueueEngineFullReadNetsTests.swift */,
 				B5BB1614763BD8F3619F9C0B /* QueueEngineIntakeTests.swift */,
 				C34375F38752FD1A3E0ED67F /* QueueEnginePassTests.swift */,
 				3118EE9FC5DA578075EBDA37 /* QueueEnginePhase0bProbeTests.swift */,
@@ -8666,6 +8669,7 @@
 				D00E57A0DF6573825FA2E93F /* QueueDerivationCounterTests.swift in Sources */,
 				425C23F9AAF1921CF8B05D18 /* QueueDerivationReasonTests.swift in Sources */,
 				2195F204C280823DC114DF1D /* QueueEngine.swift in Sources */,
+				7E9BA281EB025C93138E41D2 /* QueueEngineFullReadNetsTests.swift in Sources */,
 				AF320CFA759764AA016048D7 /* QueueEngineIntakeTests.swift in Sources */,
 				329F214BCC8A454598AA7963 /* QueueEnginePassTests.swift in Sources */,
 				D81E03A2968087AF842DEFA8 /* QueueEnginePhase0Extraction.swift in Sources */,
