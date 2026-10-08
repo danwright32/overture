@@ -57,8 +57,9 @@ merge_refusal_out() {
       # are about, so it always has an answer.
       # The queue engine gate's files question (#4358 slice E4d) answers a file outside the engine, so these
       # cases are about the merge rather than the gate, which has its own cases below.
-      view) case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *files*) printf 'scripts/lib/scratch.sh' ;;
+      view) case "$*" in *headRefOid*) printf 'abc1234\tmain' ;;
                          *) printf '%s' "${reported_state}" ;; esac ;;
+      --paginate) printf 'scripts/lib/scratch.sh' ;;
     esac
   }
   delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
@@ -121,6 +122,7 @@ gate_out() {  # gate_out <checker path or MISSING> [SKIP]
     echo "$2" >> "${GH_CALL_LOG}"
     case "$*" in
       *headRefOid*) printf 'abc1234\tmain' ;;
+      */files*) printf 'scripts/lib/scratch.sh' ;;
       *merge*) return 0 ;;
       *view*) printf 'MERGED' ;;
     esac
@@ -147,7 +149,8 @@ gh_args_out() {
   : > "${GH_CALL_LOG}"
   gh_as_danwright32() {
     printf '%s\n' "$*" >> "${GH_CALL_LOG}"
-    case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *"pr merge"*) return 0 ;; *view*) printf 'MERGED' ;; esac
+    case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; */files*) printf 'scripts/lib/scratch.sh' ;;
+      *"pr merge"*) return 0 ;; *view*) printf 'MERGED' ;; esac
   }
   delete_merged_local_branch() { :; }
   PR_REVIEW_CHECK="${FAKE_CHECK_DIR}/allow.sh" SKIP_PR_REVIEW="" merge_pr "92" "feature-pinned" >/dev/null 2>&1
@@ -246,6 +249,24 @@ assert_contains "an interrupted run says so in its exit code" "${OUT}" "RC=130"
 assert_contains "and still removes its worktree" "${OUT}" "WORKTREES=1"
 assert_contains "and its temporary folder" "${OUT}" "LEFT=0"
 rm -rf "${GATE_REPO}" "${GATE_TMP}"
+
+# The files are asked for every page (`gh api --paginate`), never `gh pr view --json files`, which stops at 100: an
+# app Swift file past the first hundred still runs the gate (the lessons review of E4d1).
+FILES_ASKED="$(mktemp "${TMPDIR:-/tmp}/engine-gate-files.XXXXXX")"
+gate_many_files_out() {
+  : > "${GATE_RUNS}"
+  gh_as_danwright32() {
+    printf '%s\n' "$*" > "${FILES_ASKED}"
+    for n in $(seq 1 120); do printf 'docs/page-%s.md\n' "${n}"; done
+    printf 'mac/Overture/Domain/SelfBookingConflict.swift\n'
+  }
+  ENGINE_GATE_RUNNER=gate_passes engine_gate_allows "94" "${GATE_SHA}" 2>&1
+  echo "RUNS=$(wc -l < "${GATE_RUNS}" | tr -d ' ')"
+}
+OUT="$(gate_many_files_out)"
+assert_contains "an app Swift file past the first hundred still runs the gate" "${OUT}" "RUNS=1"
+assert_contains "and the files were asked for every page" "$(cat "${FILES_ASKED}")" "--paginate"
+rm -f "${FILES_ASKED}"
 
 OUT="$(gate_files_out "scripts/lib/scratch.sh" "${GATE_SHA}" gate_fails)"
 assert_contains "a PR touching no engine file is allowed" "${OUT}" "RC=0"
