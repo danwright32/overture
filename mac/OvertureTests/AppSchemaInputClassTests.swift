@@ -7,9 +7,9 @@ import Testing
 //
 //   * to `AppSchema.models`: every model classified exactly once, and nothing classified that is not one;
 //   * to `QueueRenderPass.Inputs`: every field a class says it feeds is a real field of the pass's inputs;
-//   * to `QueueView`: the models it actually holds (its `@Query`s and the array handed to it) are exactly
-//     the ones classified as read directly, so a table the queue starts reading cannot stay classified as
-//     one it ignores, and the reverse;
+//   * to the queue engine: the tables it holds (`FactStore.Table`, since #4358 slice E4d, when the queue's own
+//     `@Query`s went) are exactly the models classified as read directly, so a table the queue starts reading
+//     cannot stay classified as one it ignores, and the reverse;
 //   * and a table classified as not an input is not named anywhere in the pass's code.
 @Suite("Every model's way into the queue is classified, and the classes are true (#4356)")
 @MainActor

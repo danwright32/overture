@@ -63,17 +63,27 @@ struct RemovingOneSourceCostsOnePassTests {
         // #4516: frozen, so the memo's two second window cannot be what a count here measures.
         var clock = HostedPassCounting.frozenClock()
         var mounted = true
-        // #4358 slice E4d: the sheet takes the watchlist handed down rather than querying it; this harness hands it
-        // down from a query of its own, which is the bare stand-in for the engine's rows.
-        @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
-
         var body: some View {
             if mounted {
-                SourcesView(held: QueueEngineRows(everyShow: prospects, everyInquiry: [], everySource: sources),
-                            clock: clock)
+                WatchlistReader(prospects: prospects, clock: clock)
                     .modelContainer(container)
                     .environment(feedback)
             }
+        }
+    }
+
+    // #4358 slice E4d: the sheet takes the watchlist handed down rather than querying it; this hands it down from a
+    // query of its own, the bare stand-in for the engine's rows. A view of its OWN, below `.modelContainer`, so the
+    // query reads the container: held by the harness above, it ran with no context in its environment and handed
+    // the sheet an empty watchlist (the chunk review of E4d2, L472).
+    private struct WatchlistReader: View {
+        let prospects: [Prospect]
+        let clock: () -> Date
+        @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
+
+        var body: some View {
+            SourcesView(held: QueueEngineRows(everyShow: prospects, everyInquiry: [], everySource: sources),
+                        clock: clock)
         }
     }
 

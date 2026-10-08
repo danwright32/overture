@@ -282,15 +282,15 @@ struct LandingWrittenTypesScanTests {
         let reads: String
     }
 
-    static func consumers(of written: Set<String>) -> [Consumer] {
-        let files = AppSourceWalk.files(under: RepoRoot.app)
+    static func consumers(of written: Set<String>, in planted: [AppSourceWalk.File]? = nil) -> [Consumer] {
+        let files = planted ?? AppSourceWalk.files(under: RepoRoot.app)
         var out: Set<Consumer> = []
         for declaration in files.flatMap(QueryPairAudit.declarations(in:)) where written.contains(declaration.entity) {
             out.insert(Consumer(key: "\(declaration.file).\(declaration.property)",
                                 reads: "@Query over \(declaration.entity)"))
         }
         let models = ScopeMemoInputsAreCompleteGuardTests.modelTypes()
-        for input in ScopeMemoInputsAreCompleteGuardTests.memoInputs(models: models).inputs
+        for input in ScopeMemoInputsAreCompleteGuardTests.memoInputs(models: models, files: planted).inputs
         where written.contains(input.element) {
             out.insert(Consumer(key: "\(input.file).\(input.derivation) memo reads \(input.collection)",
                                 reads: "a memo input over \(input.element)"))
@@ -363,6 +363,30 @@ struct LandingWrittenTypesScanTests {
     }
 
     // MARK: - The rule, on sites written here
+
+    // The positive control `everyConsumerOfALandingWrittenTypeIsOneTheCutoverHolds` names: with no consumer left in
+    // the app, an empty list is only a finding if both readers find one over a landing written type when it is
+    // there. A planted file holds one of each (the chunk review of E4d2, L159).
+    @Test func theReadersFindAPlantedConsumer() {
+        let planted = AppSourceWalk.File(url: URL(fileURLWithPath: "/planted/Planted.swift"), name: "Planted.swift",
+                                         text: """
+            struct Planted: View {
+                @Query private var shows: [Prospect]
+                let held: [WatchedSource]
+                @State private var renderMemo = ScopeMemo<Int>()
+                func derive() -> Int {
+                    renderMemo.value(fingerprint: 0) { held.count }
+                }
+                var body: some View { Text("\\(shows.count)") }
+            }
+            """)
+        let found = Set(Self.consumers(of: ["Prospect", "WatchedSource"], in: [planted]).map(\.reads))
+        #expect(found.contains("@Query over Prospect"), Comment(rawValue: "the query reader missed it: \(found)"))
+        #expect(found.contains("a memo input over WatchedSource"),
+                Comment(rawValue: "the memo reader missed it: \(found)"))
+        #expect(Self.consumers(of: ["Inquiry"], in: [planted]).isEmpty,
+                "a consumer of a type the landing does not write was reported")
+    }
 
     @Test func theRuleRefusesAnUnclassifiedSiteAStaleEntryAndAWrongType() {
         let files: [(name: String, text: String)] = [

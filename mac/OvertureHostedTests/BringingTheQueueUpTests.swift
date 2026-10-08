@@ -50,7 +50,8 @@ struct BringingTheQueueUpTests {
     private static let allowedDerivationsForTheWholeApp = 2
 
     private func container() throws -> ModelContainer {
-        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
+        // #4358 slice E4d: the whole schema, because the queue engine started here reads every table it holds.
+        try TestModelContainer.inMemory(AppSchema.models)
     }
 
     private func seed(_ ctx: ModelContext, rows: Int) {
