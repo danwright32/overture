@@ -16,8 +16,8 @@ import Testing
 // Two arms over ONE set of steps (`RealUseSteps`), so the guard and the measurement cannot drift apart:
 //   * `QueueEngineFullReadNetsTests`, in every run: the synthetic landing corpus (invented shows, L222) through all
 //     three entry points that land shows, then every ordinary action, asserting no net fires and nothing reads the
-//     whole store; and, in the same fixture, a merged insert that MUST trip its net (L159), so a quiet net is known
-//     to be a net that can speak.
+//     whole store; and, in the same fixture, a merged insert and a foreign save that MUST trip theirs (L159), so
+//     a quiet net is known to be a net that can speak.
 //   * `QueueEngineNetsRealUseProbeTests`, opt in: the frozen 1x and 4x live store inputs of #4327 step 0.0 (the
 //     real arm's archive), a real landing of the recorded results plus the same actions, printing every counter
 //     and the engine's main actor time per step. Counts and durations only, never a name (L222).
@@ -120,21 +120,38 @@ final class EngineNetRun {
         return reading
     }
 
+    /// What one forced verification said. `received` false is no verdict at all, never a match (L98).
+    struct Verdict: CustomStringConvertible {
+        let received: Bool
+        let matches: Int
+        let factMismatches: Int
+        let outputMismatches: Int
+        let other: String
+
+        var description: String {
+            guard received else { return "UNMEASURED: no verdict in two minutes" }
+            return "matches \(matches), fact mismatches \(factMismatches), output mismatches \(outputMismatches), "
+                + other
+        }
+    }
+
     /// The verifier's verdict on the engine's facts against a fresh read of the saved store, once asked for.
-    func verify() async -> String {
+    func verify() async -> Verdict {
         let before = engine.verifierCounts
         func verdicts(_ c: QueueEngineVerifierCounts) -> Int {
             c.matches + c.factMismatches + c.outputMismatches + c.superseded + c.cancelled
                 + c.unmeasured.values.reduce(0, +)
         }
         engine.verifyNow()
-        guard await waitUntil("the verifier's verdict", timeout: .seconds(120), {
+        let received = await waitUntil("the verifier's verdict", timeout: .seconds(120)) {
             verdicts(engine.verifierCounts) > verdicts(before)
-        }) else { return "UNMEASURED: no verdict in two minutes" }
+        }
         let c = engine.verifierCounts
-        return "matches \(c.matches - before.matches), fact mismatches \(c.factMismatches - before.factMismatches), "
-            + "output mismatches \(c.outputMismatches - before.outputMismatches), superseded "
-            + "\(c.superseded - before.superseded), unmeasured \(c.unmeasured)"
+        return Verdict(received: received, matches: c.matches - before.matches,
+                       factMismatches: c.factMismatches - before.factMismatches,
+                       outputMismatches: c.outputMismatches - before.outputMismatches,
+                       other: "superseded \(c.superseded - before.superseded), cancelled "
+                           + "\(c.cancelled - before.cancelled), unmeasured \(c.unmeasured)")
     }
 }
 
@@ -407,6 +424,24 @@ final class QueueEngineFullReadNetsTests {
         #expect(reading.insertsMergedAway == 1 && reading.fullReads == 1,
                 "a merged insert must trip its net and read the store once: \(reading)")
     }
+
+    // The foreign save net, in the same fixture: a save through a second context is counted (and, attributed, costs
+    // no full read since slice E2). The two nets with no control here cannot be produced by a save the app can make:
+    // `unclassifiedSaves` needs a model `AppSchemaInputClass` lacks, which `AppSchemaInputClassTests` refuses, and
+    // `unreadRows` needs a store read that throws, which E1a's intake suite stubs. What each of them costs is the
+    // full read, and `fullReads` is the quantity every step above asserts, proven to speak by the control above.
+    @Test func aSaveThroughAnotherContextTripsItsNetInTheSameFixture() async throws {
+        let run = try await started()
+        let reading = try await run.step("foreign save") {
+            let other = ModelContext(run.context.container)
+            guard let show = try other.fetch(FetchDescriptor<Prospect>()).first else { return false }
+            show.fitReason = "written through another context"
+            try other.save()
+            return true
+        }
+        #expect(reading.foreignSaves == 1 && reading.fullReads == 0,
+                "a foreign save must be counted, attributed, with no full read: \(reading)")
+    }
 }
 
 // MARK: - The measurement, opt in, on the frozen live store inputs
@@ -508,6 +543,11 @@ final class QueueEngineNetsRealUseProbeTests {
                   verifier after every step: \(verdict)
                 """)
             #expect(fired.isEmpty, "a step of real use tripped a full-read net: \(fired)")
+            // A step with nothing to act on fires no net either, so a quiet reading counts only when it ran (L159).
+            let idle = run.readings.filter { !$0.exercised }.map(\.step)
+            #expect(idle.isEmpty, "steps that found nothing to act on, so measured nothing: \(idle)")
+            #expect(verdict.received && verdict.factMismatches == 0 && verdict.outputMismatches == 0,
+                    "the engine's facts did not verify against a fresh read: \(verdict)")
         }
     }
 }
