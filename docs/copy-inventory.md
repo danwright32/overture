@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1804 sentences**.
+Every sentence Overture can say to Dan: **1810 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 677 of the 1804 below hold a
+  sentence carrying a VALUE: 680 of the 1810 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2425,6 +2425,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "That doesn't look like a web address."
     `Domain/WatchlistEditing.swift`
+"That inquiry is no longer in Overture, so nothing was changed. The row you pressed is out of date"
+    `Domain/InquiryIdentity.swift`
+"That inquiry was still being logged when this row was drawn, so Overture could not tell which inquiry you pressed. Nothing was changed. The list has caught up, so press it again if it is still there"
+    `Domain/InquiryIdentity.swift`
 "That isn't a date Overture can read."
     `Domain/DayOff.swift`
 "That landing finished at \(LandingWaitCopy.landedTime(landedAt)), so discarding its record changes nothing else."
@@ -2533,6 +2537,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "The inquiry form was on screen."
     `Domain/FreezeReport.swift`
+"The inquiry from \(name) is no longer in Overture, so nothing was changed. The row you pressed is out of date"
+    `Domain/InquiryIdentity.swift`
+"The inquiry from \(name) was still being logged when this row was drawn, so Overture could not tell which inquiry you pressed. Nothing was changed. The list has caught up, so press it again if it is still there"
+    `Domain/InquiryIdentity.swift`
 "The installer could not reach GitHub to check whether this build's code had been merged."
     `Domain/BuildFreshnessPanel.swift`
 "The last day is before the first day."
@@ -2581,6 +2589,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The room its shows play in"
     `UI/SourcesView.swift`
+"The row for \(name)'s inquiry no longer matches the inquiry Overture holds, so nothing was changed. The list has caught up, so press it again if it is still there"
+    `Domain/InquiryIdentity.swift`
 "The run returned results under \(ids.count) sources it was never asked about (\(list)), so it rebuilt those ids and that work was ignored. The sources they should have belonged to will be read again."
     `Domain/ScoutWarningCopy.swift`
 "The run returned results under a source it was never asked about (\(list)), so it rebuilt an id and that work was ignored. The source it should have belonged to will be read again."
@@ -2754,6 +2764,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "This replaces the email you wrote yourself with an AI draft. Replace it?"
     `Domain/ReprepRequest.swift`
+"This row no longer matches the inquiry Overture holds, so nothing was changed. The list has caught up, so press it again if it is still there"
+    `Domain/InquiryIdentity.swift`
 "This run's results disagreed with themselves, so nothing from it was used."
     `Domain/WatchedSource.swift`
 "This sends \(chosen) separate emails right now, one to each of these people. Nothing else goes out."

@@ -10,7 +10,7 @@ import SwiftData
 //
 // BY VALUE, three ways, and never by description:
 //   - a member that is already a value with real equality is compared with `==`;
-//   - a member that holds MODELS (`inquiriesByRowID`, the Reached out list) is
+//   - a member that holds MODELS (the Reached out list's show rows, until #4371) is
 //     compared through a projection onto store identifiers and the values beside them, because a model's
 //     equality is object identity and two passes over one store hold different objects for the same row;
 //   - the one class, `CardStore`, is compared through `contents`, the value it holds.
@@ -62,7 +62,8 @@ enum RenderDataComparison {
         Field(name: "dateGroups", how: .value) { $0.dateGroups == $1.dateGroups },
         Field(name: "inquiryRows", how: .value) { $0.inquiryRows == $1.inquiryRows },
         Field(name: "inquiryGroups", how: .value) { $0.inquiryGroups == $1.inquiryGroups },
-        Field(name: "inquiriesByRowID", how: .projection) { $0.inquiriesByRowID.mapValues(\.persistentModelID) == $1.inquiriesByRowID.mapValues(\.persistentModelID) },
+        // #4579: identities now, so compared as the values they are.
+        Field(name: "inquiriesByRowID", how: .value) { $0.inquiriesByRowID == $1.inquiriesByRowID },
         Field(name: "reachedOutList", how: .projection) { list($0.reachedOutList) == list($1.reachedOutList) },
         Field(name: "dateProbeHeadings", how: .value) { $0.dateProbeHeadings == $1.dateProbeHeadings },
         Field(name: "stageCounts", how: .value) { $0.stageCounts == $1.stageCounts },
@@ -111,7 +112,7 @@ enum RenderDataComparison {
 
     private enum EntryKey: Equatable {
         case show(PersistentIdentifier, PersistentIdentifier, Date)
-        case inquiry(PersistentIdentifier, InquiryRow, Date)
+        case inquiry(InquiryIdentity, InquiryRow, Date)
     }
 
     private struct GroupKey: Equatable {
@@ -133,8 +134,8 @@ enum RenderDataComparison {
         switch e {
         case .prospect(let show, let contact, let next):
             return .show(show.persistentModelID, contact.persistentModelID, next)
-        case .inquiry(let inquiry, let row, let next):
-            return .inquiry(inquiry.persistentModelID, row, next)
+        case .inquiry(let identity, let row, let next):
+            return .inquiry(identity, row, next)
         }
     }
 
