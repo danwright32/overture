@@ -55,7 +55,10 @@ merge_refusal_out() {
       merge) return "${merge_rc}" ;;
       # The head question the lessons review gate asks first is not the state question these cases
       # are about, so it always has an answer.
-      view) case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *) printf '%s' "${reported_state}" ;; esac ;;
+      # The queue engine gate's files question (#4358 slice E4d) answers a file outside the engine, so these
+      # cases are about the merge rather than the gate, which has its own cases below.
+      view) case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *files*) printf 'scripts/lib/scratch.sh' ;;
+                         *) printf '%s' "${reported_state}" ;; esac ;;
     esac
   }
   delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
@@ -162,6 +165,57 @@ assert_contains "and says out loud that it did" "${OUT}" "NOT held for the lesso
 
 rm -rf "${FAKE_CHECK_DIR}"
 rm -f "${GH_CALL_LOG}"
+
+
+# --- the queue engine's merge gate (#4358 slice E4d) ---------------------------------------------------
+#
+# engine_gate_allows, driven with the gh wrapper answering the PR's files and the run replaced
+# (ENGINE_GATE_RUNNER), so no case reaches GitHub or the live store. Every outcome it names is produced here
+# (L151): not an engine PR, a pass, a failed run, a run that printed no PASSED line (skipped), unreadable
+# files, a head that is not a whole commit, and the override.
+GATE_SHA="0123456789abcdef0123456789abcdef01234567"
+GATE_RUNS="$(mktemp "${TMPDIR:-/tmp}/engine-gate-runs.XXXXXX")"
+gate_files_out() {
+  local files="$1" head="$2" runner="$3"
+  : > "${GATE_RUNS}"
+  gh_as_danwright32() { printf '%s' "${GATE_FILES}"; }
+  GATE_FILES="${files}" ENGINE_GATE_RUNNER="${runner}" engine_gate_allows "93" "${head}" 2>&1
+  echo "RC=$?"
+  echo "RUNS=$(wc -l < "${GATE_RUNS}" | tr -d ' ')"
+}
+gate_passes() { echo "$1" >> "${GATE_RUNS}"; echo "noise"; echo "engine-divergence-gate: PASSED matches 5, records 0"; }
+gate_fails() { echo "$1" >> "${GATE_RUNS}"; echo "the merge gate REFUSED: factMismatch x1"; return 1; }
+gate_skipped() { echo "$1" >> "${GATE_RUNS}"; echo "Test theBranchsVerifier... skipped: no live store"; return 0; }
+
+OUT="$(gate_files_out "scripts/lib/scratch.sh" "${GATE_SHA}" gate_fails)"
+assert_contains "a PR touching no engine file is allowed" "${OUT}" "RC=0"
+assert_contains "and says why the gate was not run" "${OUT}" "touches no queue engine file"
+assert_contains "and runs nothing" "${OUT}" "RUNS=0"
+
+OUT="$(gate_files_out "mac/Overture/App/QueueEngine.swift" "${GATE_SHA}" gate_passes)"
+assert_contains "an engine PR whose suite says PASSED is allowed" "${OUT}" "RC=0"
+assert_contains "and the suite ran once" "${OUT}" "RUNS=1"
+assert_contains "and the verdict is printed" "${OUT}" "engine-divergence-gate: PASSED"
+
+OUT="$(gate_files_out "mac/Overture/UI/QueueView.swift" "${GATE_SHA}" gate_fails)"
+assert_contains "an engine PR whose suite failed is refused" "${OUT}" "RC=1"
+assert_contains "and the refusal names the gate" "${OUT}" "queue engine's merge gate failed"
+
+OUT="$(gate_files_out "mac/Overture/Domain/FactStore.swift" "${GATE_SHA}" gate_skipped)"
+assert_contains "a run that never said PASSED (skipped, no live store) is refused" "${OUT}" "RC=1"
+assert_contains "and says it was skipped or ran nothing" "${OUT}" "skipped or ran nothing"
+
+OUT="$(gate_files_out "" "${GATE_SHA}" gate_passes)"
+assert_contains "unreadable files refuse rather than reading as no engine change" "${OUT}" "RC=1"
+assert_contains "and runs nothing" "${OUT}" "RUNS=0"
+
+OUT="$(gate_files_out "mac/Overture/App/QueueEngine.swift" "abc1234" gate_passes)"
+assert_contains "an abbreviated head is refused, since the stamp needs a whole commit" "${OUT}" "RC=1"
+
+OUT="$(ALLOW_ENGINE_GATE_SKIP=1 gate_files_out "mac/Overture/App/QueueEngine.swift" "${GATE_SHA}" gate_fails)"
+assert_contains "the override lets it through" "${OUT}" "RC=0"
+assert_contains "and says out loud that it did" "${OUT}" "NOT checked by the queue engine's merge gate"
+rm -f "${GATE_RUNS}"
 
 
 # --- there is ONE implementation of the merge ---------------------------------------------------------

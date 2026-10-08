@@ -86,8 +86,6 @@ struct QueueEngineDerivation<Value: Sendable>: Sendable {
     let differingFields: @Sendable (Value, Value) -> [String]
     /// The earliest instant at which a rule in the answer comes due, or nil when none is in play.
     let nextChange: @Sendable (Value) -> Date?
-    /// The cards the answer built, so a frame asking only for those is no reason to derive again.
-    let builtCardKeys: @Sendable (Value) -> Set<String>
     /// #4358 slice E4b (#4357 step 8): the pass as the engine's own turn runs it, on the main actor, wrapped in what
     /// a main-thread pass records (the queue's counts it and times it for the freeze watch). The verifier runs
     /// `derive` itself, on its own thread, which records nothing: a rebuild nobody waits for is not a pass any
@@ -139,8 +137,12 @@ struct QueueEngineLanding: Hashable, Sendable {
 enum QueueEngineReload: Equatable, Sendable, CaseIterable {
     /// The row was fetched again, and a read of the saved store through a context of its own now agrees with it.
     case reloaded
-    /// The row was not out of step, so there was nothing to reload.
+    /// The row is held and was not out of step, so there was nothing to reload.
     case alreadyInStep
+    /// #4358 slice E4d: the engine holds no show by this identifier (it was deleted, or merged away, since the card
+    /// was drawn), so nothing was compared and nothing was reloaded. Never `alreadyInStep`, which would claim a
+    /// match nobody measured (L11).
+    case notHeld
     /// The main context holds an unsaved edit on the row, which a fetch would not bring back and Dan would lose.
     case unsavedEdit
     /// The row was fetched again and still does not agree with the saved store. Recovery goes on trying.
@@ -522,6 +524,8 @@ final class QueueEngine<Value: Sendable> {
     @ObservationIgnored private var verification: QueueEngineVerifierRun<Value>?
     /// #4369: rows a landing's capped intake has not read yet, read first in the next turn.
     @ObservationIgnored private var carried: Set<PersistentIdentifier> = []
+    /// #4358 slice E4d: rows whose look-up during the launch fill THREW, so a press on one is refused as unreadable.
+    @ObservationIgnored private var failedReads: Set<PersistentIdentifier> = []
 
     // MARK: - The turn and the gate
 
@@ -584,6 +588,10 @@ final class QueueEngine<Value: Sendable> {
     private(set) var output: QueueEngineOutput<Value>?
     /// Where the launch has got (D6), for the surface to show while nothing, or not everything, is ready.
     private(set) var launch = QueueEngineLaunchState()
+    /// #4358 slice E4d (plan item 12): the shows the engine knows are out of step with the store, OBSERVED, so a card
+    /// draws its "Reload this show" row the moment its show is faulted and drops it the moment it heals, whether or
+    /// not a pass is published in between. Written only by `refreshOutOfStep`, and only when it changes.
+    private(set) var outOfStepShows: Set<PersistentIdentifier> = []
     /// Every floor-only pass that changed the output, newest last, at most `floorChangesKept`.
     @ObservationIgnored private(set) var floorChanges: [QueueEngineFloorChange] = []
     static var floorChangesKept: Int { 50 }
@@ -688,12 +696,13 @@ final class QueueEngine<Value: Sendable> {
         scheduleTurn()
     }
 
-    /// The surface's view. Handing in the same view, or asking only for cards the last pass built, is no
-    /// reason for a pass (plan v2 Phase 4 step 2).
+    /// The surface's view. Handing in the same view is no reason for a pass (plan v2 Phase 4 step 2), and nor is
+    /// asking for cards: #4358 slice E4d, the cards a frame drew are kept for the NEXT pass to prebuild and force
+    /// none of their own. A card the pass did not build is built where it is drawn, from the values the pass's
+    /// store holds, so a pass only to prebuild it costs the whole queue for nothing; measured on the hosted queue, a
+    /// show revealed by one dismiss made every action two passes rather than one (`OneChangeDerivesTheQueueOnceTests`).
     func setViewInputs(_ inputs: QueueEngineViewInputs) {
-        let built = output.map { derivation.builtCardKeys($0.value) } ?? []
         let moved = inputs.focusedStage != viewInputs.focusedStage || inputs.focusedKeys != viewInputs.focusedKeys
-            || !inputs.requestedCardKeys.isSubset(of: built)
         viewInputs = inputs
         guard moved else { return }
         viewInputsMoved = true
@@ -749,6 +758,16 @@ final class QueueEngine<Value: Sendable> {
     /// store, and saving the main context's object would write the stale fields back (D7; read by #4357 slice I2).
     func isFaulted(_ id: PersistentIdentifier) -> Bool { faults.contains(id) }
 
+    /// #4358 slice E4d: the main context the engine reads and every action saves through, for the host's own reads of
+    /// the small tables the surfaces draw.
+    var modelContext: ModelContext { context }
+
+    /// Brings `outOfStepShows` to the faulted shows, writing only on a change so an unchanged set redraws nothing.
+    func refreshOutOfStep() {
+        let now = Set(faults.entries.keys.filter { FactStore.Table.holding($0.entityName) == .shows })
+        if now != outOfStepShows { outOfStepShows = now }
+    }
+
     /// How many rows are faulted, since when, and how many for over an hour (stuck), for the launch notice the
     /// cutover adds beside the verifier's match count (D7).
     var faultSummary: QueueEngineFaults.Summary { faults.summary(at: clock.now()) }
@@ -786,6 +805,8 @@ final class QueueEngine<Value: Sendable> {
     func reload(_ identity: ShowIdentity) -> QueueEngineReload {
         let id = identity.showID
         let now = clock.now()
+        defer { refreshOutOfStep() }
+        guard facts.shows[id] != nil else { return .notHeld }
         guard faults.contains(id) else { return .alreadyInStep }
         guard !rowsWithUnsavedChanges().contains(id) else { return .unsavedEdit }
         let contacts = recipientParent.filter { $0.value == id }.map(\.key)
@@ -841,6 +862,7 @@ final class QueueEngine<Value: Sendable> {
     /// Takes in what changed, then derives and publishes only when a reason holds (the generation gate).
     private func runTurn() {
         turnScheduled = false
+        defer { refreshOutOfStep() }
         // Nothing is taken in or derived before the launch's first read lands: a pass now would publish an empty
         // queue (D6). What the intake holds meanwhile waits for the first turn after it.
         guard case .ready = launch.firstPaint else { return }
@@ -1448,6 +1470,7 @@ final class QueueEngine<Value: Sendable> {
 
     private func finishVerification(_ result: QueueEngineVerification) {
         let now = clock.now()
+        defer { refreshOutOfStep() }
         switch result {
         case .match:
             verifierCounts.matches += 1
@@ -1875,8 +1898,12 @@ extension QueueEngine {
             IdentityKeyedState(path: "armed", disposition: .resolved { $0.armed.resolve($1) }),
             // #4369: a deleted row is no longer owed a read, and a re-keyed one is owed it under its new identifier.
             IdentityKeyedState(path: "carried", disposition: .resolved { $0.carried.resolve($1) }),
+            // #4358 slice E4d: a deleted row is no longer a read that failed, and a re-keyed one is under its new id.
+            IdentityKeyedState(path: "failedReads", disposition: .resolved { $0.failedReads.resolve($1) }),
             // A deleted row is out of step with nothing, and a re-keyed one is faulted under its new identifier.
             IdentityKeyedState(path: "faults.entries", disposition: .resolved { $0.faults.resolve($1) }),
+            // Derived from the fault set just above, so it is brought to it after that entry resolves.
+            IdentityKeyedState(path: "outOfStepShows", disposition: .resolved { engine, _ in engine.refreshOutOfStep() }),
             // A run in flight compares outputs as they WERE, whole, so nothing in its ring is purged; a deletion
             // stops it instead, because the read it is making may already miss the row (plan v7 Phase 4 step 1).
             IdentityKeyedState(path: "verification", disposition: .resolved { engine, resolution in
@@ -1932,15 +1959,25 @@ extension QueueEngine: ShowResolver {
         if let held = showMembers[id] ?? (temporaries[id] as? Prospect) { return StoreRows.isLive(held) ? held : nil }
         guard isStillFilling else { return nil }
         do {
-            guard let show = try FactStore.Table.shows.liveRow(id, in: context) as? Prospect else { return nil }
+            guard let show = try FactStore.Table.shows.liveRow(id, in: context) as? Prospect else {
+                failedReads.remove(id)
+                return nil
+            }
+            failedReads.remove(id)
             noteChanged(show)
             return show
         } catch {
-            // A failed read is not a deletion (L215); the press is refused as a show not found, and counted.
+            // A failed read is not a deletion (L215): counted, and remembered so the press is refused as a read that
+            // failed (`readFailed`, `ShowIdentity.Refusal.unreadable`) rather than as a show that is gone (L11).
             counters.unreadRows.record(at: clock.now())
+            failedReads.insert(id)
             return nil
         }
     }
+
+    /// #4358 slice E4d: whether the last look for this row, during the launch fill, THREW, so a press that found
+    /// nothing is said as a read that failed rather than as a show that is gone.
+    func readFailed(_ id: PersistentIdentifier) -> Bool { failedReads.contains(id) }
 
     func identities(forKeys keys: Set<String>) -> [String: ShowIdentity] {
         var out: [String: ShowIdentity] = [:]
@@ -1978,6 +2015,26 @@ extension QueueEngine: ShowResolver {
             }
         }
         return Prospect.inKeyOrder(showMembers.values.filter { StoreRows.isLive($0) })
+    }
+
+    /// #4358 slice E4d: every held inquiry, oldest first and then by identifier (L343), for the surfaces that read the
+    /// inquiries the engine holds rather than a query of their own (#4370). While the fill runs the inquiries are
+    /// not yet held, so the main context is read instead, as `everyShow` does.
+    var everyInquiry: [Inquiry] {
+        let rows: [Inquiry]
+        if isStillFilling {
+            do {
+                rows = try context.fetch(FetchDescriptor<Inquiry>())
+            } catch {
+                counters.unreadRows.record(at: clock.now())
+                rows = Array(inquiryMembers.values)
+            }
+        } else {
+            rows = Array(inquiryMembers.values)
+        }
+        return rows.filter { StoreRows.isLive($0) }.sorted {
+            $0.createdAt != $1.createdAt ? $0.createdAt < $1.createdAt : $0.persistentModelID < $1.persistentModelID
+        }
     }
 
     func isOutOfStep(_ id: PersistentIdentifier) -> Bool { isFaulted(id) }

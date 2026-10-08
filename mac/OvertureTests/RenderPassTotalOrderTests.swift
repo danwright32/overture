@@ -16,19 +16,17 @@ import SwiftData
 // member by member with the slice I1 comparator (`RenderDataComparison.differingFields`). The seed is fixed
 // and named in every failure, so a red run reproduces exactly (L339).
 //
-// ONE TIE IS HELD, AND IT IS NAMED. `QueueModel.queueScope` breaks a full tie on its own two keys by input
-// position on purpose, to reproduce RootView's `@Query`, and `QueueScopeMatchesTheQueryTests` defends that
-// until the query is deleted. Plan v7 reserves its natural key tie break for the Phase 4 plus 5 cutover
-// (decision 13(i)), and says the canonical wrapper stands in for it in tests until then (section 6). So the
-// rows that tie on both of its keys keep natural key order among the positions they were shuffled into,
-// and every other relative order is free. `theScopesOwnTieStillNeedsTheHold` is the premise, and the
-// cutover consumes it (L373).
+// NO TIE IS HELD. `QueueModel.queueScope` broke a full tie on its own two keys by input position until the cutover,
+// to reproduce RootView's `@Query`, and this suite held those rows in natural key order so the rest could be
+// shuffled. #4358 slice E4d gave the scope its natural key tie break (plan v7 decision 13(i)) and deleted the query,
+// so the hold, the premise test that said it was still needed, and `QueueScopeMatchesTheQueryTests` went together
+// (L373), and every input below is shuffled whole.
 //
-// WHAT THIS CANNOT SEE, said so nobody reads more into it. With the scope's own order held, the terms that
-// run over the scope's rows (the stage placement, Reached out, the engagement link, the order within a
-// night) are handed one order on every permutation, so their tie breaks are guarded by their own
-// permutation tests rather than by this one: `OrderDependenceReproductionTests` for the plan's Step T
-// terms, and the per-term tests below and in `QueueTiebreakTests` for the ones this slice made total.
+// WHAT THIS CANNOT SEE, said so nobody reads more into it. The terms that run over the scope's rows (the stage
+// placement, Reached out, the engagement link, the order within a night) now see the scope in one order on every
+// permutation because the scope is total, so their own tie breaks are guarded by their own permutation tests:
+// `OrderDependenceReproductionTests` for the plan's Step T terms, and the per-term tests below and in
+// `QueueTiebreakTests` for the ones this slice made total.
 //
 // Every name and address is invented, on example.org (L155, L222). The clock is pinned at both ends (L130).
 @MainActor
@@ -242,33 +240,17 @@ final class RenderPassTotalOrderTests {
 
     // Every unordered input shuffled, each show's contacts included. Drawn from one generator in a fixed
     // sequence, so a seed names one series of orders on every run and every machine (L339).
-    private func shuffled(_ c: Corpus, using generator: inout SeededGenerator,
-                          holdingTheScopesTie: Bool) -> Corpus {
+    private func shuffled(_ c: Corpus, using generator: inout SeededGenerator) -> Corpus {
         let order = c.shows.shuffled(using: &generator)
         for show in c.shows where show.recipients.count > 1 {
             show.setRecipients(show.recipients.shuffled(using: &generator))
         }
-        return Corpus(shows: holdingTheScopesTie ? Self.holdingTheScopesTie(order) : order,
+        return Corpus(shows: order,
                       inquiries: c.inquiries.shuffled(using: &generator),
                       answers: c.answers.shuffled(using: &generator),
                       sources: c.sources.shuffled(using: &generator))
     }
 
-    // The rows `queueScope` cannot tell apart on its own two keys (an undismissed show's date and fit) keep
-    // natural key order among the positions they were shuffled into. Only those rows move, and only among
-    // themselves, so every other relative order is the shuffle's.
-    static func holdingTheScopesTie(_ shows: [Prospect]) -> [Prospect] {
-        var held = shows
-        var positions: [String: [Int]] = [:]
-        for (index, p) in shows.enumerated() where p.statusRaw != ReviewStatus.dismissed.rawValue {
-            positions["\(p.performanceDate ?? "\u{0}")\u{1}\(p.fitScore)", default: []].append(index)
-        }
-        for slots in positions.values {
-            let members = slots.map { shows[$0] }.sorted { $0.naturalKey < $1.naturalKey }
-            for (slot, member) in zip(slots, members) { held[slot] = member }
-        }
-        return held
-    }
 
     private func contactOrder(of key: String, in c: Corpus) -> String {
         guard let p = c.shows.first(where: { $0.naturalKey == key }) else { return "" }
@@ -277,22 +259,16 @@ final class RenderPassTotalOrderTests {
 
     // MARK: the property
 
-    // The corpus as planted, with the scope's own tie held the same way every permutation holds it, so the
-    // baseline answers the held question too.
-    private func held(_ c: Corpus) -> Corpus {
-        Corpus(shows: Self.holdingTheScopesTie(c.shows), inquiries: c.inquiries, answers: c.answers,
-               sources: c.sources)
-    }
 
     @Test(arguments: [StageFocus.scout, .review, .reachedOut])
     func everyOrderOfTheInputsGivesOnePass(focus: StageFocus) throws {
         let corpus = try plantedCorpus()
-        let baseline = pass(held(corpus), focus: focus)
+        let baseline = pass(corpus, focus: focus)
         var generator = SeededGenerator(seed: seed)
         var failures: [String] = []
         var contactOrders: Set<String> = [contactOrder(of: "pitched shared", in: corpus)]
         for index in 0..<permutationCount {
-            let order = shuffled(corpus, using: &generator, holdingTheScopesTie: true)
+            let order = shuffled(corpus, using: &generator)
             contactOrders.insert(contactOrder(of: "pitched shared", in: order))
             let differing = RenderDataComparison.differingFields(baseline, pass(order, focus: focus))
             if !differing.isEmpty {
@@ -339,22 +315,25 @@ final class RenderPassTotalOrderTests {
                 "the three sent inquiries are not due at one instant, so their order is never a tie")
     }
 
-    // The premise behind the hold, which the cutover consumes (L373): today `queueScope` really does break a
-    // full tie by input position, so without the hold the scope moves. When the cutover gives it the natural
-    // key, this fails: delete `holdingTheScopesTie` and this test together.
-    @Test func theScopesOwnTieStillNeedsTheHold() throws {
+
+    // #4358 slice E4d (decision 13(i)): the scope's own full tie, broken by the natural key in byte order and then
+    // the identifier, so two shows tied on date and fit sort one way whatever order they arrive in. Seen to fail by
+    // putting the input position back as the last tie break.
+    @Test func theScopeBreaksAFullTieByItsKeyInEveryOrder() throws {
         let corpus = try plantedCorpus()
-        let baseline = pass(held(corpus), focus: .scout)
-        var generator = SeededGenerator(seed: seed)
-        var moved = 0
-        for _ in 0..<permutationCount {
-            let order = shuffled(corpus, using: &generator, holdingTheScopesTie: false)
-            if RenderDataComparison.differingFields(baseline, pass(order, focus: .scout)).contains("queueScope") {
-                moved += 1
-            }
+        let tied = corpus.shows.filter { $0.statusRaw != ReviewStatus.dismissed.rawValue }
+        let groups = Dictionary(grouping: tied) { "\($0.performanceDate ?? "")|\($0.fitScore)" }
+        try #require(groups.values.contains { $0.count > 1 }, "the corpus holds no full tie, so nothing was measured")
+        let orders = Set(CanonicalOracle.permutations(corpus.shows, count: permutationCount, seed: seed)
+            .map { QueueModel.queueScope($0).map(\.naturalKey) })
+        #expect(orders.count == 1, Comment(rawValue: "seed \(seed): \(orders.count) scope orders over "
+            + "\(permutationCount) permutations"))
+        for group in groups.values where group.count > 1 {
+            let scope = QueueModel.queueScope(group.shuffled())
+            #expect(scope.map(\.naturalKey) == group.map(\.naturalKey).sorted {
+                $0.utf8.lexicographicallyPrecedes($1.utf8)
+            }, "a full tie is not in natural key order")
         }
-        #expect(moved > 0, Comment(rawValue: "queueScope no longer breaks a full tie by input position, so the "
-            + "cutover has landed: delete the hold and this test (L373)"))
     }
 
     // MARK: the terms this slice made total, each over its own permutations

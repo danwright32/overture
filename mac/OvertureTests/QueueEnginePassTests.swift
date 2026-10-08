@@ -58,16 +58,21 @@ final class QueueEngineGateTests {
         #expect(engine.output?.reasons == [.viewInputs])
     }
 
-    @Test func cardsTheLastPassBuiltAreNoReasonAndAnyOtherIs() throws {
+    // #4358 slice E4d: the cards a frame drew are no reason for a pass, built or not; they are kept for the next pass
+    // to prebuild. The positive control is the change that follows: its pass carries the request (L159).
+    @Test func cardsAFrameDrewAreNoReasonForAPassAndTheNextPassTakesThem() throws {
         let store = try EngineStore(shows: 2, seed: 33)
         let turns = EngineTurns()
-        let engine = started(store, EngineDerivations.counts(builtCardKeys: ["show-00001", "show-00002"]), turns)
+        let engine = started(store, EngineDerivations.counts(), turns)
         let passes = engine.counters.passes
-        engine.setViewInputs(QueueEngineViewInputs(requestedCardKeys: ["show-00001"]))
-        #expect(turns.run() == 0, "a frame asking only for built cards asked for a turn")
         engine.setViewInputs(QueueEngineViewInputs(requestedCardKeys: ["show-00001", "show-00009"]))
+        #expect(turns.run() == 0, "a frame asking for cards asked for a turn")
+        #expect(engine.counters.passes == passes)
+        engine.sourceFired("gmailConnected")
         turns.run()
         #expect(engine.counters.passes == passes + 1)
+        #expect(engine.viewInputs.requestedCardKeys == ["show-00001", "show-00009"],
+                "the next pass did not take the cards the frame drew")
     }
 
     // A write that changed nothing is a turn (its tracker fired) and no pass: the equality gate feeds the

@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 
 // #4358 slice E4c (plan v7 section 15, the E4 plan's section 4): the merge gate's reader and its refusals, as a
 // pure function over what one gate run leaves behind.
@@ -358,5 +359,133 @@ struct EngineDivergenceGateRuleTests {
                                          testRun: .commit(Self.sha)))
         run.live = EngineDivergenceGate.read(logAt: url).live
         #expect(Self.refusals(run) == [.recorded(["factMismatch x1"])])
+    }
+}
+
+// #4358 slice E4d (plan v7 section 15, the E4 plan's section 4): THE MERGE GATE ITSELF. The branch's own queue engine,
+// built exactly as the app builds it (the queue's derivation, the verifier on its own triggers, the launch on its own
+// thread), over a read only clone of Dan's live store, driven through ordinary actions until its verifier has matched
+// a fresh read at least `EngineDivergenceGate.requiredMatches` times, and then judged by the rule above over the log
+// THIS RUN wrote (its own temporary file, never Dan's) and its own scratch defaults.
+//
+// WHO RUNS IT. `merge_pr` (`scripts/lib/pr-merge.sh`), for every pull request touching the engine, with the head's
+// commit in `TEST_RUNNER_OVERTURE_GATE_COMMIT`, so the log's lines are stamped as this commit's test run. Disabled by
+// its trait where there is no live store (GitHub's runners), which the runner reports as skipped, never passed; the
+// merge path refuses a run that does not print the PASSED line below (L98).
+//
+// The clone is written to by the actions (it is a copy, L2); nothing here reads or writes the live store.
+@MainActor
+@Suite("The branch's own verifier agrees with a clone of the live store (#4358 merge gate)", .serialized)
+final class EngineDivergenceGateTests {
+    private let sandboxes = TemporarySandboxes()
+
+    /// What the merge path looks for: printed only when the verdict PASSED, so a skipped or crashed run, which
+    /// prints nothing, is a refusal there.
+    static let passedLine = "engine-divergence-gate: PASSED"
+
+    /// Whether this run was asked to be the gate. Only the merge path hands it a commit, so an ordinary run (a scoped
+    /// one, GitHub's) reports this suite as skipped rather than as a refused gate it was never asked to be. A commit
+    /// that is given but malformed still runs, and reads as UNMEASURED by name.
+    nonisolated static var askedToGate: Bool {
+        if case .notGiven = CardDivergenceLog.TestRunCommit.current { return false }
+        return true
+    }
+
+    @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"),
+          .enabled(if: EngineDivergenceGateTests.askedToGate,
+                   "not the merge gate: set TEST_RUNNER_OVERTURE_GATE_COMMIT to the commit under test"))
+    func theBranchsVerifierMatchesTheLiveCloneAndRecordsNothing() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            try await judge()
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
+    private func judge() async throws {
+        let dir = try sandboxes.make(named: "engine-divergence-gate")
+        guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+            throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
+        }
+        let container = try Phase0.openContainer(at: clone)
+        let context = container.mainContext
+        context.autosaveEnabled = false
+        let log = dir.appendingPathComponent("card-divergence.ndjson")
+        let defaults = ScratchDefaults.make("EngineDivergenceGate")
+        // The app's engine (`QueueEngineHost.engine`), with three differences a test must make (L472): notification
+        // centres of its own, so no real wake or day change reaches it; a private save counter; and its log and match
+        // count in this run's own file and defaults. The context inputs are fixed, and every output carries the ones
+        // it was derived from, so the verifier rebuilds from exactly those (L70).
+        let engine = QueueEngine(
+            context: context, derivation: QueueEngineQueue.derivation(freezeWatch: { nil }), saves: StoreSaveCount(),
+            events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
+            verifier: QueueEngineVerifierSetup(triggers: .automatic,
+                                               log: QueueEngineVerifierLog(url: log, defaults: defaults)),
+            launch: QueueEngineLaunchSetup(),
+            contextInputs: { QueueEngineContextInputs(clients: .none) })
+        engine.start()
+        let filled = await waitUntil("the launch fill", timeout: .seconds(600)) {
+            if case .done = engine.launch.fill { return true }
+            if case .failed = engine.launch.fill { return true }
+            if case .failed = engine.launch.firstPaint { return true }
+            return false
+        }
+        guard filled, case .done = engine.launch.fill else {
+            Issue.record(Comment(rawValue: "UNMEASURED: the launch did not fill: \(engine.launch)"))
+            return
+        }
+
+        // Real use, through the functions the app's own controls call (`RealUseSteps`, shared with the precondition
+        // probe so the gate and the probe drive one set of paths), each followed by a verification asked for once the
+        // engine has taken it in.
+        let steps: [(String, () throws -> Bool)] = [
+            ("keep", { try RealUseSteps.keep(context) }),
+            ("edit a draft", { try RealUseSteps.editDraft(context) }),
+            ("log an inquiry", { try RealUseSteps.logInquiry(context) }),
+            ("mark a producer", { RealUseSteps.promoteProducer(context) }),
+            ("strike an address", { try RealUseSteps.refuseContact(context) }),
+            ("exclude a town", { RealUseSteps.excludeTown(context) }),
+        ]
+        var exercised: [String] = []
+        for (name, step) in steps {
+            if try step() { exercised.append(name) }
+            await verifyOnce(engine)
+        }
+        // Then until K matches, under a deadline: a verification can be superseded or come back unmeasured, which is
+        // never a match and never counted as one.
+        let deadline = ContinuousClock.now + .seconds(600)
+        while engine.verifierCounts.matches < EngineDivergenceGate.requiredMatches, ContinuousClock.now < deadline {
+            await verifyOnce(engine)
+        }
+
+        let read = EngineDivergenceGate.read(logAt: log)
+        let run = EngineDivergenceGate.Run(commit: CardDivergenceLog.TestRunCommit.current, live: read.live,
+                                           archive: read.archive, counts: engine.verifierCounts,
+                                           defaultsMatches: defaults.object(forKey: CardDivergenceLog.verifierMatchCountKey) as? Int)
+        let verdict = EngineDivergenceGate.verdict(run)
+        print("engine-divergence-gate: steps \(exercised), verifier \(engine.verifierCounts), verdict \(verdict)")
+        #expect(exercised.count == steps.count, Comment(rawValue:
+            "steps that found nothing to act on in the clone, so measured nothing: "
+            + "\(Set(steps.map(\.0)).subtracting(exercised).sorted())"))
+        switch verdict {
+        case .passed(let matches, let records):
+            print("\(Self.passedLine) matches \(matches), records \(records)")
+        case .refused(let refusals):
+            Issue.record(Comment(rawValue: "the merge gate REFUSED: "
+                + refusals.map(\.description).joined(separator: "; ")))
+        case .unmeasured(let why):
+            Issue.record(Comment(rawValue: "the merge gate is \(why)"))
+        }
+    }
+
+    /// Asks for one verification once the engine has taken in everything it was told, and waits for it to end.
+    private func verifyOnce(_ engine: QueueEngine<QueueEnginePass>) async {
+        let before = engine.verifierCounts.ended
+        _ = await waitUntil("the engine to take the step in", timeout: .seconds(60)) { !engine.modelContext.hasChanges }
+        engine.verifyNow()
+        _ = await waitUntil("a verification to end", timeout: .seconds(120)) { engine.verifierCounts.ended > before }
     }
 }

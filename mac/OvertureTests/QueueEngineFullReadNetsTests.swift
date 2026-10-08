@@ -22,6 +22,13 @@ import Testing
 //     real arm's archive), a real landing of the recorded results plus the same actions, printing every counter
 //     and the engine's main actor time per step. Counts and durations only, never a name (L222).
 
+/// #4370: the entity names every save of one store named, gathered from whatever thread saved, behind a lock.
+final class LandingSaves: @unchecked Sendable {
+    let lock = NSLock()
+    var types: Set<String> = []
+    var saves = 0
+}
+
 /// What the engine counted while one step of real use ran, and the main actor time its turns took.
 struct EngineNetReading: CustomStringConvertible {
     let step: String
@@ -378,6 +385,44 @@ final class QueueEngineFullReadNetsTests {
         return run
     }
 
+    // #4370's SECOND DIRECTION (#4358 slice E4d): what a real landing SAVED, by entity, read from the saves themselves,
+    // must be among the types the landing scan DERIVED from the source (`LandingWrittenTypesScanTests`). A landing that
+    // saves a type the derivation lacks has a consumer the scan never looked for, which redraws mid-landing unheld.
+    // Two sources that must agree, neither drawn from the other (L345): the didSave identifiers here, the source scan
+    // there. A save naming no identifier is counted, so a landing that saved nothing is never read as agreement.
+    private func savedTypes<T>(during run: EngineNetRun, _ work: () async throws -> T) async rethrows
+        -> (result: T, types: Set<String>, saves: Int) {
+        let seen = LandingSaves()
+        let store = ObjectIdentifier(run.context.container)
+        let token = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: nil, queue: nil) { note in
+            guard let saved = note.object as? ModelContext, ObjectIdentifier(saved.container) == store else { return }
+            var names: [String] = []
+            for key in [ModelContext.NotificationKey.insertedIdentifiers, .updatedIdentifiers, .deletedIdentifiers] {
+                names += (note.userInfo?[key.rawValue] as? [PersistentIdentifier] ?? []).map(\.entityName)
+            }
+            seen.lock.withLock {
+                seen.saves += 1
+                seen.types.formUnion(names)
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+        let result = try await work()
+        return seen.lock.withLock { (result, seen.types, seen.saves) }
+    }
+
+    private func expectSavedTypesWereDerived(_ types: Set<String>, saves: Int, _ step: String) {
+        let derived = LandingWrittenTypesScanTests.deriveSites()
+        let written = LandingWrittenTypesScanTests.judge(derived.sites, vocabulary: derived.vocabulary,
+                                                         table: LandingWrittenTypesScanTests.classified).writtenTypes
+        #expect(saves > 0 && types.contains("Prospect"), Comment(rawValue:
+            "\(step) saved \(saves) time(s), types \(types.sorted()), so there was no landing to compare (L159)"))
+        let underived = types.subtracting(written)
+        #expect(underived.isEmpty, Comment(rawValue:
+            "\(step) saved \(underived.sorted()), which the landing scan did not derive (it derived "
+            + "\(written.sorted())). A consumer of those types is invisible to LandingWrittenTypesScanTests and "
+            + "redraws mid-landing: classify the write that saves it there (#4370)."))
+    }
+
     private func expectQuiet(_ run: EngineNetRun) {
         for reading in run.readings.dropFirst() {
             #expect(reading.exercised, "\(reading.step) found nothing to act on, so it measured nothing")
@@ -388,13 +433,16 @@ final class QueueEngineFullReadNetsTests {
 
     @Test func theExtractIngestAndEveryActionAfterItLeaveTheNetsQuiet() async throws {
         let run = try await started()
-        try await run.step("scout landing (ingest)") {
-            _ = await ScoutExtractIngest.ingest(LandingOracleCorpus.results(), clients: [], history: [],
-                                                blocked: .empty, today: LandingOracleCorpus.today,
-                                                now: LandingOracleCorpus.now, into: run.context)
-            try run.context.save()
-            return true
+        let landed = try await savedTypes(during: run) {
+            try await run.step("scout landing (ingest)") {
+                _ = await ScoutExtractIngest.ingest(LandingOracleCorpus.results(), clients: [], history: [],
+                                                    blocked: .empty, today: LandingOracleCorpus.today,
+                                                    now: LandingOracleCorpus.now, into: run.context)
+                try run.context.save()
+                return true
+            }
         }
+        expectSavedTypesWereDerived(landed.types, saves: landed.saves, "the extract ingest")
         try await RealUseSteps.actions(on: run, export: Self.export, exportURL: Self.noExport,
                                        now: LandingOracleCorpus.now)
         expectQuiet(run)
@@ -407,7 +455,7 @@ final class QueueEngineFullReadNetsTests {
         }
         let run = try await started(kind: .squarespaceFeed)
         let byId = Dictionary(uniqueKeysWithValues: LandingOracleCorpus.sources.map { ($0.id, $0) })
-        try await run.step("scout landing (runScout)") {
+        let landed = try await savedTypes(during: run) { try await run.step("scout landing (runScout)") {
             let outcome = try await ScoutService.runScout(
                 into: run.context, depth: .watchOnly, extractor: EventsInHand(events: []),
                 extractorRegistry: { source in
@@ -419,7 +467,8 @@ final class QueueEngineFullReadNetsTests {
                 exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
             try run.context.save()
             return outcome.sources.contains { if case .ingested = $0.state { return true } else { return false } }
-        }
+        } }
+        expectSavedTypesWereDerived(landed.types, saves: landed.saves, "runScout's sweep")
         expectQuiet(run)
     }
 
@@ -429,14 +478,17 @@ final class QueueEngineFullReadNetsTests {
             return
         }
         let run = try await started()
-        for source in LandingOracleCorpus.sources {
-            try await run.step("add a lead (\(source.id))") {
-                try await RealUseSteps.pasteLead(run.context, url: source.listingsURL, events: source.events,
-                                                 today: LandingOracleCorpus.today, now: LandingOracleCorpus.now,
-                                                 exportURL: AbsentHandoff.export,
-                                                 importedHistory: AbsentHandoff.history)
+        let landed = try await savedTypes(during: run) {
+            for source in LandingOracleCorpus.sources {
+                try await run.step("add a lead (\(source.id))") {
+                    try await RealUseSteps.pasteLead(run.context, url: source.listingsURL, events: source.events,
+                                                     today: LandingOracleCorpus.today, now: LandingOracleCorpus.now,
+                                                     exportURL: AbsentHandoff.export,
+                                                     importedHistory: AbsentHandoff.history)
+                }
             }
         }
+        expectSavedTypesWereDerived(landed.types, saves: landed.saves, "the lead paste")
         expectQuiet(run)
     }
 

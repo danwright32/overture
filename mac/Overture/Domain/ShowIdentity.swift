@@ -66,6 +66,10 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
         /// context touched it). Saving the main context's object would write the stale fields back over the saved
         /// ones, so the press is refused until the row is reloaded, by recovery or by Dan's "Reload this show".
         case outOfStep
+        /// #4358 slice E4d: looking for the row THREW, which happens only while the launch fill has not reached it and
+        /// the resolver reads it from the store instead. Not `gone`: nothing was measured about whether it exists,
+        /// so saying it left the queue would claim something no read established (L11, L215).
+        case unreadable
 
         var description: String {
             switch self {
@@ -73,6 +77,7 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
             case .reKeyed: return "reKeyed"
             case .drawnBeforeItsFirstSave: return "drawnBeforeItsFirstSave"
             case .outOfStep: return "outOfStep"
+            case .unreadable: return "unreadable"
             }
         }
 
@@ -122,6 +127,17 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
                 }
                 return "Overture's copy of \(org) is out of step with the saved show, so nothing was changed. "
                     + "Press Reload this show on its card, then try again"
+            // COLD READ, 2026-10-08 (#4358 slice E4d), in the order Dan meets it: the queue has just opened and is still
+            // taking his shows in, he presses a control, the card does not change, and this appears. It says the
+            // read failed, not that the show is gone, and asks for the one thing that helps: the same press a moment
+            // later, once Overture holds the show itself and no longer has to read it from the saved copy (L111).
+            case .unreadable:
+                guard let org, !org.isEmpty else {
+                    return "Overture could not read that show from your saved shows just now, so nothing was "
+                        + "changed. Press it again in a moment"
+                }
+                return "Overture could not read \(org) from your saved shows just now, so nothing was changed. "
+                    + "Press it again in a moment"
             }
         }
 
@@ -149,6 +165,10 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
             case .outOfStep:
                 return "Overture's copy of \(org) is out of step with the saved show, so nothing was undone. "
                     + "Press Reload this show on its card before changing it again"
+            // COLD READ, 2026-10-08: the menu said "Undo Dismiss: X", he pressed it, and the show could not be read.
+            // It never asks for Cmd+Z again, which would undo the NEXT action (L111).
+            case .unreadable:
+                return "Overture could not read \(org) from your saved shows just now, so nothing was undone"
             }
         }
     }
@@ -170,6 +190,8 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
     @MainActor
     func resolve(in shows: some ShowResolver) -> Outcome {
         guard let show = shows.liveShow(showID) else {
+            // #4358 slice E4d: a look that THREW is said as itself, never as a show that is gone (L11).
+            if shows.readFailed(showID) { return .refused(.unreadable) }
             // A store identifier carries the store it belongs to only once it has been saved, so its
             // absence is what marks one minted before the first save (`InsertedRowIdentifierAcrossSaveTests`
             // reads both halves). Such a row, drawn and then saved, now answers to a different identifier.
@@ -204,11 +226,17 @@ protocol ShowResolver {
     /// action on it would write stale fields back. Only the queue engine can know; rows a caller merely holds
     /// answer false (the extension below).
     @MainActor func isOutOfStep(_ id: PersistentIdentifier) -> Bool
+    /// #4358 slice E4d: whether this resolver's last look for the row THREW, so a press that found nothing is said as
+    /// a failed read. Only the queue engine reads the store to answer; rows a caller merely holds answer false.
+    @MainActor func readFailed(_ id: PersistentIdentifier) -> Bool
 }
 
 extension ShowResolver {
     @MainActor
     func isOutOfStep(_ id: PersistentIdentifier) -> Bool { false }
+
+    @MainActor
+    func readFailed(_ id: PersistentIdentifier) -> Bool { false }
 
     @MainActor
     func identity(forKey key: String) -> ShowIdentity? {

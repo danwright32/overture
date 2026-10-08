@@ -109,7 +109,12 @@ enum SelfBookingConflict {
             for show in shows where show.isCommitment {
                 for night in Set(show.nights) { byNight[night, default: []].append(show) }
             }
-            committedByNight = byNight
+            // #4358 slice E4d (plan item 13): each night's shows in key order rather than input order, so two passes
+            // over the same shows build EQUAL indexes whatever order the shows arrived in, and the engine's verifier
+            // cannot read an input order as a mismatch. Every reader already sorts what it takes out (`overlaps`).
+            committedByNight = byNight.mapValues { shows in
+                shows.sorted { $0.key != $1.key ? $0.key < $1.key : $0.name < $1.name }
+            }
         }
     }
 

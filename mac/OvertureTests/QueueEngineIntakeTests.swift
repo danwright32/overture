@@ -206,8 +206,7 @@ enum EngineDerivations {
         var minute = 0
     }
 
-    static func counts(nextChange: Date? = nil, readsTheMinute: Bool = false,
-                       builtCardKeys: Set<String> = []) -> QueueEngineDerivation<Counts> {
+    static func counts(nextChange: Date? = nil, readsTheMinute: Bool = false) -> QueueEngineDerivation<Counts> {
         QueueEngineDerivation(
             derive: { input in
                 let f = input.facts
@@ -227,8 +226,7 @@ enum EngineDerivations {
                 if a.minute != b.minute { out.append("minute") }
                 return out
             },
-            nextChange: { _ in nextChange },
-            builtCardKeys: { _ in builtCardKeys })
+            nextChange: { _ in nextChange })
     }
 }
 
@@ -941,9 +939,8 @@ final class QueueEngineIntakeTests {
 //     -only-testing:OvertureTests/QueueEngineCostProbeTests
 //
 // Medians of five with their spread, Debug, load average beside each block (L395, L356). Counts and durations
-// only, never a name (L222). The value pass is not timed here, and says so: `QueueRenderPass.make` over facts
-// cannot run until #4357 finishes, so today's pass over models on the same corpus is timed beside the intake as
-// the yardstick the plan's projection is judged against.
+// only, never a name (L222). The engine's pass over facts (`QueueEngineQueue.derive`, since slice E4d) is timed
+// beside today's pass over models on the same corpus, the yardstick the plan's projection is judged against.
 @Suite("#4358 queue engine intake cost (opt in, live store clone)")
 @MainActor
 final class QueueEngineCostProbeTests {
@@ -1025,9 +1022,19 @@ final class QueueEngineCostProbeTests {
             let viewport = Set(pass([]).focusedRows.prefix(QueueViewportAssumption.rows).map(\.id))
             _ = pass(viewport)
             let today = Phase0.median5("intake-todayPass-\(label)") { _ = pass(viewport) }
-            // #4617: the engine's start and today's pass (the yardstick) are read against each other, the engine
-            // timed first in every run, so that comparison inside a run carries the order effect, said here.
-            Phase0.fixedOrder(["intake-fullRead-\(label)", "intake-todayPass-\(label)"])
+            // #4358 slice E4d (plan item 21): the pass the switched queue draws, the queue's own derivation over the
+            // engine's facts, the same viewport's cards requested. The intake engine above runs a counting derivation,
+            // so its facts are what the app's engine would hold; the pass is timed apart from the turn that runs it.
+            let overFacts = QueueEnginePassInput(
+                facts: live.facts,
+                viewInputs: QueueEngineViewInputs(focusedStage: .scout, focusedKeys: nil, requestedCardKeys: viewport),
+                now: Date(), context: EngineHarness.noSignals)
+            let factsPass = QueueEngineQueue.derive(overFacts)
+            #expect(factsPass.data.rows.count == pass(viewport).rows.count, "the pass over facts and the pass over models disagree on the rows")
+            let engines = Phase0.median5("intake-enginePass-\(label)") { _ = QueueEngineQueue.derive(overFacts) }
+            // #4617: the engine's start, today's pass (the yardstick) and the engine's pass are read against each
+            // other, always in this order in every run, so a comparison inside a run carries the order effect, said here.
+            Phase0.fixedOrder(["intake-fullRead-\(label)", "intake-todayPass-\(label)", "intake-enginePass-\(label)"])
             print("""
                 engine-cost [\(label)] \(Phase0.load())
                   shape                                     \(Phase0.shape(shows))
@@ -1035,8 +1042,8 @@ final class QueueEngineCostProbeTests {
                   turn taking in one edited row             \(Phase0.reading("intake-oneEditedRow-\(label)", runs: edits).text)
                   turn taking in one equal-value write      \(Phase0.reading("intake-oneEqualWrite-\(label)", runs: equals).text)
                   turn taking in about 40 rows in one save  \(Phase0.reading("intake-fortyRowSave-\(label)", runs: nights).text)
-                  value pass over facts                     UNMEASURED: make over facts needs #4357 (plan: 68 to 155 ms at 1,344, 275 to 624 at 5,376)
-                  today's pass over models, viewport cards  \(today.text)  (the yardstick)
+                  the engine's pass over facts, viewport    \(engines.text)  (plan: 68 to 155 ms at 1,344, 275 to 624 at 5,376)
+                  main's pass over models, viewport cards   \(today.text)  (the yardstick)
                   engine turns \(live.counters.turns), rows read again \(live.counters.rowsReread), equal reads dropped \(live.counters.equalValueReads)
                 """)
         }
