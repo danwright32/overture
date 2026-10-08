@@ -277,7 +277,7 @@ final class QueueEngineCardCheckTests {
         #expect(finding.cardsBuilt == 1)
         #expect(output.value.corrected[key]?.sourceCalendarURLs == [], "the fresh card was not the one drawn (C1)")
         let row = try #require(output.value.data.rows.first { $0.id == key })
-        #expect(output.value.card(for: row).sourceCalendarURLs == [])
+        #expect(output.value.card(for: row, resolving: engine).sourceCalendarURLs == [])
     }
 
     @Test func aCardThatAgreesIsNoFinding() throws {

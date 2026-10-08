@@ -49,9 +49,12 @@ struct QueueEnginePass: @unchecked Sendable {
     fileprivate(set) var corrected: [String: QueueItem] = [:]
 
     /// The card for a drawn row: through the store, which records that the row was drawn whatever the answer (the
-    /// next pass prebuilds from that record), then the fresh card if the check at publish replaced it.
-    func card(for row: QueueScopeRow) -> QueueItem {
-        let built = data.cards.card(for: row)
+    /// next pass prebuilds from that record), then the fresh card if the check at publish replaced it. `shows` is the
+    /// surface's resolver (#4371), which the engine's store, built over facts, never needs to ask; E4d hands in the
+    /// engine itself.
+    @MainActor
+    func card(for row: QueueScopeRow, resolving shows: some ShowResolver) -> QueueItem {
+        let built = data.cards.card(for: row, resolving: shows)
         return corrected[row.id] ?? built
     }
 }
