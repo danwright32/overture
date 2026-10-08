@@ -70,14 +70,17 @@ enum Phase0cProducers {
         init(_ xs: [Double]) { sorted = xs.sorted() }
         var count: Int { sorted.count }
         var max: Double { sorted.last ?? 0 }
-        var median: Double { sorted.isEmpty ? 0 : sorted[sorted.count / 2] }
+        var median: Double { sorted.isEmpty ? 0 : sorted[sorted.count / 2] } // probe-reading-exempt: the distribution's median for a verdict, whose line text(_:) prints where it is reported
         var p99: Double {
             guard !sorted.isEmpty else { return 0 }
             let rank = Int((0.99 * Double(sorted.count)).rounded(.up))
             return sorted[Swift.max(0, Swift.min(sorted.count - 1, rank - 1))]
         }
-        var text: String {
-            String(format: "max %.3f  p99 %.3f  median %.3f ms  (n %d)", max, p99, median, count)
+        /// #4617: the text a probe reports, which prints the `probe reading:` line of the median under `metric`
+        /// as it is made, so the before and after comparison reads it. No sample, no line.
+        func text(_ metric: String) -> String {
+            if count > 0 { _ = Phase0.reading(metric, runs: sorted) }
+            return String(format: "max %.3f  p99 %.3f  median %.3f ms  (n %d)", max, p99, median, count)
         }
     }
 
@@ -86,7 +89,7 @@ enum Phase0cProducers {
         let s = xs.sorted()
         guard !s.isEmpty else { return "none" }
         let p99 = s[Swift.max(0, Swift.min(s.count - 1, Int((0.99 * Double(s.count)).rounded(.up)) - 1))]
-        return "count \(s.count), max \(s.last!), p99 \(p99), median \(s[s.count / 2])"
+        return "count \(s.count), max \(s.last!), p99 \(p99), median \(Phase0.medianCount(xs))"
     }
 
     nonisolated static func pad(_ s: String, _ n: Int) -> String { Phase0b.pad(s, n) }
@@ -1448,6 +1451,7 @@ final class Phase0cKind {
     private(set) var undoTimes: [Double] = []
     private(set) var work: [Int] = []
     private var slowest: (ms: Double, run: Run)? = nil
+    private var replayed: Phase0.Reading?
 
     init(_ name: String) { self.name = name }
 
@@ -1463,18 +1467,26 @@ final class Phase0cKind {
     var all: Phase0cProducers.Dist { Phase0cProducers.Dist(doTimes + undoTimes) }
     var worstMedian: Double { max(Phase0cProducers.Dist(doTimes).median, Phase0cProducers.Dist(undoTimes).median) }
 
-    /// The slowest sample's key, re-timed five times; nil when there were no samples.
-    func replayWorst() -> Phase0.Reading? {
+    /// The slowest sample's key, re-timed five times, its line printed under `metric`; nil when there were no
+    /// samples. Re-timed ONCE (#4617): a second call returns the first replay, so the verdict reads the same
+    /// replay the report printed rather than a second one under the same metric.
+    func replayWorst(_ metric: String) -> Phase0.Reading? {
+        if let replayed { return replayed }
         guard let slowest else { return nil }
-        return Phase0.Reading(runs: (0..<5).map { _ in let r = slowest.run(); return max(r.doMs, r.undoMs) })
+        replayed = Phase0.reading(metric, runs: (0..<5).map { _ in let r = slowest.run(); return max(r.doMs, r.undoMs) })
+        return replayed
     }
 
-    func lines(workLabel: String) -> [String] {
-        let replay = replayWorst()
+    /// The replay `lines(workLabel:metric:)` took, for the verdict read after it.
+    var replayedWorst: Phase0.Reading? { replayed }
+
+    /// The report, every reading's line printed under `metric` and this kind's name.
+    func lines(workLabel: String, metric: String) -> [String] {
+        let replay = replayWorst("\(metric)-\(name)-replay")
         return [
             Phase0cProducers.pad(name, 70),
-            "      do    " + Phase0cProducers.Dist(doTimes).text,
-            "      undo  " + Phase0cProducers.Dist(undoTimes).text,
+            "      do    " + Phase0cProducers.Dist(doTimes).text("\(metric)-\(name)-do"),
+            "      undo  " + Phase0cProducers.Dist(undoTimes).text("\(metric)-\(name)-undo"),
             "      \(workLabel) " + Phase0cProducers.sizes(work)
                 + (replay.map { "; slowest key re-timed five times " + $0.text } ?? ""),
         ]
@@ -1682,14 +1694,15 @@ struct QueueEnginePhase0cProducersProbeTests {
             let showList = list(world)
 
             // The cold arm, interleaved with today's build so both see the same machine (L224, L356).
-            var todayCold: [Double] = [], protoCold: [Double] = []
+            // #4617: interleaved, it still ran today's build first in every sample, so the prototype carried the
+            // order effect into the ratio the stop rule reads. Now the arms alternate which goes first.
             var proto = Phase0cProducerTables(rows: [:], overrides: current)
-            for _ in 0..<5 {
-                todayCold.append(Phase0.time { _ = QueueModel.ProducerTables(shows: showList, overrides: current) })
-                protoCold.append(Phase0.time { proto = Phase0cProducerTables(rows: world, overrides: current) })
-            }
+            let coldArms = Phase0.alternating([
+                ("c3-todayCold-\(label)", { _ = QueueModel.ProducerTables(shows: showList, overrides: current) }),
+                ("c3-protoCold-\(label)", { proto = Phase0cProducerTables(rows: world, overrides: current) }),
+            ])
             let coldTests = proto.lastTests
-            let today = Phase0b.reading(todayCold), cold = Phase0b.reading(protoCold)
+            let today = coldArms[0], cold = coldArms[1]
             var mismatches = Phase0cT4Check.compare(proto, shows: showList, overrides: current, brute: true)
             let witnessPresenters = proto.witnesses.count
             let witnessPairs = proto.witnesses.values.reduce(0) { $0 + $1.count }
@@ -1795,8 +1808,8 @@ struct QueueEnginePhase0cProducersProbeTests {
             for k in kinds {
                 worstMedian = max(worstMedian, k.worstMedian)
                 worstMax = max(worstMax, k.all.max)
-                lines += k.lines(workLabel: "presenter-against-venue tests")
-                worstReplay = max(worstReplay, k.replayWorst()?.median ?? 0)
+                lines += k.lines(workLabel: "presenter-against-venue tests", metric: "c3-\(label)")
+                worstReplay = max(worstReplay, k.replayedWorst?.median ?? 0)
             }
             // Back where it started (every replay undoes itself), so the end state is checked whole.
             mismatches += Phase0cT4Check.compare(proto, shows: showList, overrides: current, brute: true).map { "end: \($0)" }
@@ -1850,13 +1863,16 @@ struct QueueEnginePhase0cProducersProbeTests {
             var world = Phase0cLedger.World(rows: rows, answers: answers, refusals: refusals, held: [],
                                             overrides: current, now: now, nextPid: prospects.count)
             let ledgerRefusals = ContactRefusal.ledger(from: refusalRows)
-            let floor = Phase0.median5 {
+            let floor = Phase0.median5("c4t5-floor-\(label)") {
                 _ = CanonicalOracle.inheritedAnswers(answerRows, corpus: prospects, overrides: current,
                                                      refusals: ledgerRefusals, heldKeys: [], now: now)
             }
             let onModels = CanonicalOracle.inheritedAnswers(answerRows, corpus: prospects, overrides: current,
                                                             refusals: ledgerRefusals, heldKeys: [], now: now)
-            let coldT = Phase0.median5 { _ = Phase0cLedger(world) }
+            let coldT = Phase0.median5("c4t5-coldT-\(label)") { _ = Phase0cLedger(world) }
+            // #4617: the noise floor and the prototype cold build are read against each other, timed in this
+            // order in every run, so that comparison inside a run carries the order effect, which this line says.
+            Phase0.fixedOrder(["c4t5-floor-\(label)", "c4t5-coldT-\(label)"])
             var proto = Phase0cLedger(world)
             var mismatches: [String] = []
             if Phase0cT5Check.oracle(world) != onModels { mismatches.append("the extracted world's oracle differs from the oracle on the store's own rows") }
@@ -1977,8 +1993,8 @@ struct QueueEnginePhase0cProducersProbeTests {
             var worstMax = 0.0, worstReplay = 0.0
             for k in kinds {
                 worstMax = max(worstMax, k.all.max)
-                lines += k.lines(workLabel: "rows re-judged")
-                worstReplay = max(worstReplay, k.replayWorst()?.median ?? 0)
+                lines += k.lines(workLabel: "rows re-judged", metric: "c4t5-\(label)")
+                worstReplay = max(worstReplay, k.replayedWorst?.median ?? 0)
             }
             check("end")
             let t5Pass = mismatches.isEmpty && worstMax <= 5
@@ -2004,14 +2020,14 @@ struct QueueEnginePhase0cProducersProbeTests {
                                                       drawn: p.statusRaw != "dismissed")
             }
             let drawn = Phase0cT6Check.drawnRows(sources)
-            let t6Floor = Phase0.median5 { _ = CanonicalOracle.engagementLink(drawn) }
+            let t6Floor = Phase0.median5("c4t6-t6Floor-\(label)") { _ = CanonicalOracle.engagementLink(drawn) }
             let slices = sources.mapValues(Phase0cEngagement.slice)
             var t6Lines: [String] = []
             var t6Worst = 0.0, t6Replay = 0.0
             var t6Bad: [String] = []
             var protos: [Phase0cEngagement.Rule: Phase0cEngagement] = [:]
             for rule in Phase0cEngagement.Rule.allCases {
-                let cold = Phase0.median5 { _ = Phase0cEngagement(rule: rule, rows: slices) }
+                let cold = Phase0.median5("c4t6-cold-\(rule)-\(label)") { _ = Phase0cEngagement(rule: rule, rows: slices) }
                 var e = Phase0cEngagement(rule: rule, rows: slices)
                 let want = Phase0cT6Check.truth(rule, drawn)
                 t6Bad += Phase0cT6Check.compare(e, want).map { "\(rule.rawValue) cold: \($0)" }
@@ -2040,11 +2056,14 @@ struct QueueEnginePhase0cProducersProbeTests {
                     }
                 }
                 t6Worst = max(t6Worst, kind.all.max)
-                t6Lines += kind.lines(workLabel: "rows re-clustered") + ["      cold build " + cold.text]
-                t6Replay = max(t6Replay, kind.replayWorst()?.median ?? 0)
+                t6Lines += kind.lines(workLabel: "rows re-clustered", metric: "c4t6-\(label)") + ["      cold build " + cold.text]
+                t6Replay = max(t6Replay, kind.replayedWorst?.median ?? 0)
                 t6Bad += Phase0cT6Check.compare(e, want).map { "\(rule.rawValue) end: \($0)" }
                 protos[rule] = e
             }
+            // #4617: the noise floor, then each rule's cold build, in this order in every run: a comparison between
+            // them inside a run carries the order effect, which this line says.
+            Phase0.fixedOrder(["c4t6-t6Floor-\(label)"] + Phase0cEngagement.Rule.allCases.map { "c4t6-cold-\($0)-\(label)" })
             // Decision 18's count: drawn rows whose engagement differs between the two rules.
             let a = protos[.lastAppended]!, b = protos[.clusterLatest]!
             var groupOf: [Phase0cEngagement.Rule: [Int: Set<Int>]] = [:]

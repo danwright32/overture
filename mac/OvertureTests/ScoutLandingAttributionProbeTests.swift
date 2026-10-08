@@ -542,8 +542,8 @@ struct ScoutLandingAttributionProbeTests {
             let ctx = container.mainContext
             var rows = try ctx.fetch(FetchDescriptor<Prospect>())
             for r in rows { _ = r.runSourceURLs; _ = r.groupName; _ = r.venue }
-            let fetch = Phase0.median5 { rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [] }
-            let folds = Phase0.median5 {
+            let fetch = Phase0.median5("x\(factor)-wholeStoreFetch") { rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [] }
+            let folds = Phase0.median5("x\(factor)-foldEveryRow") {
                 for p in rows {
                     _ = ShowLink.foldedTitle(p.groupName)
                     _ = ShowLink.foldedVenue(p.venue)

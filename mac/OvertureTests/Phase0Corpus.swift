@@ -73,11 +73,81 @@ enum Phase0 {
         /// The line `scripts/compare-before-after.sh` reads out of a run's log (#4615): this reading's median
         /// under `metric`, one word with no spaces. One run is one side; a verdict needs that script's balanced
         /// rounds, because the side run second under the shared test lock reads slower (#4614).
-        func probeLine(_ metric: String) -> String { "probe reading: \(metric) " + String(format: "%.3f", median) }
+        /// #4617: the metric is made one word here rather than trusted to be one, because most probes name a
+        /// reading after a corpus label such as "live clone", and the script drops a line whose metric holds a
+        /// space, so that reading would silently never be compared.
+        func probeLine(_ metric: String) -> String {
+            "probe reading: \(Phase0.metricWord(metric)) " + String(format: "%.3f", median)
+        }
     }
 
-    nonisolated static func median5(_ work: () -> Void) -> Reading {
-        Reading(runs: (0..<5).map { _ in time(work) })
+    /// `metric` as the one word the comparison script reads: every character outside letters, digits, dot,
+    /// underscore and hyphen becomes a hyphen.
+    nonisolated static func metricWord(_ metric: String) -> String {
+        String(metric.map { c -> Character in
+            c.isASCII && (c.isLetter || c.isNumber || c == "." || c == "_" || c == "-") ? c : "-"
+        })
+    }
+
+    // #4617: the ways a probe gets a reading, `median5`, `reading` and `alternating` below, each print its
+    // `probe reading:` line as they make it, so a probe using them cannot report a reading the before and after
+    // comparison never sees. `emit` is the seam the unit tests read the line through.
+
+    /// Times `work` five times and prints the reading's line under `metric` (unique within one run: a metric
+    /// read twice in one run is UNMEASURED in the comparison).
+    nonisolated static func median5(_ metric: String, emit: (String) -> Void = { print($0) },
+                                    _ work: () -> Void) -> Reading {
+        reading(metric, runs: (0..<5).map { _ in time(work) }, emit: emit)
+    }
+
+    /// A reading of runs the probe timed itself, its line printed under `metric`. An empty sample measured
+    /// nothing, so it prints NO line (the comparison then names the metric as missing rather than comparing a
+    /// zero, L90) and reads as 0 in the probe's own text, as the probes always showed it.
+    nonisolated static func reading(_ metric: String, runs: [Double],
+                                    emit: (String) -> Void = { print($0) }) -> Reading {
+        guard !runs.isEmpty else { return Reading(runs: [0]) }
+        let r = Reading(runs: runs)
+        emit(r.probeLine(metric))
+        return r
+    }
+
+    /// The line naming metrics a probe times inside ONE run as rival ways of doing one thing, and whether
+    /// their samples were taken in alternating order or in a fixed one. The before and after comparison is
+    /// not biased by either, since both sides run the same order; a comparison BETWEEN them inside a run is,
+    /// when the order is fixed: the one timed second carries the order effect (L395, #4614).
+    nonisolated static func orderLine(alternated: Bool, _ metrics: [String]) -> String {
+        "probe order: " + (alternated ? "alternated " : "fixed ")
+            + metrics.map(metricWord).joined(separator: ",")
+    }
+
+    /// Times rival `arms` against each other, five samples each, the first arm of sample `i` being arm
+    /// `i % arms.count`, so whatever the order does inside the run lands on every arm alike rather than on
+    /// whichever is timed second. Prints each arm's reading line and the order line. With five samples and
+    /// two arms the first arm goes first three times and the second twice, the nearest five can come.
+    nonisolated static func alternating(_ arms: [(metric: String, work: () -> Void)], samples: Int = 5,
+                                        emit: (String) -> Void = { print($0) }) -> [Reading] {
+        var runs = Array(repeating: [Double](), count: arms.count)
+        for i in 0..<samples {
+            for k in 0..<arms.count {
+                let arm = (i + k) % arms.count
+                runs[arm].append(time(arms[arm].work))
+            }
+        }
+        let readings = zip(arms, runs).map { reading($0.0.metric, runs: $0.1, emit: emit) }
+        emit(orderLine(alternated: true, arms.map { $0.metric }))
+        return readings
+    }
+
+    /// Says that rival `metrics` were timed in a FIXED order inside one run, where rewriting the probe to
+    /// alternate them is not worth what it would change (the decision is written at each call).
+    nonisolated static func fixedOrder(_ metrics: [String], emit: (String) -> Void = { print($0) }) {
+        emit(orderLine(alternated: false, metrics))
+    }
+
+    /// The median of a COUNT a probe reports beside its timings (keys re-asked, rows rebuilt). Not a duration,
+    /// so it prints no reading line: the comparison reads milliseconds.
+    nonisolated static func medianCount(_ values: [Int]) -> Int {
+        values.isEmpty ? 0 : values.sorted()[values.count / 2]
     }
 
     // THE load average reader every probe shares (#4315). It used to be three copies, one per probe

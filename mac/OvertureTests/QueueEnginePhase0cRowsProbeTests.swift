@@ -82,7 +82,7 @@ enum Phase0cRows {
     static func countText(_ counts: [Int]) -> String {
         guard !counts.isEmpty else { return "none" }
         let s = counts.sorted()
-        return "median \(s[s.count / 2]), max \(s.last!), total \(s.reduce(0, +)) over \(s.count) instants"
+        return "median \(Phase0.medianCount(counts)), max \(s.last!), total \(s.reduce(0, +)) over \(s.count) instants"
     }
 
     /// The refusal replay's line, carrying its own verdict on the load rule: a replay whose load was 8 or more
@@ -98,12 +98,13 @@ enum Phase0cRows {
         return "\(numbers), \(loads)"
     }
 
-    /// Max, p99 and median of a set of samples, in milliseconds, with the count.
-    nonisolated static func spread(_ samples: [Double]) -> (max: Double, p99: Double, median: Double, text: String) {
+    /// Max, p99 and median of a set of samples, in milliseconds, with the count. The median's `probe reading:`
+    /// line is printed under `metric` as it is taken (#4617).
+    nonisolated static func spread(_ metric: String, _ samples: [Double]) -> (max: Double, p99: Double, median: Double, text: String) {
         guard !samples.isEmpty else { return (0, 0, 0, "no samples") }
         let s = samples.sorted()
         let p99 = s[min(s.count - 1, Int((Double(s.count) * 0.99).rounded(.up)) - 1)]
-        let median = s[s.count / 2]
+        let median = Phase0.reading(metric, runs: samples).median
         return (s.last!, p99, median,
                 String(format: "max %.3f ms, p99 %.3f, median %.3f over %d", s.last!, p99, median, s.count))
     }

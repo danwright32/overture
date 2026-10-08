@@ -51,10 +51,6 @@ enum Phase0b {
         }
     }
 
-    nonisolated static func reading(_ runs: [Double]) -> Phase0.Reading {
-        Phase0.Reading(runs: runs.isEmpty ? [0] : runs)
-    }
-
     /// The containment-preserving fourfold variant of a list of (presenter, venue) pairs (plan v5 D3).
     ///
     /// NOT the variant the plan names ("copy marker as a whole word after any leading article"), and the
@@ -392,10 +388,14 @@ struct QueueEnginePhase0bProbeTests {
             var shows = start
             var current = overrides
             let oracle0 = QueueModel.ProducerTables(shows: shows, overrides: current)
-            var coldRuns: [Double] = []
             var patched = Phase0bPatchTables(shows: [], overrides: current)
-            for _ in 0..<5 { coldRuns.append(Phase0.time { patched = Phase0bPatchTables(shows: shows, overrides: current) }) }
-            let oracleCold = Phase0.median5 { _ = QueueModel.ProducerTables(shows: shows, overrides: current) }
+            // #4617: the prototype's cold build and today's are rivals, so they are timed in alternating order:
+            // timed one after the other, whichever ran second carried the order effect into the comparison.
+            let cold = Phase0.alternating([
+                ("0b1-prototypeCold-\(label)", { patched = Phase0bPatchTables(shows: shows, overrides: current) }),
+                ("0b1-oracleCold-\(label)", { _ = QueueModel.ProducerTables(shows: shows, overrides: current) }),
+            ])
+            let (prototypeCold, oracleCold) = (cold[0], cold[1])
 
             // Agreement with today's code and with the brute force, over every presenter in the corpus.
             func compare(_ what: String, brute: Bool = false) -> Int {
@@ -489,17 +489,17 @@ struct QueueEnginePhase0bProbeTests {
                     current = prior
                     mismatches += compare("\(kind.rawValue) undo \(sample)")
                 }
-                let t = Phase0b.reading(times)
+                let t = Phase0.reading("0b1-patch-\(kind)-\(label)", runs: times)
                 worstMedian = max(worstMedian, t.median)
-                let askedText = asked.sorted()[asked.count / 2]
-                lines.append(Phase0b.pad(kind.rawValue, 40) + " \(t.text)  keys re-asked median \(askedText) (max \(asked.max() ?? 0)), keys changed median \(changedCounts.sorted()[changedCounts.count / 2]), mismatches \(mismatches)")
+                let askedText = Phase0.medianCount(asked)
+                lines.append(Phase0b.pad(kind.rawValue, 40) + " \(t.text)  keys re-asked median \(askedText) (max \(asked.max() ?? 0)), keys changed median \(Phase0.medianCount(changedCounts)), mismatches \(mismatches)")
                 if mismatches > 0 { failures.append("\(label) \(kind.rawValue): \(mismatches) mismatches") }
             }
             let presenters = oracle0.corpus.presenterKeys.count
             Phase0b.say("""
                 0b.1 [\(label)] \(shows.count) shows, \(presenters) presenter keys, \(oracle0.corpus.venues.keys.count) venue keys, \(brandCount) brand keys, \(Phase0.load())
                   today's ProducerTables built cold                 \(oracleCold.text)
-                  prototype cold build                              \(Phase0b.reading(coldRuns).text), mismatches against today's code and the brute force \(coldBad)
+                  prototype cold build                              \(prototypeCold.text), mismatches against today's code and the brute force \(coldBad)
                   \(lines.joined(separator: "\n  "))
                   worst per-kind patch median                       \(String(format: "%.2f", worstMedian)) ms (stop rule: over 5 ms at 5,376, or any mismatch)
                 """)
@@ -523,30 +523,30 @@ struct QueueEnginePhase0bProbeTests {
             let baseContext = StageContext(now: now, geo: t.geo, clients: t.clients)
             let resolved = baseContext.resolvingPlaces(of: inQueue)
             _ = QueueRenderPass.make(inputs(t, now: now, cards: []))
-            let floor = Phase0.median5 { _ = QueueRenderPass.make(inputs(t, now: now, cards: [])) }
-            let geoTerm = Phase0.median5 { _ = baseContext.resolvingPlaces(of: inQueue) }
-            let scopeTerm = Phase0.median5 {
+            let floor = Phase0.median5("0b2-floor-\(label)") { _ = QueueRenderPass.make(inputs(t, now: now, cards: [])) }
+            let geoTerm = Phase0.median5("0b2-geoTerm-\(label)") { _ = baseContext.resolvingPlaces(of: inQueue) }
+            let scopeTerm = Phase0.median5("0b2-scopeTerm-\(label)") {
                 _ = QueueModel.scope(from: inQueue, answers: t.answers, corpus: every, overrides: t.overrides,
                                      sources: t.sources, refusals: t.refusals, clients: resolved.clients,
                                      now: resolved.now, cardKeys: [], today: resolved.today)
             }
-            let reachedTerm = Phase0.median5 { _ = ReachedOutQueue.activeWithDates(from: inQueue, now: now) }
+            let reachedTerm = Phase0.median5("0b2-reachedTerm-\(label)") { _ = ReachedOutQueue.activeWithDates(from: inQueue, now: now) }
             let reachedKeys = Set(ReachedOutQueue.activeWithDates(from: inQueue, now: now).map(\.prospect.naturalKey))
-            let placeTerm = Phase0.median5 { _ = StageNavigation.placements(in: inQueue, context: resolved) }
+            let placeTerm = Phase0.median5("0b2-placeTerm-\(label)") { _ = StageNavigation.placements(in: inQueue, context: resolved) }
             let placement = StageNavigation.placements(in: inQueue, context: resolved)
-            let stageKeysTerm = Phase0.median5 { _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedKeys) }
-            let countsTerm = Phase0.median5 { _ = StageNavigation.counts(in: placement) }
-            let focusedTerm = Phase0.median5 { _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement)) }
-            let fanOutTerm = Phase0.median5 { _ = QueueRenderPass.fanOutWarning(inQueue) }
-            let agentTerm = Phase0.median5 {
+            let stageKeysTerm = Phase0.median5("0b2-stageKeysTerm-\(label)") { _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedKeys) }
+            let countsTerm = Phase0.median5("0b2-countsTerm-\(label)") { _ = StageNavigation.counts(in: placement) }
+            let focusedTerm = Phase0.median5("0b2-focusedTerm-\(label)") { _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement)) }
+            let fanOutTerm = Phase0.median5("0b2-fanOutTerm-\(label)") { _ = QueueRenderPass.fanOutWarning(inQueue) }
+            let agentTerm = Phase0.median5("0b2-agentTerm-\(label)") {
                 _ = AgentInputs.from(prospects: inQueue, allProspects: every, inquiries: t.inquiries, context: resolved,
                                      gmailConnected: false, runInFlight: nil, replyRunAlive: false, placement: placement)
             }
             let today = EasternDate.today(now)
-            let feedTerm = Phase0.median5 {
+            let feedTerm = Phase0.median5("0b2-feedTerm-\(label)") {
                 _ = AppNotices.feedBreaks(FeedBreakEvent.events(among: every, asOf: today), shownInQueue: { _ in true })
             }
-            let survivorsTerm = Phase0.median5 {
+            let survivorsTerm = Phase0.median5("0b2-survivorsTerm-\(label)") {
                 _ = every.filter { p in
                     guard p.mergeSurvivorUnseenAt != nil, !p.isClosed else { return false }
                     return EasternDate.runIsLive(lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
@@ -554,55 +554,55 @@ struct QueueEnginePhase0bProbeTests {
                                                  today: today)
                 }.count
             }
-            let inquiryTerm = Phase0.median5 { _ = QueueRenderPass.inquiryRows(t.inquiries, stage: .scout, now: now) }
+            let inquiryTerm = Phase0.median5("0b2-inquiryTerm-\(label)") { _ = QueueRenderPass.inquiryRows(t.inquiries, stage: .scout, now: now) }
             let scopeRows = QueueModel.scope(from: inQueue, answers: t.answers, corpus: every, overrides: t.overrides,
                                              sources: t.sources, refusals: t.refusals, clients: resolved.clients,
                                              now: resolved.now, cardKeys: [], today: resolved.today).rows
-            let selfBookingTerm = Phase0.median5 { _ = QueueModel.selfBookingIndex(scopeRows) }
-            let pendingTerm = Phase0.median5 { _ = QueueModel.pendingBookingCount(scopeRows) }
-            let groupTerm = Phase0.median5 { _ = QueueModel.groupByDate(scopeRows) }
+            let selfBookingTerm = Phase0.median5("0b2-selfBookingTerm-\(label)") { _ = QueueModel.selfBookingIndex(scopeRows) }
+            let pendingTerm = Phase0.median5("0b2-pendingTerm-\(label)") { _ = QueueModel.pendingBookingCount(scopeRows) }
+            let groupTerm = Phase0.median5("0b2-groupTerm-\(label)") { _ = QueueModel.groupByDate(scopeRows) }
 
             // INSIDE QueueModel.scope, every line of its preamble and its row loop, in the order it runs.
             let shows = every.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
-            let engagementTerm = Phase0.median5 { _ = EngagementLink.group(inQueue.map(EngagementLink.Row.init)) }
-            let tablesTerm = Phase0.median5 { _ = QueueModel.ProducerTables(shows: shows, overrides: t.overrides) }
+            let engagementTerm = Phase0.median5("0b2-engagementTerm-\(label)") { _ = EngagementLink.group(inQueue.map(EngagementLink.Row.init)) }
+            let tablesTerm = Phase0.median5("0b2-tablesTerm-\(label)") { _ = QueueModel.ProducerTables(shows: shows, overrides: t.overrides) }
             let producer = QueueModel.ProducerTables(shows: shows, overrides: t.overrides)
-            let inheritedTerm = Phase0.median5 {
+            let inheritedTerm = Phase0.median5("0b2-inheritedTerm-\(label)") {
                 _ = QueueModel.inheritedAnswers(t.answers, corpus: every, overrides: t.overrides, refusals: t.refusals,
                                                 heldKeys: [], now: now, producerCorpus: producer.corpus)
             }
             let inherited = QueueModel.inheritedAnswers(t.answers, corpus: every, overrides: t.overrides,
                                                         refusals: t.refusals, heldKeys: [], now: now,
                                                         producerCorpus: producer.corpus)
-            let rowCountsTerm = Phase0.median5 { _ = QueueModel.organisationRowCounts(every.map(\.presenter)) }
-            let calendarTerm = Phase0.median5 { _ = QueueModel.sourceCalendarIndex(t.sources) }
-            let contradictedTerm = Phase0.median5 { _ = ContradictedCancellation.contradictedKeys(among: every) }
-            let showLinkTerm = Phase0.median5 { _ = ShowLink.group(every.map(ShowLink.Row.init)) }
-            let titlesTerm = Phase0.median5 {
+            let rowCountsTerm = Phase0.median5("0b2-rowCountsTerm-\(label)") { _ = QueueModel.organisationRowCounts(every.map(\.presenter)) }
+            let calendarTerm = Phase0.median5("0b2-calendarTerm-\(label)") { _ = QueueModel.sourceCalendarIndex(t.sources) }
+            let contradictedTerm = Phase0.median5("0b2-contradictedTerm-\(label)") { _ = ContradictedCancellation.contradictedKeys(among: every) }
+            let showLinkTerm = Phase0.median5("0b2-showLinkTerm-\(label)") { _ = ShowLink.group(every.map(ShowLink.Row.init)) }
+            let titlesTerm = Phase0.median5("0b2-titlesTerm-\(label)") {
                 _ = Dictionary(every.map { ($0.naturalKey, $0.groupName) }, uniquingKeysWith: { a, _ in a }).count
             }
-            let collapseTerm = Phase0.median5 {
+            let collapseTerm = Phase0.median5("0b2-collapseTerm-\(label)") {
                 _ = ShowLink.collapse(every.map(ShowLink.Row.init), drawn: Set(inQueue.map(\.naturalKey)))
             }
-            let lookalikesTerm = Phase0.median5 {
+            let lookalikesTerm = Phase0.median5("0b2-lookalikesTerm-\(label)") {
                 var by: [String: [Prospect]] = [:]
                 for row in every { if let target = row.arrivedLookingLike { by[target, default: []].append(row) } }
                 _ = by.mapValues { $0.sorted { ($0.firstSeenAt ?? .distantPast) > ($1.firstSeenAt ?? .distantPast) }.map(\.naturalKey) }
             }
-            let nightsTerm = Phase0.median5 {
+            let nightsTerm = Phase0.median5("0b2-nightsTerm-\(label)") {
                 _ = Dictionary(every.compactMap { r -> (String, String)? in
                     guard let n = r.performanceDate, !n.isEmpty else { return nil }
                     return (r.naturalKey, n)
                 }, uniquingKeysWith: { a, _ in a }).count
             }
-            let rowLoopTerm = Phase0.median5 {
+            let rowLoopTerm = Phase0.median5("0b2-rowLoopTerm-\(label)") {
                 for p in inQueue {
                     let contacts = p.countedRecipients
                     _ = QueueScopeRow(p, facts: RecipientFacts.of(p, contacts: contacts),
                                       inheritedReachability: inherited[p.naturalKey])
                 }
             }
-            let countedTerm = Phase0.median5 { for p in inQueue { _ = p.countedRecipients } }
+            let countedTerm = Phase0.median5("0b2-countedTerm-\(label)") { for p in inQueue { _ = p.countedRecipients } }
             // A card for every row in the queue, built from a retained preamble (the per-row cost the engine
             // would pay per rebuilt row), and its marginal cost per card.
             let store = QueueModel.scope(from: inQueue, answers: t.answers, corpus: every, overrides: t.overrides,
@@ -736,9 +736,12 @@ struct QueueEnginePhase0bProbeTests {
                     totals.append(total)
                     worst.append(largest)
                 }
-                lines.append("\(arm), keyset batch \(size): \(batches) batches, \(rowsSeen) rows returned, \(distinct) distinct of \(rowCount) (missed \(rowCount - distinct), repeated \(rowsSeen - distinct)), total \(Phase0b.reading(totals).text), largest batch \(Phase0b.reading(worst).text)")
+                lines.append("\(arm), keyset batch \(size): \(batches) batches, \(rowsSeen) rows returned, \(distinct) distinct of \(rowCount) (missed \(rowCount - distinct), repeated \(rowsSeen - distinct)), total \(Phase0.reading("0b3-\(arm)-batch\(size)-total-\(label)", runs: totals).text), largest batch \(Phase0.reading("0b3-\(arm)-batch\(size)-largest-\(label)", runs: worst).text)")
             }
             }
+            // #4617: the two sorts are rival arms, timed one after the other in this order (the default sort first), each
+            // over fresh containers. A comparison between them inside one run carries the order effect, which this says.
+            Phase0.fixedOrder(["0b3-default (localizedStandard) sort-batch25-total-\(label)", "0b3-lexical sort-batch25-total-\(label)"])
             // 0b.12: the background identifier fetch the shortfall check would run, and the Inquiry fill.
             let c = try Phase0.openContainer(at: url)
             var idRuns: [Double] = []
@@ -756,13 +759,13 @@ struct QueueEnginePhase0bProbeTests {
             }
             let modelIDs = Set(try ModelContext(c).fetch(FetchDescriptor<Prospect>()).map(\.persistentModelID))
             let fetchedIDs = Set(try ModelContext(c).fetchIdentifiers(FetchDescriptor<Prospect>()))
-            let inquiryFetch = Phase0.median5 { _ = ((try? ModelContext(c).fetch(FetchDescriptor<Inquiry>())) ?? []).count }
+            let inquiryFetch = Phase0.median5("0b12-inquiryFetch-\(label)") { _ = ((try? ModelContext(c).fetch(FetchDescriptor<Inquiry>())) ?? []).count }
             let inquiryCount = try ModelContext(c).fetchCount(FetchDescriptor<Inquiry>())
             Phase0b.say("""
                 0b.3 [\(label)] \(Phase0.load())
                   \(lines.joined(separator: "\n  "))
                 0b.12 [\(label)]
-                  background identifier fetch, Prospect + Inquiry, on its own thread  \(Phase0b.reading(idRuns).text) (\(idCount) + \(inquiryIDCount) identifiers)
+                  background identifier fetch, Prospect + Inquiry, on its own thread  \(Phase0.reading("0b12-identifierFetch-\(label)", runs: idRuns).text) (\(idCount) + \(inquiryIDCount) identifiers)
                   identifiers equal the fetched models' PIDs                         \(modelIDs == fetchedIDs) (\(fetchedIDs.count) against \(modelIDs.count))
                   live Inquiry count \(inquiryCount); one fetch of every Inquiry, fresh context  \(inquiryFetch.text)
                 """)
@@ -912,7 +915,7 @@ struct QueueEnginePhase0bProbeTests {
             ctx.insert(fresh)
             ctx.delete(members[members.count / 3])
             let pending = sameAsFetch()
-            let buildMembers = Phase0.median5 { _ = StoreRows(prospects: membersRows(), inquiries: []) }
+            let buildMembers = Phase0.median5("0b5-buildMembers-\(label)") { _ = StoreRows(prospects: membersRows(), inquiries: []) }
             ctx.rollback()
             let rolledBack = sameAsFetch()
 
@@ -945,7 +948,7 @@ struct QueueEnginePhase0bProbeTests {
                 awaitedMain.append(monitor.stop().worst)
             }
             let lapText = all[0].keys.sorted().map { k in
-                let r = Phase0b.reading(all.map { $0[k] ?? 0 })
+                let r = Phase0.reading("0b5-\(k)-\(label)", runs: all.map { $0[k] ?? 0 })
                 return Phase0b.pad(k, 42) + " " + r.text + (r.median > 50 ? "  OVER 50 ms: batched under D5" : "")
             }
             Phase0b.say("""
@@ -953,7 +956,7 @@ struct QueueEnginePhase0bProbeTests {
                   members-built StoreRows equals context.fetch: quiet \(quiet), with a pending insert and delete \(pending), after rollback \(rolledBack)
                   building StoreRows from members + inserted - deleted   \(buildMembers.text)
                   \(lapText.joined(separator: "\n  "))
-                  closing read awaited off main, worst main turn during it   \(Phase0b.reading(awaitedMain).text)
+                  closing read awaited off main, worst main turn during it   \(Phase0.reading("0b5-awaitedClosingReadWorstTurn-\(label)", runs: awaitedMain).text)
                   NOT RUN: the reply check, threading repair, proposal sweep, signature refresh and OmniFocus laps, which reach real services (L2)
                 """)
             #expect(quiet && pending && rolledBack, "0b.5: members plus inserted minus deleted did not equal the fetch")
@@ -1016,7 +1019,7 @@ struct QueueEnginePhase0bProbeTests {
                 let s = log.snapshot
                 lines.append("round \(round): wall \(String(format: "%.1f", wall)) ms; largest main turn \(String(format: "%.1f", turns.worst)) ms (\(turns.samples) samples, \(turns.over100) over 100 ms, \(turns.over16) over 16 ms, \(turns.abandoned) abandoned); "
                              + "outcome inserted \(outcome.inserted) updated \(outcome.updated) skipped \(outcome.skipped); rows written (value changed) \(changed.count); trackers fired \(s.rows.count); "
-                             + "\(entries.count) saves, didSave updated shows per save: max \(sizes.max() ?? 0), median \(sizes.isEmpty ? 0 : sizes.sorted()[sizes.count / 2]), total \(sizes.reduce(0, +))")
+                             + "\(entries.count) saves, didSave updated shows per save: max \(sizes.max() ?? 0), median \(Phase0.medianCount(sizes)), total \(sizes.reduce(0, +))")
             }
             // The save cost of the ingestedAt writes alone: the rows the unchanged re-land restamps (taken from
             // the clone's round 2, and their three glued copies on the 4x corpus), restamped and saved, against
@@ -1050,10 +1053,13 @@ struct QueueEnginePhase0bProbeTests {
                 })
                 try Phase0.requireSaved(failure, step: "0b.6 restamp spread over 36 saves")
             }
+            // #4617: in every sample the empty save, the one save and the save spread over 36 run in this order, so a
+            // comparison between them inside one run carries the order effect, which this says.
+            Phase0.fixedOrder(["0b6-emptySave-\(label)", "0b6-oneSave-\(label)", "0b6-spreadSave-\(label)"])
             Phase0b.say("""
                 0b.6 [\(label)] \(landed.results.reduce(0) { $0 + $1.events.count }) events over \(landed.results.count) sources, \(Phase0.load())
                   \(lines.joined(separator: "\n  "))
-                  ingestedAt restamp of \(rows.count) rows: one save \(Phase0b.reading(oneSave).text); spread over 36 saves \(Phase0b.reading(spread).text); an empty save \(Phase0b.reading(empty).text)
+                  ingestedAt restamp of \(rows.count) rows: one save \(Phase0.reading("0b6-oneSave-\(label)", runs: oneSave).text); spread over 36 saves \(Phase0.reading("0b6-spreadSave-\(label)", runs: spread).text); an empty save \(Phase0.reading("0b6-emptySave-\(label)", runs: empty).text)
                   the Phase 1a branch arm  UNMEASURED: Phase 1a is not built, so every number above is today's code, no-op writes included
                 """)
         }
@@ -1108,11 +1114,11 @@ struct QueueEnginePhase0bProbeTests {
                     if soonest != wholeNext { nextMismatch += 1 }
                 }
             }
-            let one = rows[rows.count / 2]
-            let oneRow = Phase0.median5 {
+            let one = rows[rows.count / 2] // probe-reading-exempt: picks the middle row to time, not a median
+            let oneRow = Phase0.median5("0b8-oneRow-\(label)") {
                 _ = DueWork.countAndNextChange(prospects: [one], inquiries: [], now: base, replyRunAlive: false)
             }
-            let whole = Phase0.median5 {
+            let whole = Phase0.median5("0b8-whole-\(label)") {
                 _ = DueWork.countAndNextChange(prospects: rows, inquiries: inquiries, now: base, replyRunAlive: false)
             }
             Phase0b.say("""
@@ -1259,7 +1265,7 @@ struct QueueEnginePhase0bProbeTests {
                 })
             }
             _ = scope
-            let bucket = Phase0b.reading(bucketRuns)
+            let bucket = Phase0.reading("0b11-coldBucket-\(label)", runs: bucketRuns)
 
             // The distribution is read on the clone only: the fourfold copy keeps every date, so its instants
             // are the clone's with four rows each, by construction.
