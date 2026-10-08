@@ -168,8 +168,11 @@ merge_pr() {
   # refused by GitHub rather than merged unreviewed (L179; the first real review of this change
   # found the gap).
   # Expanded with the guarded form below: macOS bash 3.2 under set -u errors on an EMPTY array (L486).
-  local pin=()
-  [[ -n "${REVIEWED_HEAD:-}" ]] && pin=(--match-head-commit "${REVIEWED_HEAD}")
+  # #4358 slice E4d: with the review skipped there is no REVIEWED_HEAD, so the merge is pinned to the head the engine
+  # gate ran at instead, and a push between that run and this line is refused rather than merged unseen (L179).
+  local pin=() merge_head="${REVIEWED_HEAD:-}"
+  [[ -z "${merge_head}" && "${gate_head}" =~ ^[0-9a-f]{40}$ ]] && merge_head="${gate_head}"
+  [[ -n "${merge_head}" ]] && pin=(--match-head-commit "${merge_head}")
   if ! gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch ${pin[@]+"${pin[@]}"}; then
     echo "gh refused to merge PR #${pr_number}; its message is above. Nothing else was done to it," >&2
     echo "so the branch is untouched and this can be rerun once the cause is dealt with." >&2
