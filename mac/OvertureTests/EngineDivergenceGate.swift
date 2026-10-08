@@ -297,6 +297,8 @@ struct EngineDivergenceGateRuleTests {
         let cases: [(String, (inout QueueEngineVerifierCounts) -> Void)] = [
             ("factMismatches x1", { $0.factMismatches = 1 }),
             ("outputMismatches x1", { $0.outputMismatches = 1 }),
+            ("cardDivergences x1", { $0.cardDivergences = 1 }),
+            ("cardMismatches x1", { $0.cardMismatches = 1 }),
             ("healed x1", { $0.healed = 1 }),
             ("healDidNotConverge x1", { $0.healDidNotConverge = 1 }),
             ("unverifiedTooLong x1", { $0.unverifiedTooLong = 1 }),
