@@ -339,7 +339,7 @@ struct OutputsHoldNoModelTests {
                              requestedKeys: [row.naturalKey], registry: QueueModel.CardKeyRegistry())
     }
 
-    @Test func aCardStoreOverFactsHoldsNoModelAndBuildsTheModelsCard() throws {
+    @Test func aCardStoreOverFactsOrOverModelsHoldsNoModelAndBuildsTheSameCard() throws {
         let container = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
         let (show, contacts, _) = try FactsFixture.liveRow(variant: 1, in: container.mainContext)
         // The fixture writes each string field with its own name, so both contacts share the id "id": two
