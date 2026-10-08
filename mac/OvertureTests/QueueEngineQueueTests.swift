@@ -558,6 +558,17 @@ final class QueueEngineLandingTests {
         #expect(engine.isHoldingForALanding, "closing one landing twice closed the other")
         engine.closeLanding(second)
         #expect(!engine.isHoldingForALanding)
+
+        // Every engine numbers its landings from 1, so two fresh engines' first landings carry the same number: the
+        // one another engine opened must still close nothing here (found by the lessons review).
+        let fresh = self.engine(try EngineStore(shows: 1, seed: 4445), EngineTurns(), batch: 2)
+        let other = self.engine(try EngineStore(shows: 1, seed: 4446), EngineTurns(), batch: 2)
+        let mine = fresh.openLanding()
+        let foreign = other.openLanding()
+        fresh.closeLanding(foreign)
+        #expect(fresh.isHoldingForALanding, "a landing another engine opened closed this engine's own")
+        fresh.closeLanding(mine)
+        #expect(!fresh.isHoldingForALanding)
     }
 
     @Test func aViewChangeMidLandingIsDanActing() throws {

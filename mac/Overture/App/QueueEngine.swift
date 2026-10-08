@@ -129,6 +129,9 @@ struct QueueEngineOutput<Value> {
 /// #4369 (#4358 slice E4b): one scout landing, open from `QueueEngine.openLanding()` until `closeLanding(_:)`, which
 /// every landing entry point calls in a `defer` (the cutover, slice E4d, L514, L515).
 struct QueueEngineLanding: Hashable, Sendable {
+    /// The engine that opened it, by an identity minted at the engine's birth, never its address (L1019): every
+    /// engine numbers its landings from 1, so the number alone cannot say whose landing this is.
+    fileprivate let owner: UUID
     fileprivate let number: Int
 }
 
@@ -536,6 +539,8 @@ final class QueueEngine<Value: Sendable> {
     /// The landings open now, by number. A set rather than a count, so a landing closed twice cannot close another.
     @ObservationIgnored private var openLandings: Set<Int> = []
     @ObservationIgnored private var landingsOpened = 0
+    /// Whose landings these are: a landing another engine opened closes nothing here.
+    @ObservationIgnored private let landingOwner = UUID()
     /// The reasons turns held while a landing was open, carried into the one publish that follows.
     @ObservationIgnored private var heldReasons: Set<QueueEnginePassReason> = []
     /// Stored values "Reload this show" changed since the last turn, which that turn derives for at once.
@@ -757,13 +762,14 @@ final class QueueEngine<Value: Sendable> {
     func openLanding() -> QueueEngineLanding {
         landingsOpened += 1
         openLandings.insert(landingsOpened)
-        return QueueEngineLanding(number: landingsOpened)
+        return QueueEngineLanding(owner: landingOwner, number: landingsOpened)
     }
 
     /// Closes `landing`. When it was the last one open, a turn follows, which reads what is still carried a batch
     /// at a time and then publishes ONCE. Closing a landing twice, or one this engine did not open, does nothing.
     func closeLanding(_ landing: QueueEngineLanding) {
-        guard openLandings.remove(landing.number) != nil, openLandings.isEmpty else { return }
+        guard landing.owner == landingOwner, openLandings.remove(landing.number) != nil,
+              openLandings.isEmpty else { return }
         scheduleTurn()
     }
 
