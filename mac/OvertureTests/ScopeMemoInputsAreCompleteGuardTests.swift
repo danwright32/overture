@@ -49,28 +49,27 @@ struct ScopeMemoInputsAreCompleteGuardTests {
         return names
     }
 
-    // WHAT THIS GUARD CANNOT SEE, stated because a green run here is not a statement that a key is
-    // complete (L400).
-    //
-    // It asks whether a derivation's BODY MENTIONS a collection by name. A derivation that reaches one
-    // through a computed property mentions the property, not the collection, and this rule is blind to
-    // it. Measured 2026-09-24: `SourcesView.makeRenderData` builds `roomContext`, which builds `geo`,
-    // which reads `excludedTownRows` and `allowedSeedTownRows`. Neither was in the key and this guard
-    // was green. The key was fixed; the blind spot is not fixable by a text rule, because following it
-    // means resolving a property chain.
-    //
-    // So: when keying a memo, trace every computed property the derivation touches BY HAND, and treat a
-    // pass here as covering only what the body names directly.
-    @Test func everyModelCollectionADerivationReadsIsInTheKeyItsMemoDecidesBy() {
-        let models = Self.modelTypes()
-        #expect(models.count > 8, Comment(rawValue: """
-            only \(models.count) @Model types were enumerated, so the walk did not read the app and \
-            nothing below was measured (L98)
-            """))
+    /// One model collection a memoised derivation reads: the file, the derivation (a declaration whose body runs
+    /// a memo), the collection's name there, its element type, and whether the memo's key carries it.
+    ///
+    /// #4370 (B1) reads this enumeration too, as the memo half of "every consumer of what a landing writes", so
+    /// the two guards ask their questions of ONE derivation of the memo inputs rather than two (L263).
+    struct MemoInput: Equatable, Sendable {
+        let file: String
+        let derivation: String
+        let collection: String
+        let element: String
+        let inKey: Bool
+        var description: String {
+            "\(file).\(derivation) reads \(collection): [\(element)]"
+        }
+    }
 
-        let files = AppSourceWalk.files(underAll: [Self.appRoot], floor: Self.fileFloor)
+    /// Every derivation that runs a memo, and every model collection each one reads.
+    static func memoInputs(models: Set<String>) -> (derivations: [String], inputs: [MemoInput]) {
+        let files = AppSourceWalk.files(underAll: [appRoot], floor: fileFloor)
         var derivations: [String] = []
-        var missing: [String] = []
+        var inputs: [MemoInput] = []
         for file in files {
             let code = RedrawRegion.code(file.text)
             guard code.contains("ScopeMemo<") else { continue }
@@ -134,12 +133,35 @@ struct ScopeMemoInputsAreCompleteGuardTests {
                     let addsIt = declaration.body.contains(".add(\(collection))")
                     let derivesTheKey = Self.keyedElsewhere["\(file.name).\(name)"] != nil
                         && declaration.body.contains("fingerprint:")
-                    if !addsIt && !derivesTheKey {
-                        missing.append("\(file.name).\(name) reads \(collection): [\(element)] and never adds it to the key")
-                    }
+                    inputs.append(MemoInput(file: file.name, derivation: name, collection: collection,
+                                            element: element, inKey: addsIt || derivesTheKey))
                 }
             }
         }
+        return (derivations, inputs)
+    }
+
+    // WHAT THIS GUARD CANNOT SEE, stated because a green run here is not a statement that a key is
+    // complete (L400).
+    //
+    // It asks whether a derivation's BODY MENTIONS a collection by name. A derivation that reaches one
+    // through a computed property mentions the property, not the collection, and this rule is blind to
+    // it. Measured 2026-09-24: `SourcesView.makeRenderData` builds `roomContext`, which builds `geo`,
+    // which reads `excludedTownRows` and `allowedSeedTownRows`. Neither was in the key and this guard
+    // was green. The key was fixed; the blind spot is not fixable by a text rule, because following it
+    // means resolving a property chain.
+    //
+    // So: when keying a memo, trace every computed property the derivation touches BY HAND, and treat a
+    // pass here as covering only what the body names directly.
+    @Test func everyModelCollectionADerivationReadsIsInTheKeyItsMemoDecidesBy() {
+        let models = Self.modelTypes()
+        #expect(models.count > 8, Comment(rawValue: """
+            only \(models.count) @Model types were enumerated, so the walk did not read the app and \
+            nothing below was measured (L98)
+            """))
+
+        let (derivations, inputs) = Self.memoInputs(models: models)
+        let missing = inputs.filter { !$0.inKey }.map { "\($0.description) and never adds it to the key" }
 
         // Cannot pass vacuously. With no derivation running a memo this has measured nothing (L98).
         #expect(!derivations.isEmpty, """

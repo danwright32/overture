@@ -124,6 +124,20 @@ struct PrivacyOfTheCardDivergenceLogTests {
         // And a build run from source carries none, whatever the installer's record says.
         #expect(CardDivergenceLog.BuildStamp.of(installed: installed(sha), isRunFromSource: true)
                 == CardDivergenceLog.BuildStamp(build: .runFromSource, commit: nil))
+        // #4358 slice E4c: the SECOND way into `commit`, added on purpose. A test run's commit comes from the
+        // process's environment, so it is held to the same rule: only a whole commit is ever written, and any other
+        // value is read as malformed and stamps exactly what it would have without it.
+        let testRun = CardDivergenceLog.TestRunCommit.self
+        #expect(CardDivergenceLog.BuildStamp.of(installed: nil, isRunFromSource: true,
+                                                testRun: testRun.read(environment: [testRun.variable: sha],
+                                                                      isTestProcess: true))
+                == CardDivergenceLog.BuildStamp(build: .testRun, commit: sha))
+        for refused in ["Marguerite Eddowes", String(sha.prefix(7)), sha + "0", "", String(repeating: "g", count: 40)] {
+            let given = testRun.read(environment: [testRun.variable: refused], isTestProcess: true)
+            let stamp = CardDivergenceLog.BuildStamp.of(installed: nil, isRunFromSource: true, testRun: given)
+            #expect(stamp == CardDivergenceLog.BuildStamp(build: .runFromSource, commit: nil),
+                    Comment(rawValue: "a test run given `\(refused)` stamped \(stamp)"))
+        }
     }
 
     // The comparison hands back NAMES, and this is asserted against real data rather than by reading the
