@@ -58,21 +58,41 @@ final class QueueEngineGateTests {
         #expect(engine.output?.reasons == [.viewInputs])
     }
 
+    // What each pass the engine ran was handed as the cards to build, in order, so a test reads what the PASS took
+    // rather than what the engine holds, which is true the moment the view hands it over (the lessons review).
+    private final class RequestsSeen: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen: [Set<String>] = []
+        func record(_ keys: Set<String>) { lock.withLock { seen.append(keys) } }
+        var all: [Set<String>] { lock.withLock { seen } }
+    }
+
     // #4358 slice E4d: the cards a frame drew are no reason for a pass, built or not; they are kept for the next pass
-    // to prebuild. The positive control is the change that follows: its pass carries the request (L159).
+    // to prebuild. The positive control is the change that follows: the pass it causes is HANDED the request (L159).
     @Test func cardsAFrameDrewAreNoReasonForAPassAndTheNextPassTakesThem() throws {
         let store = try EngineStore(shows: 2, seed: 33)
         let turns = EngineTurns()
-        let engine = started(store, EngineDerivations.counts(), turns)
+        let seen = RequestsSeen()
+        let counts = EngineDerivations.counts()
+        let recording = QueueEngineDerivation<EngineDerivations.Counts>(
+            derive: { input in
+                seen.record(input.viewInputs.requestedCardKeys)
+                return counts.derive(input)
+            },
+            differingFields: counts.differingFields, nextChange: counts.nextChange)
+        let engine = started(store, recording, turns)
         let passes = engine.counters.passes
+        let derivedBefore = seen.all.count
         engine.setViewInputs(QueueEngineViewInputs(requestedCardKeys: ["show-00001", "show-00009"]))
         #expect(turns.run() == 0, "a frame asking for cards asked for a turn")
         #expect(engine.counters.passes == passes)
+        #expect(seen.all.count == derivedBefore, "a frame asking for cards was derived for")
         engine.sourceFired("gmailConnected")
         turns.run()
         #expect(engine.counters.passes == passes + 1)
-        #expect(engine.viewInputs.requestedCardKeys == ["show-00001", "show-00009"],
-                "the next pass did not take the cards the frame drew")
+        #expect(seen.all.last == ["show-00001", "show-00009"], Comment(rawValue:
+            "the next pass was handed \(seen.all.last.map { $0.sorted().description } ?? "nothing"), not the cards the "
+            + "frame drew"))
     }
 
     // A write that changed nothing is a turn (its tracker fired) and no pass: the equality gate feeds the
