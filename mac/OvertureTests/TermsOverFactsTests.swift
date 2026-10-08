@@ -1109,7 +1109,7 @@ extension TermsOverFactsTests {
     // The no-model walk over a whole published pass (`OutputsHoldNoModelTests` holds the scan and the card
     // store). Two passes, because the Reached out list and the inquiry block are each built for one stage only.
     @MainActor
-    @Test func aPopulatedPassHoldsAModelOnlyWhereItIsStillAllowed() throws {
+    @Test func aPopulatedPassHoldsNoModelAnywhere() throws {
         let ctx = try context()
         let (all, inquiries) = try seedAgentInputsFrom(ctx)
         let passes = [StageFocus.reachedOut, .review].map { ($0, populatedPass(all, inquiries, focus: $0)) }
@@ -1146,26 +1146,30 @@ extension TermsOverFactsTests {
                     && reachedOutList.entries.contains { if case .show = $0 { return true }; return false },
                 "the Reached out pass draws no inquiry row beside a show row, so the walk checks less than it says")
 
-        var holding = Set<String>()
+        // #4371: and the card store holds a show and its contacts for every row in each pass, so a model left in
+        // what a missed card is built from would be in reach of the walk (L159).
+        for (focus, data) in passes {
+            let held = data.cards.contents
+            #expect(!data.rows.isEmpty && data.rows.allSatisfy { held.shows[$0.id] != nil }
+                        && held.contacts.values.contains { !$0.isEmpty }, Comment(rawValue:
+                "the \(focus.rawValue) pass's card store does not hold a show for every row and a contact for "
+                + "some, so the walk checks less than it says"))
+        }
+
         var offenders: [String] = []
         for (focus, data) in passes {
             for child in Mirror(reflecting: data).children {
                 guard let label = child.label else { continue }
-                let found = RowFactsHoldNoModelTests.models(in: child.value, path: label)
-                guard !found.isEmpty else { continue }
-                holding.insert(label)
-                if OutputsHoldNoModelTests.stillHoldingAModel[label] == nil {
-                    offenders += found.map { "\(focus.rawValue): \($0)" }
-                }
+                offenders += RowFactsHoldNoModelTests.models(in: child.value, path: label)
+                    .map { "\(focus.rawValue): \($0)" }
             }
         }
+        // No exemption at all since #4371 (E4a part 2), the card store's was the last.
         #expect(offenders.isEmpty, Comment(rawValue: "a published pass holds a live model at: "
             + offenders.joined(separator: ", ")))
-        // The exemptions are real today, so each one is deleted with the change that ends it rather than left
-        // standing as permission nobody needs (L373). It also proves the walk sees a model where one is.
-        let stale = OutputsHoldNoModelTests.stillHoldingAModel.keys.filter { !holding.contains($0) }.sorted()
-        #expect(stale.isEmpty, Comment(rawValue: "these members no longer hold a model, so take them off "
-            + "`OutputsHoldNoModelTests.stillHoldingAModel`: " + stale.joined(separator: ", ")))
+        // The walk's own control: handed a member that does hold a model, it reports it.
+        #expect(!RowFactsHoldNoModelTests.models(in: ["cards": all], path: "control").isEmpty,
+                "the walk was handed the live shows and reported none, so its silence above means nothing")
     }
 }
 

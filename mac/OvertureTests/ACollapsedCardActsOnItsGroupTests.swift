@@ -131,7 +131,7 @@ struct ACollapsedCardActsOnItsGroupTests {
 
         let drawn = try #require(data.rows.first { $0.id == later.naturalKey },
                                  "the only copy this surface had was hidden behind a card it never drew")
-        #expect(data.cards.card(for: drawn).collapsedMemberKeys.sorted()
+        #expect(data.cards.card(for: drawn, resolving: all).collapsedMemberKeys.sorted()
                 == [earlier.naturalKey, later.naturalKey].sorted(),
                 "the card it did draw must still stand for every member, or an action reaches half a group")
     }

@@ -257,7 +257,7 @@ struct ScopeMemoTests {
                                onRefetch: ScopeMemo<QueueModel.Scope>.Refetch = .rebuild) -> QueueModel.Scope {
         var fingerprint = ScopeFingerprint()
         fingerprint.add(rows)
-        return memo.value(fingerprint: fingerprint, drawn: drawn, now: when, savesIn: c,
+        return memo.value(fingerprint: fingerprint, drawn: drawn, resolving: rows, now: when, savesIn: c,
                           onRefetch: onRefetch) { keys in
             QueueModel.scope(from: rows, now: when, cardKeys: keys, cardKeyRegistry: registry)
         }
@@ -281,7 +281,7 @@ struct ScopeMemoTests {
         let first = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry, at: t0)
         #expect(memo.builds == 1, "the mount must build, or nothing below measures anything")
         let drawnRows = Array(first.rows.prefix(3))
-        for row in drawnRows { _ = first.cards.card(for: row) }
+        for row in drawnRows { _ = first.cards.card(for: row, resolving: rows) }
         #expect(first.cards.expectedFirstFrameMisses == drawnRows.count,
                 "the first frame's cards were not built on demand, so this fixture is not the mount")
 
@@ -297,7 +297,7 @@ struct ScopeMemoTests {
         // The served answer holds the SAME store as the first, so its miss count carries the first frame's.
         let missesBefore = second.cards.expectedFirstFrameMisses
         let scrolled = Array(first.rows.prefix(4))
-        for row in scrolled { _ = second.cards.card(for: row) }
+        for row in scrolled { _ = second.cards.card(for: row, resolving: rows) }
         #expect(second.cards.expectedFirstFrameMisses - missesBefore == 1,
                 "the fourth row was not built on demand, so this frame is not a scroll")
         let third = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
@@ -335,7 +335,7 @@ struct ScopeMemoTests {
             let first = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
                                       at: t0, onRefetch: policy)
             let drawn = Array(first.rows.prefix(3))
-            for row in drawn { _ = first.cards.card(for: row) }
+            for row in drawn { _ = first.cards.card(for: row, resolving: rows) }
             // What SwiftData's refetch after a save does (#4253): `willSet` on every row, nothing changed.
             for row in rows { row.withMutation(keyPath: \.groupName) {} }
             return Mounted(container: c, rows: rows, memo: memo, registry: registry, drawn: drawn, policy: policy)
@@ -389,7 +389,7 @@ struct ScopeMemoTests {
 
         let first = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry, at: t0)
         let drawn = try #require(first.rows.first)
-        _ = first.cards.card(for: drawn)
+        _ = first.cards.card(for: drawn, resolving: rows)
         _ = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
                           at: t0.addingTimeInterval(0.1))
         #expect(memo.builds == 1, "the first frame's card was not adopted, so nothing below is about adoption")

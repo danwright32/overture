@@ -236,6 +236,49 @@ struct OneChangeDerivesTheQueueOnceTests {
             + "\(why.joined(separator: " | ")) (#4106)"))
     }
 
+    // #4371 (E4a part 2): ONE card action re-runs ONE card's body, through the real queue over the memo path.
+    //
+    // The card store the pass publishes holds each show by identity since #4371, and a card it did not
+    // prebuild resolves its show through the live shows at draw time. What this pins is that drawing through
+    // that resolver changes nothing a card body sees: the cards the action did not touch are the same values
+    // as before and skip their bodies (`ScoutCardInputs`), and the one it touched redraws. Counted per card with
+    // the card's own body counter (#4260), never timed (L63).
+    //
+    // THE POSITIVE CONTROLS FIRST (L159): the mount drew at least two cards, so a zero below is a body that was
+    // asked and skipped, and the touched card is one of them, so its redraw can be seen at all.
+    @Test func oneCardActionReRunsOneCardBody() async throws {
+        let c = try container()
+        let h = host(c)
+        defer { tearDown(h) }
+        let beforeMount = QueueRenderCounter.cardBodyCounts()
+        seed(h.context)
+        await brought(up: h)
+        let mounted = QueueRenderCounter.cardBodyCounts()
+        let drawn = mounted.filter { $0.value > (beforeMount[$0.key] ?? 0) && $0.key.hasPrefix("row-") }
+            .map(\.key).sorted()
+        #expect(drawn.count >= 2, Comment(rawValue:
+            "bringing the queue up ran the bodies of \(drawn) only, so fewer than two cards were drawn and the "
+            + "zeros below would mean nothing"))
+
+        let all = try prospects(h.context)
+        let targetKey = try #require(drawn.first, "no card was drawn, so there is no card to press")
+        let target = try #require(all.first { $0.naturalKey == targetKey })
+        let beforeAction = QueueRenderCounter.cardBodyCounts()
+        ProspectMutations.correctClassification(QueueItem(target), discipline: .theater, shows: all,
+                                                context: h.context, feedback: h.feedback)
+        _ = await settle(h.hosting)
+        let after = QueueRenderCounter.cardBodyCounts()
+        let reRun = Dictionary(uniqueKeysWithValues: drawn.map { ($0, (after[$0] ?? 0) - (beforeAction[$0] ?? 0)) })
+
+        #expect(target.discipline == "theater", "the correction did not land, so nothing below was measured")
+        #expect((reRun[targetKey] ?? 0) >= 1, Comment(rawValue:
+            "the card whose genre was corrected did not redraw, so it still draws the old genre (L14)"))
+        let others = reRun.filter { $0.key != targetKey && $0.value != 0 }
+        #expect(others.isEmpty, Comment(rawValue:
+            "correcting ONE card's genre re-ran these other cards' bodies \(others.sorted { $0.key < $1.key }), "
+            + "so every card action redraws every card on screen (#4322, #4371)"))
+    }
+
     // A whole night, through `dismissAll`, the mutation the night's Dismiss confirmation calls. Several
     // rows change in one write, and that must still be one derivation rather than one per row.
     @Test func dismissingAWholeNightDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {

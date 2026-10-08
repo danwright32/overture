@@ -41,12 +41,14 @@ struct RenderPathGetsCardsFromTheStoreTests {
             Issue.record("expected to find QueueView.prospectRow, the one row-request site")
             return
         }
-        #expect(body.contains("data.cards.card(for: row)"), Comment(rawValue:
+        #expect(body.contains("data.cards.card(for: row, resolving: liveProspects)"), Comment(rawValue:
             "the one place a drawn row becomes a card no longer asks the store. Whatever it asks instead "
             + "does not record the key, so the next pass prebuilds nothing and every row misses."))
         // A DEPARTING row takes the snapshot instead, and must: the send has already changed what the
         // show is, and the leaving delight draws the card as it was when Dan pressed.
-        #expect(body.contains("departingCard ?? data.cards.card(for: row)"))
+        #expect(body.contains("departingCard ?? data.cards.card(for: row, resolving: liveProspects)"))
+        // #4371: through the LIVE shows, never the pass's: a card the pass did not prebuild resolves its show by
+        // identity there, and the pass holds none.
     }
 
     // The pass hands its own registry down and reads it back, which is what carries frame N's keys to

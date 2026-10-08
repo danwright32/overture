@@ -496,6 +496,9 @@ protocol QueuePassRow: ProspectFacts {
     var passContacts: [Contact] { get }
     /// Whether the show is closed for routine follow ups, read as the pass has always read it.
     var passIsClosed: Bool { get }
+    /// #4371: how a card store built over this family holds what a card it did not prebuild is built from. The
+    /// models by identity (`CardSourcesByIdentity`), so no store holds a model; the engine's values as they are.
+    static func cardSources(shows: [Self], contacts: [String: [Contact]]) -> any QueueModel.CardSources
 }
 
 extension Prospect: QueuePassRow {
@@ -504,6 +507,9 @@ extension Prospect: QueuePassRow {
     typealias PassSource = WatchedSource
     var passContacts: [Recipient] { recipients }
     var passIsClosed: Bool { isClosed }
+    static func cardSources(shows: [Prospect], contacts: [String: [Recipient]]) -> any QueueModel.CardSources {
+        QueueModel.CardSourcesByIdentity(shows: shows, contacts: contacts)
+    }
 }
 
 extension RowFacts: QueuePassRow {
@@ -512,4 +518,8 @@ extension RowFacts: QueuePassRow {
     typealias PassSource = WatchedSourceRecord
     var passContacts: [RecipientRecord] { factContacts }
     var passIsClosed: Bool { isClosed }
+    static func cardSources(shows: [RowFacts], contacts: [String: [RecipientRecord]]) -> any QueueModel.CardSources {
+        QueueModel.CardSourcesOf(shows: Dictionary(shows.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a }),
+                                 contacts: contacts)
+    }
 }

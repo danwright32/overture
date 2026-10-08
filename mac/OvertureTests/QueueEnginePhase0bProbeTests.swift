@@ -608,7 +608,10 @@ struct QueueEnginePhase0bProbeTests {
             let store = QueueModel.scope(from: inQueue, answers: t.answers, corpus: every, overrides: t.overrides,
                                          sources: t.sources, refusals: t.refusals, clients: resolved.clients,
                                          now: resolved.now, cardKeys: [], today: resolved.today)
-            let cardsTerm = Phase0.time { for r in store.rows { _ = store.cards.card(for: r) } }
+            // #4371: through an indexed live resolver, as the queue's own draw resolves a card it did not prebuild.
+            let live = LiveProspects()
+            live.adopt(every)
+            let cardsTerm = Phase0.time { for r in store.rows { _ = store.cards.card(for: r, resolving: live) } }
 
             let scopeNamed = [engagementTerm, tablesTerm, inheritedTerm, rowCountsTerm, calendarTerm, contradictedTerm,
                               showLinkTerm, titlesTerm, collapseTerm, lookalikesTerm, nightsTerm, rowLoopTerm]
@@ -1139,6 +1142,9 @@ struct QueueEnginePhase0bProbeTests {
             // The per-row rebuild cost the engine would pay: rows and cards built from a retained preamble.
             let every = t.rows
             let inQueue = QueueRenderPass.Corpus(every).narrowed(QueueModel.queueScope).all
+            // #4371: the queue's draw resolves a card it did not prebuild through an indexed live resolver.
+            let liveInQueue = LiveProspects()
+            liveInQueue.adopt(inQueue)
             let context = StageContext(now: now, geo: t.geo, clients: t.clients).resolvingPlaces(of: inQueue)
             let byKey = Dictionary(inQueue.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
             func rebuildCost(_ keys: Set<String>) -> Double {
@@ -1149,7 +1155,7 @@ struct QueueEnginePhase0bProbeTests {
                 let rows = scope.rows.filter { keys.contains($0.id) }
                 let shows = keys.compactMap { byKey[$0] }
                 return Phase0.time {
-                    for r in rows { _ = scope.cards.card(for: r) }
+                    for r in rows { _ = scope.cards.card(for: r, resolving: liveInQueue) }
                     for p in shows { _ = QueueScopeRow(p, facts: RecipientFacts.of(p)) }
                 }
             }
@@ -1230,6 +1236,9 @@ struct QueueEnginePhase0bProbeTests {
             let now = Date()
             let every = t.rows
             let inQueue = QueueRenderPass.Corpus(every).narrowed(QueueModel.queueScope).all
+            // #4371: the queue's draw resolves a card it did not prebuild through an indexed live resolver.
+            let liveInQueue = LiveProspects()
+            liveInQueue.adopt(inQueue)
             let context = StageContext(now: now, geo: t.geo, clients: t.clients).resolvingPlaces(of: inQueue)
 
             // The cold bucket: N/60 rows rebuilt from nothing but the retained preamble, five different buckets.
@@ -1245,7 +1254,7 @@ struct QueueEnginePhase0bProbeTests {
                 let rows = Array(fresh.rows.dropFirst(b * bucketSize).prefix(bucketSize))
                 let shows = rows.compactMap { r in inQueue.first { $0.naturalKey == r.id } }
                 bucketRuns.append(Phase0.time {
-                    for r in rows { _ = fresh.cards.card(for: r) }
+                    for r in rows { _ = fresh.cards.card(for: r, resolving: liveInQueue) }
                     for p in shows { _ = QueueScopeRow(p, facts: RecipientFacts.of(p)) }
                 })
             }
