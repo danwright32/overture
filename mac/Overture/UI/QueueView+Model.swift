@@ -2007,7 +2007,7 @@ enum QueueModel {
         let inquiryEntries = inquiries.compactMap { inquiry -> ReachedOutEntry? in
             guard let due = inquiry.nextReachOutDate(now: now),
                   let row = inquiryRows([inquiry], now: now).first else { return nil }
-            return .inquiry(inquiry: inquiry, row: row, next: due)
+            return .inquiry(identity: InquiryIdentity(inquiry), row: row, next: due)
         }
         // Stable: equal dates keep prospects before inquiries rather than reordering run to run.
         // #4357 slice I3 (plan v7 Phase 3, step 6): and TOTAL. Two inquiries due at one instant kept the order
@@ -2024,7 +2024,10 @@ enum QueueModel {
         case let (.prospect(p, _, _), .prospect(q, _, _)): return p.naturalKey < q.naturalKey
         case (.prospect, .inquiry): return true
         case (.inquiry, .prospect): return false
-        case let (.inquiry(i, _, _), .inquiry(j, _, _)): return inquiryKeyThenIdentifier(i, j)
+        // #4579: from the values the entry holds, the row's key and the identity's identifier, which are the
+        // model's own key and identifier taken when the row was drawn.
+        case let (.inquiry(i, r, _), .inquiry(j, s, _)):
+            return inquiryKeyThenIdentifier((r.naturalKey, i.inquiryID), (s.naturalKey, j.inquiryID))
         }
     }
 
@@ -2032,9 +2035,15 @@ enum QueueModel {
     // then the store's own identifier. The key alone is not enough: two people can write about one event, and
     // their inquiries then share it.
     static func inquiryKeyThenIdentifier(_ a: Inquiry, _ b: Inquiry) -> Bool {
-        let (ka, kb) = (a.naturalKey, b.naturalKey)
-        if ka != kb { return ka < kb }
-        return a.persistentModelID < b.persistentModelID
+        inquiryKeyThenIdentifier((a.naturalKey, a.persistentModelID), (b.naturalKey, b.persistentModelID))
+    }
+
+    // #4579: the same rule over values, so a list holding identities orders by it without the models. ONE rule,
+    // which the model form above calls (L263).
+    static func inquiryKeyThenIdentifier(_ a: (key: String, id: PersistentIdentifier),
+                                         _ b: (key: String, id: PersistentIdentifier)) -> Bool {
+        if a.key != b.key { return a.key < b.key }
+        return a.id < b.id
     }
 
 
@@ -2076,12 +2085,29 @@ enum QueueModel {
                               sourceCalendars: sourceCalendars(), now: now)
     }
 
-    // #4311: a stage's inquiry rows resolved back to their models, keyed by the row's id, which is what
-    // the inquiry block's buttons act on. Built by the pass rather than in the block's body.
-    static func inquiriesByRowID(_ inquiries: [Inquiry]) -> [String: Inquiry] {
+    // #4311: a stage's inquiry rows' inquiries, keyed by the row's id, which is what the inquiry block's
+    // buttons act on. Built by the pass rather than in the block's body.
+    // #4579: each inquiry's IDENTITY, never the model, which a press resolves against the view's live query
+    // (`InquiryIdentity.inquiry(for:...)`). Keyed by `InquiryIdentity.rowID`, the id the row itself carries,
+    // which is distinct for every live inquiry. It used to be the identifier's description, which is one
+    // string for every unsaved inquiry, so this kept the FIRST under all of their rows (L131). A key that
+    // more than one inquiry still claims is LEFT OUT rather than given to either (L521): a press on that row
+    // then says no inquiry stands behind it, rather than acting on whichever came first.
+    static func inquiriesByRowID(_ inquiries: [Inquiry]) -> [String: InquiryIdentity] {
         QueueRenderPass.WorkTally.recordStageListRows(inquiries.count)
-        return Dictionary(inquiries.map { (String(describing: $0.persistentModelID), $0) },
-                          uniquingKeysWith: { first, _ in first })
+        return identitiesByRowID(inquiries.map { (InquiryIdentity.rowID(of: $0), InquiryIdentity($0)) })
+    }
+
+    // The keying rule alone, over values, so the case `rowID` makes unreachable today (two inquiries claiming
+    // one row id) is still produced by a test rather than trusted (L151).
+    static func identitiesByRowID(_ keyed: [(rowID: String, identity: InquiryIdentity)]) -> [String: InquiryIdentity] {
+        var byRow: [String: InquiryIdentity] = [:]
+        var claimedTwice = Set<String>()
+        for (key, identity) in keyed where byRow.updateValue(identity, forKey: key) != nil {
+            claimedTwice.insert(key)
+        }
+        for key in claimedTwice { byRow[key] = nil }
+        return byRow
     }
 
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
@@ -2438,7 +2464,7 @@ enum QueueModel {
     static func inquiryRows(_ inquiries: [Inquiry], now: Date) -> [InquiryRow] {
         inquiries.filter { $0.isOpen }.sorted(by: inquiryOrder).map { inquiry in
             InquiryRow(
-                id: String(describing: inquiry.persistentModelID),
+                id: InquiryIdentity.rowID(of: inquiry),
                 inquirerName: inquiry.inquirerName,
                 source: inquiry.source,
                 eventName: inquiry.eventName,
@@ -4297,13 +4323,18 @@ extension QueueItem {
         // one before it consults the lint, so linting the rest would be work nobody uses: measured, that
         // was 24 extra runs per render on this store's shape.
         let pendingRecipients = contactsOnce.filter { $0.sendState == .pending }
-        let lintBlockersByRecipient = Dictionary(uniqueKeysWithValues:
-            pendingRecipients.map { ($0.id, $0.draftLintBlockers(body: body)) })
+        // #4589: keyed on the ROW identity, never `id`. `id` is the contact's email address (#4207), and one
+        // show can hold two contacts on one address, so a uniquely keyed map over it trapped with "Duplicate
+        // values for key" and took the app down from inside a card build. Merged rather than unique even on
+        // the row identity: the same row handed in twice is the same contact, whose answer is the same.
+        let lintBlockersByRecipient = Dictionary(
+            pendingRecipients.map { ($0.persistentModelID, $0.draftLintBlockers(body: body)) },
+            uniquingKeysWith: { first, _ in first })
         // Falls back to the real derivation for a contact the map does not hold, so this can never answer
         // "no findings" for a body nobody checked. The readers take it as an @autoclosure, so a
         // non-pending contact never reaches this at all.
         func lintBlockers(_ r: Row.Contact) -> [DraftIssue] {
-            lintBlockersByRecipient[r.id] ?? r.draftLintBlockers(body: body)
+            lintBlockersByRecipient[r.persistentModelID] ?? r.draftLintBlockers(body: body)
         }
         let draftLintBlockers = DraftIssue.orderedBlockers(
             Set(pendingRecipients.flatMap { lintBlockers($0) }))

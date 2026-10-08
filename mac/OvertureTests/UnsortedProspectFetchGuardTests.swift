@@ -182,6 +182,10 @@ enum UnsortedProspectFetchAudit {
         // #4358: the queue engine's whole read, into dictionaries keyed by each row's own identity.
         Entry(file: "FactStore.swift", scope: "extractAll", reads: 1, kind: .orderFree, why: engineFacts),
         Entry(file: "QueueEngine.swift", scope: "readEverything", reads: 1, kind: .orderFree, why: engineFacts),
+        // #4358 slice E2: the verifier's short read check COUNTS the table, so it returns no rows to be ordered.
+        Entry(file: "QueueEngineVerifier.swift", scope: "count", reads: 1, kind: .orderFree, why: """
+            A count of the table, compared with how many rows the whole read returned; no row is returned.
+            """),
     ]
 
     private static let engineFacts = """

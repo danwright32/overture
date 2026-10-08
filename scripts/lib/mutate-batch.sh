@@ -38,6 +38,9 @@ MUTATE_BATCH_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # group helpers. Sourcing defines them without running the runner, as check-release-compiles.sh does.
 # shellcheck source=../../mac/scripts/run-tests-locked.sh
 source "${MUTATE_BATCH_LIB_DIR}/../../mac/scripts/run-tests-locked.sh"
+# #4568: the bare scope rule, named here rather than left to arrive through the runner's own sourcing.
+# shellcheck source=../../mac/scripts/lib/test-scope-shape.sh
+source "${MUTATE_BATCH_LIB_DIR}/../../mac/scripts/lib/test-scope-shape.sh"
 set +e
 
 BATCH_LABELS=()
@@ -307,6 +310,23 @@ mutate_batch_main() {
     echo "MALFORMED BATCH - OVERTURE_MUTATE_LOG is set, so every entry would write the same log and each"
     echo "  would overwrite the one before. Unset it: every entry then gets a log of its own and the summary"
     echo "  names each one."
+    exit 2
+  fi
+
+  # #4568: a scope written without its `-only-testing:` prefix. Measured 2026-10-07: one passed bare here ran
+  # the whole pure suite for 16 minutes on the shared lock. The single form refuses it too, but the scope is
+  # SHARED by every entry, so it is refused once, here, before an entry is read, checked or queued for,
+  # rather than once per entry in the check below. Same rule and same words as the single form.
+  local bare_scope
+  if [[ -z "${OVERTURE_MUTATE_RUNNER:-}" ]] && bare_scope="$(bare_test_scope "$@")"; then
+    echo "BARE SCOPE - ${bare_scope} was passed as a test scope without its -only-testing: prefix."
+    echo
+    echo "  Write it as:"
+    echo "  $(bare_test_scope_corrected "${bare_scope}")"
+    echo
+    echo "  Nothing was mutated, no entry was checked, and the shared test lock was not queued for. Handed to"
+    echo "  the Swift runner bare, xcodebuild reads it as a build action it does not know and fails, the runner"
+    echo "  reads that as a crash, and it then runs the WHOLE pure suite, about 24 minutes, holding that lock."
     exit 2
   fi
 

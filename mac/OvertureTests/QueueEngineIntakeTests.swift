@@ -237,9 +237,13 @@ enum EngineHarness {
                               saves: StoreSaveCount = StoreSaveCount(),
                               refused: @escaping @MainActor (Int, Int) -> Void = { published, incoming in
                                   Issue.record("a generation \(incoming) was refused over \(published)")
-                              }) -> QueueEngine<Value> {
+                              },
+                              // The verifier runs only when asked here: these suites count the clock's sleepers,
+                              // and `QueueEngineVerifierTests` drives its own triggers.
+                              verifier: QueueEngineVerifierSetup = QueueEngineVerifierSetup(triggers: .byHand))
+        -> QueueEngine<Value> {
         QueueEngine(context: store.context, derivation: derivation, saves: saves, clock: clock.clock, events: events,
-                    schedule: turns.schedule, refused: refused)
+                    schedule: turns.schedule, refused: refused, verifier: verifier)
     }
 
     /// A counting engine, started, with the start's turns run.
@@ -837,13 +841,16 @@ final class QueueEngineIntakeTests {
         #expect(try engine.facts == store.freshFacts())
     }
 
-    // A save through ANOTHER context leaves the main context's own copies stale (probe 2), so the engine reads
-    // every row again, and counts it as the anomaly it is in the app.
-    @Test func aSaveThroughAnotherContextIsReadInFull() async throws {
+    // A save through ANOTHER context leaves the main context's own copies stale (probe 2), so the engine faults
+    // the rows it touched and recovery fetches them again in the same turn (decision 9(a), #4358 slice E2), and
+    // counts it as the anomaly it is in the app. It no longer reads every row: that was E1a's interim, 795 ms on
+    // the main thread at the live store's size.
+    @Test func aSaveThroughAnotherContextFaultsTheRowsItTouchedAndRecoversThem() async throws {
         let store = try EngineStore(shows: 4, seed: 18)
         let turns = EngineTurns()
         let saves = StoreSaveCount()
         let engine = EngineHarness.started(store, turns, saves: saves)
+        let fullReads = engine.counters.fullReads
         #expect(engine.counters.foreignSaves == .neverFired)
         let id = try #require(try store.shows().first).persistentModelID
         let container = store.container
@@ -860,6 +867,9 @@ final class QueueEngineIntakeTests {
         #expect(engine.counters.foreignSaves.times == 1)
         #expect(engine.facts.shows[id]?.fitReason == "written elsewhere")
         #expect(try engine.facts == store.freshFacts())
+        #expect(engine.counters.fullReads == fullReads, "the foreign save read every row again")
+        #expect(engine.verifierFindings.map(\.kind) == [.foreignSave, .healed])
+        #expect(!engine.isFaulted(id))
     }
 
     @Test func aSaveIntoAnotherStoreIsNotAChangeToThisOne() throws {
@@ -932,9 +942,10 @@ final class QueueEngineCostProbeTests {
                 QueueEngine(context: context, derivation: EngineDerivations.counts(), saves: StoreSaveCount(),
                             clock: EngineTestClock().clock,
                             events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
-                            schedule: turns.schedule)
+                            schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand))
             }
-            // The full read, which is the start and the foreign save path (the launch fill is #4358 E3's).
+            // The full read, which is the start, and since #4358 slice E2 a foreign save only when its
+            // identifiers never reached the engine (the launch fill is #4358 E3's).
             let fullRead = Phase0.median5 {
                 engine().start()
                 turns.run()
@@ -985,7 +996,7 @@ final class QueueEngineCostProbeTests {
             print("""
                 engine-cost [\(label)] \(Phase0.load())
                   shape                                     \(Phase0.shape(shows))
-                  full read (start, or a foreign save)       \(fullRead.text)
+                  full read (start, or an unattributed save) \(fullRead.text)
                   turn taking in one edited row             \(Phase0.Reading(runs: edits).text)
                   turn taking in one equal-value write      \(Phase0.Reading(runs: equals).text)
                   turn taking in about 40 rows in one save  \(Phase0.Reading(runs: nights).text)

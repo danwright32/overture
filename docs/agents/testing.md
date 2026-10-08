@@ -482,6 +482,13 @@ the measurement it came from lives here. Read the entry before the rule decides 
   or any existing file), because xcodebuild's own options take values that do not start with a dash. And
   a run in which `run-tests-locked.sh` **gave up waiting for the shared lock** is now `NOTHING RAN`,
   naming the lock: no test ran, and it used to read as CAUGHT (seen 2026-09-18 in another lane's proof).
+  **Since #4568 a scope written WITHOUT its `-only-testing:` prefix is refused as `BARE SCOPE`**, in the
+  single form and once for a whole `--batch`, before anything is mutated or the lock is queued for, and
+  the refusal prints the exact argument to write. Twice on 2026-10-07 a bare `OvertureTests/SomeSuite`
+  reached xcodebuild, which reads it as an unknown build action; the runner took that for a crash,
+  retried, and then ran the whole pure suite on the shared lock (about 24 minutes, then 16 before it was
+  stopped). `mac/scripts/run-tests-locked.sh` refuses the same shape itself, by the same rule
+  (`mac/scripts/lib/test-scope-shape.sh`), since any caller reaches it the same way.
   **Since #4218 a run the runner's stall guard ENDED is `STALLED`**, keyed on the runner's own
   `run-tests-locked.sh: STALLED AND ENDED` line at the start of a line. Since #3976 the runner stops a run
   that holds the shared lock and stands still, and exits non-zero naming no test, so it too used to read

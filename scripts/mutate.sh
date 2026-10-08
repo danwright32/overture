@@ -15,7 +15,8 @@ set -uo pipefail
 #   2. A run was piped through a command that was not on PATH and exited 0 having tested nothing, so the
 #      pipe's status was read instead of the runner's (AGENTS.md's own warning, #2502).
 #
-# Eleven outcomes, kept apart on purpose, because collapsing any two of them is how this lies:
+# Fifteen outcomes, kept apart on purpose, because collapsing any two of them is how this lies (plus the
+# UNCOMMITTED refusal, #3792, which is about the tree rather than the run):
 #
 #   CAUGHT            the mutation applied where it was aimed and the suite went red. The guard is real.
 #   SURVIVED          the mutation applied and the suite stayed green. The guard protects nothing.
@@ -31,8 +32,11 @@ set -uo pipefail
 #   LOG OVERWRITTEN   another run wrote to this run's log, so its verdict would be about theirs (#3984).
 #   SCOPE NOT FOR THIS RUNNER  a file was passed as a scope to the Swift runner, which cannot run it (#3923).
 #   STALLED           the runner's stall guard ended the run before any test went red (#4218).
+#   BARE SCOPE        a test scope was written without its -only-testing: prefix, so it was not one (#4568).
 #
-# The last three are the three ways a MALFORMED INSTRUCTION used to be reported as a verdict. Each was
+# DID NOT BUILD, MISPLACED FLAG and PERL VARIABLE (the last three when this was written; outcomes have
+# been appended below them since) are the three ways a MALFORMED INSTRUCTION used to be reported as a
+# verdict. Each was
 # measured: a build failure was folded into CAUGHT ("the compiler caught it"), which is true of a
 # mutation whose point is that the code stops type-checking and false of every other one, where it means
 # the guard under test never ran at all. A `--at` written after the expression fell into the trailing
@@ -41,7 +45,7 @@ set -uo pipefail
 # perl's own program-name variable, so it interpolates away and produces code that does not compile,
 # which is how the first of those was produced twice in one session (#2988).
 #
-# The last two are #2820, and they are the ones that lied in the CAUGHT direction, which is the worse
+# LANDED ELSEWHERE and NOT PROOF are #2820, and they are the ones that lied in the CAUGHT direction, which is the worse
 # one: roughly 1600 of the suite's declarations are source-text guards and CAUGHT is the verdict quoted
 # as proof of each. Measured 2026-08-16: an expression using a pipe as its perl delimiter reached the
 # regex engine as an alternation with an empty branch, matched the EMPTY STRING at offset 0, prepended
@@ -102,7 +106,8 @@ guard.
   <file>              the file to break, relative to the repo root or absolute
   <perl-expression>   passed to `perl -0pi -e`, so it sees the whole file at once
   [test-scope ...]    optional, passed straight through to the test runner
-                      (e.g. -only-testing:OvertureTests/RunSlotTests)
+                      (e.g. -only-testing:OvertureTests/RunSlotTests). Always WITH the prefix: a bare
+                      OvertureTests/RunSlotTests is refused as BARE SCOPE (#4568)
 
   OVERTURE_MUTATE_LOG      where the run's full log is kept. By default every run gets a file of its
                            OWN under /tmp/overture-mutate-runs/ (#3984), so two mutations going at once
@@ -375,6 +380,27 @@ if [[ -z "${OVERTURE_MUTATE_RUNNER:-}" ]]; then
       exit 2
     fi
   done
+fi
+
+# #4568: a test scope written WITHOUT its `-only-testing:` prefix is refused, before the file is touched.
+#
+# Twice on 2026-10-07 `OvertureTests/SomeSuite` was passed bare, once here and once to `--batch`. xcodebuild
+# reads a bare word after `test` as a build action, stops on `Unknown build action`, the runner calls that a
+# crash, retries it, and then runs the WHOLE pure suite (about 24 minutes) on the shared test lock. The
+# shape is decided in mac/scripts/lib/test-scope-shape.sh, the same rule run-tests-locked.sh refuses by.
+# Only for the default Swift runner, as the refusal above: a custom runner decides what its arguments mean.
+# shellcheck source=../mac/scripts/lib/test-scope-shape.sh
+source "${REPO_ROOT}/mac/scripts/lib/test-scope-shape.sh"
+if [[ -z "${OVERTURE_MUTATE_RUNNER:-}" ]] && BARE_SCOPE="$(bare_test_scope "$@")"; then
+  echo "BARE SCOPE - ${BARE_SCOPE} was passed as a test scope without its -only-testing: prefix."
+  echo
+  echo "  Write it as:"
+  echo "  $(bare_test_scope_corrected "${BARE_SCOPE}")"
+  echo
+  echo "  Nothing was mutated and nothing was run. Handed to the Swift runner bare, xcodebuild reads it as a"
+  echo "  build action it does not know and fails, the runner reads that as a crash, and it then runs the"
+  echo "  WHOLE pure suite, about 24 minutes, holding the shared test lock everything on this Mac waits on."
+  exit 2
 fi
 
 # #3792: a target carrying UNCOMMITTED changes is refused, before the file is touched.

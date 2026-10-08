@@ -375,8 +375,10 @@ struct QueueView: View {
         let inquiryRows: [InquiryRow]
         // #4311: the stage's inquiry block as it draws, grouped by date, and each row's inquiry for the
         // controls on it. Both used to be derived inside the block's body on every evaluation (L471).
+        // #4579: each row's inquiry by IDENTITY, never the model; a press resolves it at the press
+        // (`InquiryIdentity`), so the pass publishes values.
         let inquiryGroups: [RowDateGroup]
-        let inquiriesByRowID: [String: Inquiry]
+        let inquiriesByRowID: [String: InquiryIdentity]
         // #4311: the Reached out list as it draws (rows, day headings, the calendar table its links
         // resolve against), derived by the pass for that stage and empty on every other.
         let reachedOutList: QueueModel.ReachedOutList
@@ -997,17 +999,8 @@ struct QueueView: View {
                         }
                     }
                     ForEach(group.rows) { queueRow in
-                        if case .inquiry(let inquiryRow) = queueRow, let inquiry = byId[inquiryRow.id] {
-                            InquiryRowView(
-                                row: inquiryRow,
-                                onReply: { sheets.replyingTo = inquiry },
-                                onEdit: { sheets.editingInquiry = inquiry },
-                                onMarkBooked: { markInquiry(inquiry, .booked) },
-                                onMarkLost: { markInquiry(inquiry, .lost($0)) },
-                                onDetachConversation: {
-                                    InquiryMutations.detachConversation(inquiry, context: context,
-                                                                        feedback: feedback)
-                                })
+                        if case .inquiry(let inquiryRow) = queueRow {
+                            inquiryRowView(inquiryRow, identity: byId[inquiryRow.id], style: .card)
                         }
                     }
                 }
@@ -1021,6 +1014,26 @@ struct QueueView: View {
     // instead of the row quietly leaving the queue over a change that never reached disk.
     private func markInquiry(_ inquiry: Inquiry, _ action: InquiryMutations.MarkAction) {
         InquiryMutations.mark(inquiry, as: action, context: context, feedback: feedback)
+    }
+
+    // #4579: one inquiry row, in either list, with every control finding its inquiry AT THE PRESS through the
+    // row's identity, against the view's own live query, and saying so when it finds none
+    // (`InquiryIdentity.inquiry(for:...)`). The row used to capture the model the pass took when it ran.
+    private func inquiryRowView(_ row: InquiryRow, identity: InquiryIdentity?,
+                                style: InquiryRowView.Style) -> some View {
+        let pressed = { InquiryIdentity.inquiry(for: identity, name: row.inquirerName, in: inquiries,
+                                                feedback: feedback) }
+        return InquiryRowView(
+            row: row, style: style,
+            onReply: { if let inquiry = pressed() { sheets.replyingTo = inquiry } },
+            onEdit: { if let inquiry = pressed() { sheets.editingInquiry = inquiry } },
+            onMarkBooked: { if let inquiry = pressed() { markInquiry(inquiry, .booked) } },
+            onMarkLost: { ending in if let inquiry = pressed() { markInquiry(inquiry, .lost(ending)) } },
+            onDetachConversation: {
+                if let inquiry = pressed() {
+                    InquiryMutations.detachConversation(inquiry, context: context, feedback: feedback)
+                }
+            })
     }
 
     // #1220: every stage view groups its rows by date, reusing the pre-#1134 date-group header (weekday,
@@ -1596,20 +1609,11 @@ struct QueueView: View {
                                     .jumpMark(key: prospect.naturalKey, highlighted: highlighted)
                                 }
                                 .equatable()
-                            case .inquiry(let inquiry, let row, _):
+                            case .inquiry(let identity, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
                                 // source capsule and lifecycle line stay, because they say what an
                                 // inquiry is; the card box and its own typography are gone.
-                                InquiryRowView(
-                                    row: row, style: .listRow,
-                                    onReply: { sheets.replyingTo = inquiry },
-                                    onEdit: { sheets.editingInquiry = inquiry },
-                                    onMarkBooked: { markInquiry(inquiry, .booked) },
-                                    onMarkLost: { markInquiry(inquiry, .lost($0)) },
-                                    onDetachConversation: {
-                                        InquiryMutations.detachConversation(inquiry, context: context,
-                                                                            feedback: feedback)
-                                    })
+                                inquiryRowView(row, identity: identity, style: .listRow)
                             }
                             Divider()
                         }
