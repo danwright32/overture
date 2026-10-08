@@ -73,7 +73,7 @@ final class TheMastheadFoldsNothingPerBodyTests {
 
         let feed = Phase0cServedFeed(served)
         var window: NSWindow?
-        defer { window?.close() }
+        defer { HostedPassCounting.unmountAndClose(window) }
 
         // A first draw, then a served change the body must re-run for: two body evaluations at least.
         var first: Phase0cView.Settled?

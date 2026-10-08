@@ -108,7 +108,7 @@ struct HostedWindowsAreReleasedTests {
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
             }
 
-            window.close()
+            HostedPassCounting.closeLeavingMounted(window, because: "this suite measures what a bare close releases, so unmounting first would answer a different question (#3874)")
         }
         settle()
 
@@ -143,7 +143,7 @@ struct HostedWindowsAreReleasedTests {
             hosting.layoutSubtreeIfNeeded()
             escaped = hosting
 
-            window.close()
+            HostedPassCounting.closeLeavingMounted(window, because: "this suite measures what a bare close releases, so unmounting first would answer a different question (#3874)")
         }
         settle()
 

@@ -116,7 +116,7 @@ struct HandedRowsStayLiveTests {
     // turns rather than a wait on a condition, because there is no observable "nothing left pending" to
     // wait on; each turn returns as soon as it has nothing to do.
     private static func closeWhileAlive(_ window: NSWindow?, holding container: ModelContainer) {
-        window?.close()
+        HostedPassCounting.unmountAndClose(window)
         for _ in 0..<20 {
             autoreleasepool { _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
         }
