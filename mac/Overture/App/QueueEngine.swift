@@ -63,7 +63,17 @@ import SwiftData
 // unsaved change for it (never a rollback, which keeps fetched values, #4106 probe 0c.7), reads it as any other
 // change, and checks the result through a throwaway context. A row that will not converge stays faulted, with a
 // `healDidNotConverge` record, for the show resolver to refuse actions on (#4357, slice I2, read by the cutover).
-// The launch fill (D6, slice E3) follows.
+//
+// THE LAUNCH (plan v7 D6 and decision 4, slice E3; the values are at the end of `Domain/FactStore.swift`). `start()`
+// holds the main thread for nothing but registering its observers. The first output comes from one read of the
+// SAVED store on the launch thread, its save count and generation taken when that read STARTS, so a save landing
+// during it is newer than the output and the gate can never put these older inputs over a newer turn's. Until it
+// lands no turn derives, so the queue is never published empty, and what the intake gathers meanwhile is taken in
+// by the first turn after. Then the main context's rows, which the trackers watch, are taken in keyset batches of
+// 20, ONE per turn, each timed; the inquiries in one fetch; and a read of every stored identifier finds any row the
+// keyset skipped, which one fetch admits. The first verification is forced when the fill ends. Each half has a
+// working, a failed and a finished state for the surface (`launch`), and `retryLaunch()` is the failed state's way
+// on.
 //
 // NOTHING IN THE APP STARTS THIS YET. The cutover (#4358, slice E4) does.
 
@@ -225,6 +235,15 @@ enum QueueEngineTimer: Hashable, Sendable {
     case recovery
 }
 
+/// Where the launch fill is: taking shows batch by batch, then the inquiries in one fetch, then waiting for the
+/// shortfall check's identifier read, then done.
+enum QueueEngineFillStep: Equatable {
+    case shows
+    case inquiries
+    case checking
+    case done
+}
+
 /// What the engine registered with notification centres and its timers, released when it goes.
 private final class QueueEngineObservers: @unchecked Sendable {
     private let lock = NSLock()
@@ -291,6 +310,43 @@ struct QueueEngineVerifierSetup {
     var healCheck: @MainActor (Set<PersistentIdentifier>, ModelContainer) throws -> FactStore = QueueEngineRecovery.readAlone
     /// Nil keeps the records in memory only (`verifierFindings`), for a test that does not ask about the file.
     var log: QueueEngineVerifierLog?
+}
+
+/// Everything the launch is built from, injected so a test can hand in a read that throws, blocks or comes back
+/// short, an identifier read that fails, a batch that cannot be read, and an uptime it moves by hand.
+struct QueueEngineLaunchSetup {
+    /// Where the launch's two reads (the first output's and the shortfall check's) are made.
+    enum Reads {
+        /// On the launch thread, a serial queue outside the cooperative pool (L241) under
+        /// `QueueEngineLaunchFill.deadlineSeconds` on the engine's clock: the app's.
+        case onLaunchThread
+        /// In the next scheduled turn, on the main actor: the engine's gate, clock, intake and verifier suites,
+        /// which start the engine and run its turns by hand. Every other step of the launch is the app's own.
+        case inTurn
+    }
+
+    var reads: Reads = .onLaunchThread
+    var read: @Sendable (ModelContainer) throws -> QueueEngineFreshRead = QueueEngineFreshRead.read
+    var identifiers: @Sendable (ModelContainer) throws -> Set<PersistentIdentifier> =
+        QueueEngineLaunchFill.storedIdentifiers
+    var fetchBatch: @MainActor (FetchDescriptor<Prospect>, ModelContext) throws -> [Prospect] = { try $1.fetch($0) }
+    /// The shortfall's admission: the missing rows, fetched by identifier.
+    var admit: @MainActor (Set<PersistentIdentifier>, ModelContext) throws
+        -> (shows: [Prospect], inquiries: [Inquiry]) = QueueEngineLaunchSetup.fetchMissing
+    var batchSize = QueueEngineLaunchFill.batchSize
+    /// A monotonic clock in seconds, which each batch is timed on. Only measured, never decided from.
+    var uptime: @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+
+    /// One fetch per model, each TYPED, and outside the generic engine: a loop over existential `PersistentModel`
+    /// values inside that generic class crashes the compiler's IR generation in the app target (Xcode 26, measured
+    /// in slice E2).
+    @MainActor static func fetchMissing(_ ids: Set<PersistentIdentifier>, _ context: ModelContext) throws
+        -> (shows: [Prospect], inquiries: [Inquiry]) {
+        let shows = ids.filter { FactStore.Table.holding($0.entityName) == .shows }
+        let inquiries = ids.filter { FactStore.Table.holding($0.entityName) == .inquiries }
+        return (try FactStore.Table.fetched(Prospect.self, Array(shows), in: context),
+                try FactStore.Table.fetched(Inquiry.self, Array(inquiries), in: context))
+    }
 }
 
 enum QueueEngineRecovery {
@@ -377,6 +433,10 @@ final class QueueEngine<Value: Sendable> {
     @ObservationIgnored private let verifierThread = BlockingWorkThread(name: "queue-verifier")
     /// The session the verifier's records carry (`CardDivergenceRecord.session`).
     @ObservationIgnored private let session = UUID().uuidString
+    @ObservationIgnored private let launchSetup: QueueEngineLaunchSetup
+    /// The launch's reads, on a thread of their own, so a read that never returns wedges neither the verifier
+    /// nor anything else that shares one.
+    @ObservationIgnored private let launchThread = BlockingWorkThread(name: "queue-launch")
 
     // MARK: - What it keeps, keyed by identity (every one is in `identityKeyedState`)
 
@@ -436,10 +496,25 @@ final class QueueEngine<Value: Sendable> {
     /// An output mismatch with matching facts, waiting for the pass that heals it.
     @ObservationIgnored private var outputHealFields: [String]?
 
+    // MARK: - The launch (D6, decision 4)
+
+    @ObservationIgnored private var launchAttempts = 0
+    @ObservationIgnored private var fillAttempts = 0
+    /// The natural key of the last show the fill took: a POSITION in byte order, never an identity, so no deletion
+    /// or rename touches it (a row renamed below it is the shortfall check's to find).
+    @ObservationIgnored private var fillCursor: String?
+    @ObservationIgnored private var fillStep: QueueEngineFillStep = .shows
+    /// How far the fill has got and what each batch cost, read when asked (`launch` changes only on a transition).
+    @ObservationIgnored private(set) var fillReport = QueueEngineFillReport()
+    /// Stored values the shortfall check's admission changed, which the next turn derives for.
+    @ObservationIgnored private var fillChanged = 0
+
     // MARK: - What it publishes
 
     /// The latest pass. The one property a surface observes.
     private(set) var output: QueueEngineOutput<Value>?
+    /// Where the launch has got (D6), for the surface to show while nothing, or not everything, is ready.
+    private(set) var launch = QueueEngineLaunchState()
     /// Every floor-only pass that changed the output, newest last, at most `floorChangesKept`.
     @ObservationIgnored private(set) var floorChanges: [QueueEngineFloorChange] = []
     static var floorChangesKept: Int { 50 }
@@ -452,10 +527,12 @@ final class QueueEngine<Value: Sendable> {
          saveCenter: NotificationCenter = .default,
          schedule: @escaping QueueEngineSchedule = QueueEngineTurns.nextTurn,
          refused: @escaping @MainActor (Int, Int) -> Void = QueueEngineTurns.refuse,
-         verifier: QueueEngineVerifierSetup) {
+         verifier: QueueEngineVerifierSetup,
+         launch: QueueEngineLaunchSetup) {
         self.context = context
         container = context.container
         verifierSetup = verifier
+        launchSetup = launch
         self.derivation = derivation
         self.saves = saves
         self.clock = clock
@@ -469,9 +546,9 @@ final class QueueEngine<Value: Sendable> {
         }
     }
 
-    /// Starts watching the store and the clock, reads every row, and asks for the first pass. Saves are watched
-    /// BEFORE the read, so no save can land between the two unseen. Once: a second call would register a
-    /// second observer and double every intake.
+    /// Starts watching the store and the clock, and begins the launch: the first read off the main thread, then
+    /// the fill (D6). Saves are watched BEFORE the read, so no save can land between the two unseen. Once: a
+    /// second call would register a second observer and double every intake.
     func start() {
         guard !started else { return }
         started = true
@@ -492,11 +569,20 @@ final class QueueEngine<Value: Sendable> {
             }, on: center)
         }
         observedForeignSaves = saves.foreignSaveCount(for: container)
-        var resolution = QueueEngineResolution()
-        readEverything(into: &resolution)
-        resolveIdentities(resolution)
         armUnverifiedTimer()
-        scheduleTurn()
+        beginFirstRead()
+    }
+
+    /// The way on from a failed launch: the first read again when it failed, else the fill from where it stopped.
+    /// Anything else is a launch that has not failed, and this does nothing.
+    func retryLaunch() {
+        if case .failed = launch.firstPaint {
+            beginFirstRead()
+        } else if case .failed = launch.fill {
+            fillAttempts += 1
+            launch.fill = .filling(since: clock.now())
+            scheduleTurn()
+        }
     }
 
     /// Starts the context sources' signals (`QueueContextSignals`); each one that fires forces a pass.
@@ -540,8 +626,8 @@ final class QueueEngine<Value: Sendable> {
     }
 
     /// Publishes `incoming` if it is newer than what is on screen, and arms the clock from it; otherwise refuses
-    /// it (plan v2 Phase 4 step 3) and changes nothing. Every pass publishes through here, and so will the launch
-    /// fill (slice E3); the recovery's passes are the turn's own. Returns whether it was applied, because only an
+    /// it (plan v2 Phase 4 step 3) and changes nothing. Every pass publishes through here, the launch's first output
+    /// included; the recovery's passes are the turn's own. Returns whether it was applied, because only an
     /// applied output is a pass (L78). An applied output claims to describe the engine's facts as they stand, and
     /// is what the verifier compares with a fresh read.
     @discardableResult
@@ -595,13 +681,19 @@ final class QueueEngine<Value: Sendable> {
     /// Takes in what changed, then derives and publishes only when a reason holds (the generation gate).
     private func runTurn() {
         turnScheduled = false
+        // Nothing is taken in or derived before the launch's first read lands: a pass now would publish an empty
+        // queue (D6). What the intake holds meanwhile waits for the first turn after it.
+        guard case .ready = launch.firstPaint else { return }
+        // The fill's next step, if it has one, gets the next turn: one batch per turn, never the table in one.
+        defer { if fillWantsATurn { scheduleTurn() } }
         counters.turns += 1
         let now = clock.now()
         drainHeldRepeats(at: now)
         let saveCount = saves.value(for: container)
+        let filled = fillTurn(now: now)
         let intook = intakeTurn(now: now)
         // Recovery runs after the intake, so a faulted row a save touched this turn is tried again at once.
-        let changed = intook.changed + recover(now: now, touched: intook.touched)
+        let changed = filled + intook.changed + recover(now: now, touched: intook.touched)
         counters.rowsChanged += changed
         var reasons = clockDue
         clockDue = []
@@ -610,7 +702,6 @@ final class QueueEngine<Value: Sendable> {
         sourcesFired = []
         if viewInputsMoved { reasons.insert(.viewInputs) }
         viewInputsMoved = false
-        if output == nil { reasons.insert(.first) }
         let healing = outputHealFields
         if healing != nil { reasons.insert(.recovery) }
         guard !reasons.isEmpty else { return }
@@ -634,6 +725,198 @@ final class QueueEngine<Value: Sendable> {
             if !fields.isEmpty {
                 floorChanges.append(QueueEngineFloorChange(fields: fields, at: now, generation: generation))
                 if floorChanges.count > Self.floorChangesKept { floorChanges.removeFirst() }
+            }
+        }
+    }
+
+    // MARK: - The launch (D6, decision 4)
+
+    /// Starts one attempt at the first output. Its inputs are fixed HERE, before the read: the save count, so the
+    /// output never claims a save that landed during the read (the verifier compares at exactly that count), and the
+    /// generation, so a turn published after it is never replaced by these older inputs (E2's `mintGeneration`).
+    private func beginFirstRead() {
+        launchAttempts += 1
+        let attempt = launchAttempts
+        launch.firstPaint = .loading(since: clock.now(), attempt: attempt)
+        let saveCount = saves.value(for: container)
+        let generation = mintGeneration()
+        let read = launchSetup.read
+        let container = self.container
+        offMain({ try read(container) }) { [weak self] result in
+            // An answer to an attempt a retry has replaced is not this launch's.
+            guard let self, self.launchAttempts == attempt else { return }
+            self.landFirstRead(result, saveCount: saveCount, generation: generation, attempt: attempt)
+        }
+    }
+
+    /// The first read's answer: the first output, published, or the reason there is none.
+    private func landFirstRead(_ result: Result<QueueEngineFreshRead, QueueEngineLaunchFailure>, saveCount: Int,
+                               generation: Int, attempt: Int) {
+        let now = clock.now()
+        let fresh: QueueEngineFreshRead
+        switch result {
+        case .failure(let why):
+            launch.firstPaint = .failed(why, attempts: attempt, at: now)
+            return
+        case .success(let read):
+            fresh = read
+        }
+        guard !fresh.isShort else {
+            launch.firstPaint = .failed(.shortRead, attempts: attempt, at: now)
+            return
+        }
+        counters.fullReads += 1
+        facts = fresh.facts
+        // This pass is the one every reason gathered while loading asked for: the clock's, a source's, the view's.
+        clockDue = []
+        sourcesFired = []
+        viewInputsMoved = false
+        let value = derivation.derive(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now))
+        // Nothing is on screen yet, so the gate applies it whatever its number.
+        publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
+                                  reasons: [.first]))
+        counters.passes += 1
+        launch.firstPaint = .ready(at: now, attempts: attempt)
+        fillAttempts = 1
+        launch.fill = .filling(since: now)
+        scheduleTurn()
+    }
+
+    /// Whether the fill's next step needs a turn of its own: a batch, or the inquiries.
+    private var fillWantsATurn: Bool {
+        guard case .filling = launch.fill else { return false }
+        return fillStep == .shows || fillStep == .inquiries
+    }
+
+    /// The fill's step in this turn, and whatever the shortfall check admitted since the last one. Returns how many
+    /// stored values it changed.
+    private func fillTurn(now: Date) -> Int {
+        var changed = fillChanged
+        fillChanged = 0
+        guard case .filling = launch.fill else { return changed }
+        var resolution = QueueEngineResolution()
+        switch fillStep {
+        case .shows: changed += fillShows(now: now, into: &resolution)
+        case .inquiries: changed += fillInquiries(now: now, into: &resolution)
+        case .checking, .done: break
+        }
+        resolveIdentities(resolution)
+        return changed
+    }
+
+    /// One keyset batch of shows after the cursor, each held, armed and recorded, timed against the budget.
+    private func fillShows(now: Date, into resolution: inout QueueEngineResolution) -> Int {
+        let started = launchSetup.uptime()
+        let batch: [Prospect]
+        do {
+            batch = try launchSetup.fetchBatch(QueueEngineLaunchFill.batch(after: fillCursor,
+                                                                           limit: launchSetup.batchSize), context)
+        } catch {
+            fillFailed(at: now)
+            return 0
+        }
+        var changed = 0
+        for show in batch where take(show, show.persistentModelID, into: &resolution) { changed += 1 }
+        if let last = batch.last { fillCursor = last.naturalKey }
+        fillReport.shows += batch.count
+        fillReport.batches += 1
+        fillReport.batchSeconds.append(launchSetup.uptime() - started)
+        if batch.count < launchSetup.batchSize { fillStep = .inquiries }
+        return changed
+    }
+
+    /// Every inquiry in one fetch (they have no stored unique key to page on), then the shortfall check.
+    private func fillInquiries(now: Date, into resolution: inout QueueEngineResolution) -> Int {
+        let started = launchSetup.uptime()
+        let inquiries: [Inquiry]
+        do {
+            inquiries = try context.fetch(FetchDescriptor<Inquiry>())
+        } catch {
+            fillFailed(at: now)
+            return 0
+        }
+        var changed = 0
+        for inquiry in inquiries where take(inquiry, inquiry.persistentModelID) { changed += 1 }
+        fillReport.inquiries = inquiries.count
+        fillReport.inquirySeconds = launchSetup.uptime() - started
+        fillStep = .checking
+        let identifiers = launchSetup.identifiers
+        let container = self.container
+        offMain({ try identifiers(container) }) { [weak self] result in self?.finishFill(result) }
+        return changed
+    }
+
+    /// A step that could not be read stops the fill, counted, with the output left on screen (L215: a failed read
+    /// is not an empty table). `retryLaunch()` resumes it at the same step.
+    private func fillFailed(at now: Date) {
+        counters.unreadRows.record(at: now)
+        launch.fill = .failed(.readFailed, attempts: fillAttempts, at: now)
+    }
+
+    /// The shortfall check's answer (D6, L16, L211): every row the store holds that no member is was skipped by
+    /// the keyset and reached by no change since, so one fetch admits them all and the count is recorded. Then the
+    /// fill is done, and the first verification is forced.
+    private func finishFill(_ result: Result<Set<PersistentIdentifier>, QueueEngineLaunchFailure>) {
+        let now = clock.now()
+        switch result {
+        case .failure(let why):
+            fillReport.shortfall = .unmeasured(why)
+        case .success(let stored):
+            let missing = stored.subtracting(showMembers.keys).subtracting(inquiryMembers.keys)
+            if missing.isEmpty {
+                fillReport.shortfall = .measured(missing: 0, admitted: 0)
+            } else {
+                do {
+                    let found = try launchSetup.admit(missing, context)
+                    var resolution = QueueEngineResolution()
+                    for show in found.shows where take(show, show.persistentModelID, into: &resolution) {
+                        fillChanged += 1
+                    }
+                    for inquiry in found.inquiries where take(inquiry, inquiry.persistentModelID) { fillChanged += 1 }
+                    resolveIdentities(resolution)
+                    // A missing row the fetch did not find was deleted since; one it found is admitted.
+                    fillReport.shortfall = .measured(missing: missing.count,
+                                                     admitted: found.shows.count + found.inquiries.count)
+                } catch {
+                    // A failed fetch is not a deletion (L215): the rows are stored and not held, said so. The
+                    // verifier's fresh read finds them, and recovery takes them from there.
+                    counters.unreadRows.record(at: now)
+                    fillReport.shortfall = .unadmitted(missing: missing.count, .readFailed)
+                }
+            }
+        }
+        fillStep = .done
+        launch.fill = .done(fillReport)
+        // D6: the first verification is forced when the fill ends, rather than left to the next quiet moment. One of
+        // the automatic triggers, so a suite that verifies only by hand is not handed one it did not ask for. It
+        // takes the place of the quiet timer the first output armed, which would otherwise verify the same output
+        // again three seconds later.
+        if verifierSetup.triggers == .automatic {
+            observers.replaceTimer(.quiet, nil)
+            verifyNow()
+        }
+        if fillChanged > 0 { scheduleTurn() }
+    }
+
+    /// `work` off the main actor, its answer handed back on it: on the launch thread under its deadline, or, for
+    /// the suites that run the engine's turns by hand, in the next scheduled turn.
+    private func offMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T,
+                                      then: @escaping @MainActor (Result<T, QueueEngineLaunchFailure>) -> Void) {
+        switch launchSetup.reads {
+        case .inTurn:
+            schedule { then(Result { try work() }.mapError(QueueEngineLaunchFailure.from)) }
+        case .onLaunchThread:
+            let thread = launchThread
+            let clock = self.clock
+            Task { @MainActor in
+                let result: Result<T, QueueEngineLaunchFailure>
+                do {
+                    result = .success(try await thread.run(deadlineSeconds: QueueEngineLaunchFill.deadlineSeconds,
+                                                           sleep: { try? await clock.sleep($0) }, work))
+                } catch {
+                    result = .failure(.from(error))
+                }
+                then(result)
             }
         }
     }
@@ -1080,6 +1363,16 @@ final class QueueEngine<Value: Sendable> {
         case .unread: return false
         }
         counters.rowsReread += 1
+        guard take(show, id, into: &resolution) else {
+            counters.equalValueReads += 1
+            return false
+        }
+        return true
+    }
+
+    /// Holds `show` and its contacts as members, armed, and records its value. Returns whether the stored value
+    /// changed. The intake's re-read and the launch fill both take a show through here.
+    private func take(_ show: Prospect, _ id: PersistentIdentifier, into resolution: inout QueueEngineResolution) -> Bool {
         hold(show, id, in: &showMembers)
         holdIfTemporary(show)
         for contact in show.factContacts {
@@ -1094,11 +1387,13 @@ final class QueueEngine<Value: Sendable> {
         if let oldKey, let newKey = facts.shows[id]?.naturalKey, newKey != oldKey {
             resolution.rekeyedKeys[oldKey] = newKey
         }
-        guard changed else {
-            counters.equalValueReads += 1
-            return false
-        }
-        return true
+        return changed
+    }
+
+    private func take(_ inquiry: Inquiry, _ id: PersistentIdentifier) -> Bool {
+        hold(inquiry, id, in: &inquiryMembers)
+        holdIfTemporary(inquiry)
+        return facts.record(inquiry)
     }
 
     private func readInquiry(_ id: PersistentIdentifier, now: Date,
@@ -1111,9 +1406,7 @@ final class QueueEngine<Value: Sendable> {
         case .unread: return false
         }
         counters.rowsReread += 1
-        hold(inquiry, id, in: &inquiryMembers)
-        holdIfTemporary(inquiry)
-        guard facts.record(inquiry) else {
+        guard take(inquiry, id) else {
             counters.equalValueReads += 1
             return false
         }
@@ -1174,8 +1467,9 @@ final class QueueEngine<Value: Sendable> {
         }
     }
 
-    /// Every row in the store read again: at the start, after a save through another context, and after an
-    /// insert merged into a stored row. Returns how many stored values changed; anything held that the read no
+    /// Every row in the store read again, on the main context: after a save through another context none of whose
+    /// identifiers reached the engine, an unclassified save, and an insert merged into a stored row (the launch
+    /// reads off the main thread instead). Returns how many stored values changed; anything held that the read no
     /// longer finds is resolved away.
     @discardableResult
     private func readEverything(into resolution: inout QueueEngineResolution) -> Int {

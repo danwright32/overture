@@ -85,7 +85,8 @@ enum VerifierRig {
         let engine = QueueEngine(context: store.context, derivation: derivation, saves: saves, clock: clock.clock,
                                  events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                                  saveCenter: saveCenter, schedule: turns.schedule,
-                                 refused: { Issue.record("a generation \($1) was refused over \($0)") }, verifier: setup)
+                                 refused: { Issue.record("a generation \($1) was refused over \($0)") }, verifier: setup,
+                                 launch: QueueEngineLaunchSetup(reads: .inTurn))
         engine.start()
         turns.run()
         return engine
@@ -467,29 +468,40 @@ final class QueueEngineVerifierTriggerTests {
         let turns = EngineTurns()
         let clock = EngineTestClock()
         let engine = VerifierRig.engine(store, turns, clock: clock, setup: QueueEngineVerifierSetup())
+        // The launch fill's end forces the first verification (#4358 slice E3, D6), so quiet is measured from the
+        // next output after it.
+        await VerifierRig.finished(engine, beyond: 0, "the verification the launch fill forced")
+        engine.setViewInputs(QueueEngineViewInputs(focusedStage: .reachedOut))
+        turns.run()
         // The floor, the quiet timer and the ten minute timer.
         await waitUntil("the three timers are sleeping") { clock.waiting == 3 }
         clock.advance(by: 2.9)
         // The clock ends a due sleep inside `advance`, so a quiet timer that ended early is already gone from the
         // sleepers here, before its turn could run and start anything (seen to survive a check on `started` alone).
         #expect(clock.waiting == 3, "the quiet timer ended before three seconds")
-        #expect(engine.verifierCounts.started == 0, "the verifier started before three seconds of quiet")
+        #expect(engine.verifierCounts.started == 1, "the verifier started before three seconds of quiet")
         clock.advance(by: 0.1)
-        await VerifierRig.finished(engine, beyond: 0, "the verification after three quiet seconds")
-        #expect(engine.verifierCounts.started == 1 && engine.verifierCounts.matches == 1)
+        await VerifierRig.finished(engine, beyond: 1, "the verification after three quiet seconds")
+        #expect(engine.verifierCounts.started == 2 && engine.verifierCounts.matches == 2)
     }
 
     @Test func twentyOutputsStartAVerificationWhateverTheQuiet() async throws {
         let store = try EngineStore(shows: 2, seed: 72)
         let turns = EngineTurns()
         let engine = VerifierRig.engine(store, turns, setup: QueueEngineVerifierSetup())
-        for index in 1..<QueueEngineVerifier.forcedEveryGenerations {
+        // The launch fill's end forces the first verification (#4358 slice E3, D6), at the first output; twenty
+        // outputs are counted from there.
+        await VerifierRig.finished(engine, beyond: 0, "the verification the launch fill forced")
+        for index in 1...QueueEngineVerifier.forcedEveryGenerations {
             engine.setViewInputs(QueueEngineViewInputs(focusedStage: index.isMultiple(of: 2) ? .scout : .reachedOut))
             turns.run()
+            if index == QueueEngineVerifier.forcedEveryGenerations - 1 {
+                #expect(engine.verifierCounts.started == 1, "a verification started before the twentieth output")
+            }
         }
-        #expect(engine.verifierCounts.started == 1, "the twentieth output did not start a verification")
-        await VerifierRig.finished(engine, beyond: 0, "the forced verification")
-        #expect(engine.verifierCounts.matches == 1)
+        #expect(engine.verifierCounts.started == 2, "the twentieth output did not start a verification")
+        await VerifierRig.finished(engine, beyond: 1, "the forced verification")
+        #expect(engine.verifierCounts.matches == 2)
     }
 
     // Saves landing during every read: each run is superseded, and the re-verifications back off (3, 6, 12, 24 and
@@ -503,9 +515,11 @@ final class QueueEngineVerifierTriggerTests {
         let center = NotificationCenter()
         let engine = VerifierRig.engine(store, turns, clock: clock, saves: StoreSaveCount(center: center),
                                         setup: QueueEngineVerifierSetup(read: VerifierReads.straddling(center)))
+        // The first run is the one the launch fill's end forces, at once (#4358 slice E3, D6); then the five retries.
+        await waitUntil("the forced first run was superseded") { engine.verifierCounts.superseded == 1 }
         var elapsed: TimeInterval = 0
-        // The first run after the start's quiet moment, then the five retries.
-        for (run, delay) in [3.0, 3, 6, 12, 24, 48].enumerated() {
+        for (index, delay) in [3.0, 6, 12, 24, 48].enumerated() {
+            let run = index + 1
             // The floor's sleeper until it fires at sixty seconds, the ten minute timer, and this run's timer.
             let sleepers = (elapsed < 60 ? 1 : 0) + 2
             await waitUntil("run \(run + 1)'s timer is sleeping") { clock.waiting == sleepers }
