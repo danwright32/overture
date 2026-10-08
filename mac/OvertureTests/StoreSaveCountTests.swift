@@ -42,6 +42,24 @@ struct StoreSaveCountTests {
         #expect(counter.hasForeignSaves(in: c))
     }
 
+    // #4609: a store's record belongs to THAT store, never to the next container made at its address. Keyed by
+    // `ObjectIdentifier` alone, a fresh store built where a foreign-saved one had been released read as
+    // foreign-saved itself, so the queue's memo refused to serve SwiftData's refetch on it and derived the
+    // whole store a second time, `nothing this view reads`, in whichever hosted test drew that address.
+    @Test func aStoreMadeWhereAForeignSavedOneDiedStartsWithNoRecord() throws {
+        let counter = StoreSaveCount()
+        // THE POSITIVE CONTROL is the helper returning at all: nil means no container was ever made at a
+        // released one's address, so nothing below could have been inherited and the test measured nothing.
+        let fresh = try #require(try RecycledStore.whereAForeignSavedOneDied(AppSchema.models) { other in
+            other.insert(ExcludedTown(town: "Poughkeepsie"))
+        }, "no container was made at the address of a released foreign-saved one, so nothing was measured")
+        #expect(!counter.hasForeignSaves(in: fresh) && counter.foreignSaveCount(for: fresh) == 0, Comment(rawValue:
+            "a store nothing has saved into reads as foreign-saved (\(counter.foreignSaveCount(for: fresh)) foreign "
+            + "saves), inherited from the released store that had its address, so its memos stop serving the refetch"))
+        #expect(counter.value(for: fresh) == 0, Comment(rawValue:
+            "a store nothing has saved into reads \(counter.value(for: fresh)) saves, inherited from a released one"))
+    }
+
     // PER STORE: a save into a different container is not a change to this one. Without this, every
     // concurrently running suite's saves would move every memo in the process.
     @Test func aSaveIntoAnotherStoreLeavesThisOnesCountAlone() throws {
