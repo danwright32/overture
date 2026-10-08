@@ -180,6 +180,24 @@ struct QueueJumpIdentityWiringGuardTests {
                 "each show row must carry the show's key and draw the jump mark")
     }
 
+    // #4358 slice E4a: a show row resolves its live show as it draws and draws NOTHING when the show or contact
+    // went since the pass, so its divider belongs to the row, never to the loop. One divider per kind of row,
+    // each after the row it closes: a divider left after the switch draws a stray rule for a refused row.
+    @Test func eachReachedOutRowDrawsItsOwnDivider() {
+        guard let list = SourceGuardHelper.bodyOfFunction(named: "reachedOutList", in: queueView),
+              let show = list.range(of: "case .show(let snapshot):"),
+              let inquiry = list.range(of: "case .inquiry(let identity, let row, _):") else {
+            Issue.record("expected the Reached out list's two cases")
+            return
+        }
+        let showBranch = list[show.upperBound..<inquiry.lowerBound]
+        let inquiryBranch = list[inquiry.upperBound...]
+        #expect(list.components(separatedBy: "Divider()").count - 1 == 2,
+                "the Reached out list should draw exactly one divider per kind of row")
+        #expect(showBranch.contains("Divider()") && inquiryBranch.prefix(200).contains("Divider()"),
+                "each kind of row must draw its own divider, inside its own branch")
+    }
+
     @Test func theDateGroupedCardsUseTheSameMark() {
         let factory = SourceGuardHelper.source("Overture/UI/ProspectRowFactory.swift")
         #expect(!factory.isEmpty)

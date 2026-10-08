@@ -1622,14 +1622,16 @@ struct QueueView: View {
                                     .jumpMark(key: prospect.naturalKey, highlighted: highlighted)
                                 }
                                 .equatable()
+                                // Inside the resolved branch, so a row that draws nothing leaves no divider.
+                                Divider()
                                 }
                             case .inquiry(let identity, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
                                 // source capsule and lifecycle line stay, because they say what an
                                 // inquiry is; the card box and its own typography are gone.
                                 inquiryRowView(row, identity: identity, style: .listRow)
+                                Divider()
                             }
-                            Divider()
                         }
                     }
                     // #4062: the id a deep link resolves to (QueueModel.jumpScrollGroupID), namespaced
