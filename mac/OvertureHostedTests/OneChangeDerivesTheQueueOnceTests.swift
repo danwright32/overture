@@ -315,7 +315,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // those cards, which the held answer had not prebuilt, and derived the whole store again (measured on
     // this harness 2026-10-07: one derivation inside `host`, then one more on the first redraw, reason
     // `nothing this view reads`). The Archive paid the same on every open; both now go through
-    // `ScopeMemo.cardKeys(serving:under:)`, which adopts the first frame's cards.
+    // `ScopeMemo.value(fingerprint:drawn:...)`, which adopts the first frame's cards.
     //
     // Counted from BEFORE `host`, because the mount derivation lands inside it and `settle` only counts
     // from where it starts. Every other test here seeds after hosting, which is a save arriving under a
@@ -343,6 +343,75 @@ struct OneChangeDerivesTheQueueOnceTests {
             "opening the queue over a full store and redrawing once derived it \(derivations) times "
             + "(after the mount: \(why.joined(separator: " | "))). One is the mount; a second is the first "
             + "frame's cards bought with another whole-store pass instead of adopted (#4570)"))
+    }
+
+    // #4591: shows arriving under a queue that is ALREADY mounted derive it once, the first frame's cards
+    // included.
+    //
+    // The seed's own derivation is asked for no card, the first frame builds its cards on demand, and then
+    // SwiftData's refetch after the save re-announces every row. Until #4591 that refetch had already marked
+    // the held answer stale by the time the next evaluation asked for the first frame's cards, so #4570's
+    // adoption was refused (it adopted only into an answer nothing had marked) and the whole store was
+    // derived again with the reason `nothing this view reads`: measured on this harness 2026-10-07, every
+    // run, `allProspects, prospects | nothing this view reads`. A refetch that changed nothing is served
+    // (#4252), so the cards are now adopted under the same re-arm that serves it.
+    //
+    // This is the shape every other test here sets up in `brought(up:)`, so on main each of them started
+    // from a queue that had just derived twice. Not reproduced, so stated as a candidate only: a runner slow
+    // enough to deliver that refetch after the settle went quiet would count the second derivation against
+    // the change under test, which is the reason #4591's two CI flakes recorded.
+    @Test func showsArrivingUnderAMountedQueueDeriveItOnce() async throws {
+        let c = try container()
+        let h = host(c)
+        defer { tearDown(h) }
+        _ = await settle(h.hosting)
+        seed(h.context)
+        let why = await settle(h.hosting)
+
+        // THE POSITIVE CONTROL. The queue must have derived for the shows at all, or the ceiling below is
+        // met by a queue that never saw them (L159).
+        #expect(why.count >= 1, Comment(rawValue:
+            "sixty shows arriving under a mounted queue derived it \(why.count) times, so it never saw them"))
+        #expect(why.count == 1, Comment(rawValue:
+            "shows arriving under a mounted queue derived it \(why.count) times: \(why.joined(separator: " | ")). "
+            + "One is the shows; a second is the first frame's cards bought with another whole-store pass "
+            + "because the save's refetch had marked the answer before they could be adopted (#4591)"))
+    }
+
+    // #4591: a removal that REVEALS rows derives the queue once.
+    //
+    // The night dismissed here is the FIRST, so it is on screen: measured 2026-10-07, this window draws six
+    // cards, the first two nights, and dismissing the first draws the next night's three for the first
+    // time. The change's own derivation prebuilt the six the last frame drew; the frame after it drew three
+    // that pass never built; and the save's refetch then asked for them, so the queue derived the whole
+    // store again for three cards, reason `nothing this view reads`, 4 runs of 4. Those cards are now
+    // adopted into the answer the refetch is served, built again inside its tracking, so whatever they read
+    // still marks it stale. `dismissingAWholeNightDerivesTheQueueNoMoreThanTheSaveAnnounces` dismisses a
+    // night below the fold, which reveals nothing here and so could not see this.
+    @Test func dismissingAVisibleNightDerivesTheQueueOnce() async throws {
+        let c = try container()
+        let h = host(c)
+        defer { tearDown(h) }
+        seed(h.context)
+        await brought(up: h)
+
+        let all = try prospects(h.context)
+        let night = Self.night(0)
+        let keys = all.filter { $0.performanceDate == night }.map(\.naturalKey)
+        _ = ProspectMutations.dismissAll(keys, reason: .notAFit, dateLabel: night, nightDate: night,
+                                         shows: all, context: h.context, feedback: h.feedback,
+                                         undo: h.undo)
+        let why = await settle(h.hosting)
+
+        #expect(keys.count == Self.showsPerNight && all.filter { keys.contains($0.naturalKey) }
+                    .allSatisfy { $0.status == .dismissed },
+                "the first night was not dismissed, so nothing below was measured")
+        #expect(why.count >= 1, Comment(rawValue:
+            "dismissing the first night derived the queue \(why.count) times, so the queue never saw it"))
+        #expect(why.count == 1, Comment(rawValue:
+            "dismissing the night on screen derived the whole queue \(why.count) times: "
+            + "\(why.joined(separator: " | ")). One is the change; a second is the rows it revealed, bought "
+            + "with another whole-store pass instead of adopted (#4591)"))
     }
 
     // A TOWN renamed in place, unsaved. The queue resolves Dan's town refusals OUTSIDE the memo's build,

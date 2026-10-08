@@ -64,6 +64,40 @@ enum HostedPassCounting {
         window.close()
     }
 
+    // #4601: ENDING A HOSTED VIEW BEFORE ITS STORE GOES, for a test that takes one hosted view down and
+    // then builds and saves into ANOTHER store before it returns (`ViewportSizeTests` measures two window
+    // sizes, each on a fresh store).
+    //
+    // Unmounting removes the view from the graph, but not everything it made is freed on the spot: a
+    // `TextField` (the Archive's search field is one) leaves AppKit objects in the CURRENT autorelease pool,
+    // and through them the SwiftUI environment, which holds the store's main context. A main context holds
+    // its store WEAKLY. So when the test then drops the store, that context lives on without one, still
+    // registered by `_SwiftData_SwiftUI` for every context's save notification, and the next save anywhere
+    // in the process reads `ModelContext.container` on it and traps: `EXC_BREAKPOINT`, with the save on the
+    // stack. Measured 2026-10-07 in hosted runs, each arm unmounting and then dropping its store:
+    //
+    //   ArchiveView, or RowsFromStore around it         main context ALIVE, store freed (the next save traps)
+    //   the Archive's five @Query declarations alone    released
+    //   five queries plus a DoneButton, the banner,
+    //   or the send alerts                              released
+    //   five queries plus ShowSearchField or a TextField ALIVE
+    //   a lone TextField under .modelContainer          ALIVE
+    //   any of them inside this pool                    released, and the next save is safe
+    //   any of them after one await (300 ms)            released
+    //
+    // The trapping frame was read off the crash report, not guessed: SwiftData offset 0x8b5d8 is the
+    // `brk` in the function ModelContext's vtable slot for `container` points at, which returns a strongly
+    // held store or loads the weak one and traps when it is gone.
+    //
+    // Between tests the pool is drained anyway, which is why a teardown in a `defer` at the end of a test
+    // never showed this and why `ExternalRebuildProbeTests`, hosting the same Archive, did not crash. The
+    // app cannot reach it either: Overture builds ONE store, in `OvertureApp.init`, and holds it for the
+    // life of the process, so no context there ever outlives its store
+    // (`HostedWindowsAreReleasedTests.savingRightAfterAnArchiveClosesIsSafeWhileItsStoreLives`).
+    static func releasingWhatItHosts<Result>(_ body: () throws -> Result) rethrows -> Result {
+        try autoreleasepool { try body() }
+    }
+
     // #4534: a hosted root that can be taken out of the graph WITHOUT erasing its type, for the suites
     // that host the real type on purpose (`ABannerDerivesNothingOnAnySheetTests`, #4247's reason). The
     // `if` is a static conditional, so while it is mounted SwiftUI still diffs the content structurally,

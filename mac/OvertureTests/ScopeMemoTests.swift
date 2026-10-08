@@ -253,21 +253,26 @@ struct ScopeMemoTests {
     // #4570: one evaluation of a surface keyed the way ArchiveView and QueueView key theirs, with the card
     // half decided by the memo from the keys the last frame drew.
     private func evaluateScope(_ memo: ScopeMemo<QueueModel.Scope>, rows: [Prospect], in c: ModelContainer,
-                               drawn: Set<String>, registry: QueueModel.CardKeyRegistry,
-                               at when: Date) -> QueueModel.Scope {
+                               drawn: Set<String>, registry: QueueModel.CardKeyRegistry, at when: Date,
+                               onRefetch: ScopeMemo<QueueModel.Scope>.Refetch = .rebuild) -> QueueModel.Scope {
         var fingerprint = ScopeFingerprint()
         fingerprint.add(rows)
-        let keys = memo.cardKeys(serving: drawn, under: fingerprint)
-        return memo.value(fingerprint: fingerprint, cardKeys: keys, now: when, savesIn: c,
-                          onRefetch: .rebuild) {
+        return memo.value(fingerprint: fingerprint, drawn: drawn, now: when, savesIn: c,
+                          onRefetch: onRefetch) { keys in
             QueueModel.scope(from: rows, now: when, cardKeys: keys, cardKeyRegistry: registry)
         }
     }
 
     // #4570: a surface's first build is asked for no card, so the first frame builds every card it draws
-    // on demand. The next evaluation adopts those cards rather than deriving the whole store again, and a
-    // frame that then draws a row nobody prebuilt (a scroll) still derives, as #3654's contract says.
-    @Test func theFirstFramesCardsAreAdoptedAndAScrollStillDerives() throws {
+    // on demand. The next evaluation adopts those cards rather than deriving the whole store again.
+    //
+    // #4591: and so does every LATER frame that draws a row the held answer never built, a scroll or a row
+    // a removal revealed. This test asserted the opposite until then (`...AndAScrollStillDerives`), as
+    // #4570's own scope choice ("this changes the mount and nothing else"), not as a decision of Dan's; the
+    // reason it gave, that a scroll would be served cards nobody tracked, does not hold for an adopted card,
+    // which is built again inside the answer's tracking (`aFieldOnlyAnAdoptedCardReadsStillMakesTheAnswerStale`).
+    // #4591 measured that rule costing a whole second derivation every time a dismiss revealed rows.
+    @Test func theFirstFramesCardsAreAdoptedAndSoAreAScrolls() throws {
         let c = try container()
         let rows = seed(ModelContext(c), rows: 12)
         let memo = ScopeMemo<QueueModel.Scope>(saves: StoreSaveCount(center: NotificationCenter()))
@@ -288,13 +293,89 @@ struct ScopeMemoTests {
         #expect(second.cards.requestedKeys == Set(drawnRows.map(\.id)),
                 "the adopted cards were not counted as requested, so the next frame would derive again")
 
-        // THE CONTROL. A row the held answer never built is a scroll, which must still derive.
-        for row in first.rows.prefix(4) { _ = second.cards.card(for: row) }
-        _ = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
-                          at: t0.addingTimeInterval(0.2))
-        #expect(memo.builds == 2, Comment(rawValue:
-            "a frame drawing a row the held answer never built left the memo at \(memo.builds) builds, so "
-            + "adoption reached past the first frame and a scroll would be served cards nobody tracked"))
+        // A SCROLL: one row the held answer never built, drawn beside the three it did.
+        // The served answer holds the SAME store as the first, so its miss count carries the first frame's.
+        let missesBefore = second.cards.expectedFirstFrameMisses
+        let scrolled = Array(first.rows.prefix(4))
+        for row in scrolled { _ = second.cards.card(for: row) }
+        #expect(second.cards.expectedFirstFrameMisses - missesBefore == 1,
+                "the fourth row was not built on demand, so this frame is not a scroll")
+        let third = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
+                                  at: t0.addingTimeInterval(0.2))
+        #expect(memo.builds == 1, Comment(rawValue:
+            "a frame drawing one row the held answer never built left the memo at \(memo.builds) builds, so "
+            + "a scroll, or a row a removal revealed, derives the whole store again for one card (#4591)"))
+        #expect(third.cards.requestedKeys == Set(scrolled.map(\.id)),
+                "the scrolled-to card was not counted as requested, so the next frame would derive again")
+    }
+
+    // #4591: shows arriving under a mounted surface. The save's refetch re-announces every row BEFORE the
+    // next evaluation asks for the first frame's cards, so the held answer is already marked stale when
+    // adoption is asked for. A refetch that changed nothing is served (#4252), so the cards are adopted
+    // in the same re-arm, and the memo builds once.
+    //
+    // Beside it, the two cases that must still derive, because a memo that adopts into any marked answer
+    // passes the first half perfectly (L159): an edit nobody saved, and a surface that chose `.rebuild`.
+    @Test func aRefetchBeforeTheFirstFramesCardsAreAskedForStillAdoptsThem() throws {
+        // One store per case, so an edit one case leaves unsaved cannot reach the next.
+        struct Mounted {
+            let container: ModelContainer
+            let rows: [Prospect]
+            let memo: ScopeMemo<QueueModel.Scope>
+            let registry: QueueModel.CardKeyRegistry
+            let drawn: [QueueScopeRow]
+            let policy: ScopeMemo<QueueModel.Scope>.Refetch
+        }
+        func mountDrawAndRefetch(_ policy: ScopeMemo<QueueModel.Scope>.Refetch) throws -> Mounted {
+            let c = try container()
+            // The MAIN context, because it is the one the memo asks whether anything is unsaved.
+            let rows = seed(c.mainContext, rows: 12)
+            let memo = ScopeMemo<QueueModel.Scope>(saves: StoreSaveCount(center: NotificationCenter()))
+            let registry = QueueModel.CardKeyRegistry()
+            let first = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
+                                      at: t0, onRefetch: policy)
+            let drawn = Array(first.rows.prefix(3))
+            for row in drawn { _ = first.cards.card(for: row) }
+            // What SwiftData's refetch after a save does (#4253): `willSet` on every row, nothing changed.
+            for row in rows { row.withMutation(keyPath: \.groupName) {} }
+            return Mounted(container: c, rows: rows, memo: memo, registry: registry, drawn: drawn, policy: policy)
+        }
+        func evaluate(_ m: Mounted, at offset: Double) -> QueueModel.Scope {
+            evaluateScope(m.memo, rows: m.rows, in: m.container, drawn: m.registry.takeKeys(),
+                          registry: m.registry, at: t0.addingTimeInterval(offset), onRefetch: m.policy)
+        }
+
+        let m = try mountDrawAndRefetch(.serveWhenNothingChanged)
+        let second = evaluate(m, at: 0.1)
+        #expect(m.memo.servedUnchanged == 1, Comment(rawValue:
+            "the refetch was served \(m.memo.servedUnchanged) times, so it never marked the answer and the "
+            + "build count below would hold for the wrong reason"))
+        #expect(m.memo.builds == 1, Comment(rawValue:
+            "a refetch landing before the first frame's cards were asked for left the memo at "
+            + "\(m.memo.builds) builds, so shows arriving under a mounted queue derive it twice (#4591)"))
+        #expect(second.cards.requestedKeys == Set(m.drawn.map(\.id)),
+                "the first frame's cards were not counted as requested after the refetch")
+
+        // STILL WATCHED after the re-arm: a field only the card reads, edited in place.
+        let show = try #require(m.rows.first { $0.naturalKey == m.drawn[0].id })
+        show.fitReason = "a reason edited in place"
+        _ = evaluate(m, at: 0.2)
+        #expect(m.memo.builds == 2, Comment(rawValue:
+            "an edit to a card's field after the refetch was served left the memo at \(m.memo.builds) "
+            + "builds, so the re-arm that adopted the cards stopped watching them (#4591, L40)"))
+
+        // THE CONTROLS. An unsaved edit is a real change, not a refetch.
+        let unsaved = try mountDrawAndRefetch(.serveWhenNothingChanged)
+        unsaved.rows[7].groupName = "Renamed, not saved"
+        _ = evaluate(unsaved, at: 0.1)
+        #expect(unsaved.memo.builds == 2, Comment(rawValue:
+            "an unsaved edit left the memo at \(unsaved.memo.builds) builds, so adoption served an answer "
+            + "from before a change the main context still holds (L40)"))
+
+        // And a surface that chose to rebuild on a refetch does.
+        let rebuilding = try mountDrawAndRefetch(.rebuild)
+        _ = evaluate(rebuilding, at: 0.1)
+        #expect(rebuilding.memo.builds == 2, "a memo told to rebuild on a refetch adopted into it instead")
     }
 
     // #4570: an adopted card is WATCHED. Its show's `fitReason` is read by the card and by no part of the
