@@ -122,6 +122,111 @@ struct HostedWindowsAreReleasedTests {
         """)
     }
 
+    private func prospect(_ key: String) -> Prospect {
+        Prospect(naturalKey: key, groupName: "Ensemble \(key)", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2027-01-01", sourceListingURL: nil, priorRelationship: "none",
+                 production: "self", profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
+                 fitReason: "r", matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: .new)
+    }
+
+    // Hosts `view`, lays it out, turns the run loop briefly, then takes it down the way every counting
+    // suite does. What the unmount leaves behind is the question, so nothing here drains a pool.
+    private func hostThenUnmount(_ view: some View) {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 720),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let hosting = NSHostingView(rootView: AnyView(view))
+        hosting.frame = window.contentLayoutRect
+        window.contentView?.addSubview(hosting)
+        window.layoutIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+        let until = Date().addingTimeInterval(0.3)
+        while Date() < until { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02)) }
+        HostedPassCounting.unmountAndClose(window)
+    }
+
+    // #4601: WHAT AN UNMOUNT LEAVES IN THE AUTORELEASE POOL, the positive control for the guard in
+    // `ViewportSizeTests` (L159): that guard can only refuse a leftover if a leftover can exist.
+    //
+    // A text field leaves AppKit objects in the current pool, and through them the SwiftUI environment it
+    // was built in. Everything that environment holds outlives the unmount until the pool drains, the
+    // store's main context included, which is the half of #4601's crash this measures. The STORE is held
+    // by this test throughout, so the context can never be left without it here and nothing below can
+    // trap: the environment object beside the context is what is weighed instead.
+    //
+    //   this reads released     the leftover is gone, and `releasingWhatItHosts` guards nothing any more
+    //   the pooled arm is alive the pool no longer ends what a hosted view made, and #4601 is back
+    @Test func aTextFieldKeepsAnUnmountedViewsEnvironmentUntilThePoolDrains() throws {
+        let c = try container()
+        // Read INSIDE an outer pool, so the leftover this arm makes on purpose is gone again, with the store
+        // still held, before the test returns.
+        var unpooledSurvived = false
+        autoreleasepool {
+            weak var unpooled: ActionFeedback?
+            do {
+                let feedback = ActionFeedback()
+                unpooled = feedback
+                hostThenUnmount(TextField("unpooled", text: .constant("")).modelContainer(c).environment(feedback))
+            }
+            unpooledSurvived = unpooled != nil
+        }
+        weak var pooled: ActionFeedback?
+        HostedPassCounting.releasingWhatItHosts {
+            let feedback = ActionFeedback()
+            pooled = feedback
+            hostThenUnmount(TextField("pooled", text: .constant("")).modelContainer(c).environment(feedback))
+        }
+        #expect(unpooledSurvived, Comment(rawValue: "an unmounted text field's environment was released "
+            + "before the pool drained, so the leftover #4601 crashed on no longer forms and "
+            + "ViewportSizeTests' guard is refusing a state that cannot occur"))
+        #expect(pooled == nil, Comment(rawValue: "a text field unmounted inside "
+            + "HostedPassCounting.releasingWhatItHosts still holds its environment, so the pool no longer "
+            + "ends what a hosted view made and a store dropped after it can leave a live context behind "
+            + "(#4601)"))
+        withExtendedLifetime(c) {}
+    }
+
+    // #4601: THE APP'S OWN SHAPE, which is what decides whether the crash could ever be Dan's. In the app a
+    // window holding a live query and a text field closes (the Archive sheet), and a save follows in the
+    // same turn, before any pool drains. The difference from the crashing test is only that the store is
+    // still alive, because Overture builds one in `OvertureApp.init` and holds it for the life of the
+    // process. Saved through a second context, as a background write does, and through the main context,
+    // as an action does. A trap here kills the host, which is this test failing loudly.
+    @Test func savingRightAfterAnArchiveClosesIsSafeWhileItsStoreLives() throws {
+        let c = try container()
+        let seeding = ModelContext(c)
+        seeding.insert(prospect("seeded"))
+        try seeding.save()
+        // The close and both saves share one pool, so they happen while the leftover is alive, as in the
+        // app; it is drained before the test returns, with the store still held.
+        var leftoverAliveAtTheSaves = false
+        try autoreleasepool {
+            weak var leftover: ActionFeedback?
+            do {
+                let feedback = ActionFeedback()
+                leftover = feedback
+                hostThenUnmount(RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+                    .modelContainer(c)
+                    .environment(feedback)
+                    .environment(DayOffOfferRequest()))
+            }
+
+            let background = ModelContext(c)
+            background.insert(prospect("after-close-background"))
+            try background.save()
+            c.mainContext.insert(prospect("after-close-main"))
+            try c.mainContext.save()
+            leftoverAliveAtTheSaves = leftover != nil
+        }
+
+        // Without the leftover these saves prove nothing about the crash's shape (L159).
+        #expect(leftoverAliveAtTheSaves, Comment(rawValue: "the closed Archive's environment was already "
+            + "released when the saves ran, so this did not save beside a leftover the way the app can"))
+        #expect(try ModelContext(c).fetchCount(FetchDescriptor<Prospect>()) == 3, Comment(rawValue:
+            "both saves after the Archive closed should have landed beside the seeded row"))
+    }
+
     @Test func theHostingViewIsDeallocatedAfterTheTestThatBuiltIt() throws {
         let c = try container()
         weak var escaped: NSHostingView<AnyView>?
