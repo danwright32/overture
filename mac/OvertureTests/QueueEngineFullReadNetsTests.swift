@@ -504,7 +504,11 @@ final class QueueEngineNetsRealUseProbeTests {
             }
             let frozen = try ScoutExtractResultsDecoder.decode(
                 Data(contentsOf: work.appendingPathComponent("overture-scout-extract-results.json")))
-            let results = ScaledCorpus.results(frozen, factor: Int(size.dropFirst()) ?? 1)
+            guard let factor = Int(size.dropFirst()) else {
+                Issue.record(Comment(rawValue: "UNMEASURED: \(size) names no corpus factor"))
+                return
+            }
+            let results = ScaledCorpus.results(frozen, factor: factor)
             let container = try Phase0.openContainer(at: work.appendingPathComponent(storeName))
             let context = container.mainContext
             context.autosaveEnabled = false
@@ -532,7 +536,7 @@ final class QueueEngineNetsRealUseProbeTests {
                                                  today: today, now: now)
             }
             try await RealUseSteps.actions(on: run, export: (loaded.bookings, loaded.blockedDates, loaded.health),
-                                           exportURL: exportURL, now: Date())
+                                           exportURL: exportURL, now: now)
             let verdict = await run.verify()
             let fired = run.readings.dropFirst().filter { $0.netsFired > 0 || $0.fullReads > 0 }
             print("""
