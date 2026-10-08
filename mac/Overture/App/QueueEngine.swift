@@ -1948,8 +1948,8 @@ extension QueueEngine: ShowResolver {
         guard isStillFilling, !missing.isEmpty else { return out }
         do {
             let wanted = Array(missing)
-            let byKey = FetchDescriptor<Prospect>(predicate: #Predicate<Prospect> { wanted.contains($0.naturalKey) })
-            let found = Prospect.inKeyOrder(try context.fetch(byKey))
+            // In key order where it is read (#4406): two rows holding one key resolve the same way on every read.
+            let found = Prospect.inKeyOrder(try context.fetch(FetchDescriptor<Prospect>(predicate: #Predicate<Prospect> { wanted.contains($0.naturalKey) })))
             for show in found where out[show.naturalKey] == nil && StoreRows.isLive(show) {
                 noteChanged(show)
                 out[show.naturalKey] = ShowIdentity(show)
