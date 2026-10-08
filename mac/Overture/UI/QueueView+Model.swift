@@ -3422,7 +3422,12 @@ enum QueueModel {
                       today: String? = nil,
                       // #4356: where every cross-row read of this build is recorded, or nil for none, which is
                       // what the app passes. A test hands one in to see what the rows and cards read.
-                      tableLog: TableReader.Log? = nil) -> Scope {
+                      tableLog: TableReader.Log? = nil,
+                      // #4358 slice E4b (#4357 step 9): whether this build checks one of its cards against a fresh
+                      // build. Over the live models it does, as it always has. The queue engine passes false: over
+                      // retained facts the fresh build reads the same facts, so it could only ever agree with itself
+                      // (L70), and the engine checks the card at publish over the main context's model instead.
+                      checksACard: Bool = true) -> Scope {
         let day = today ?? EasternDate.today(now)
         // #3652/#3644: over `rowsForLinking`, which defaults to the rows being built. Its three
         // neighbours below judge against `corpus ?? prospects` and each says why; this one carried no
@@ -3557,7 +3562,7 @@ enum QueueModel {
         // shape already in the file is Debug only, and Dan runs Release, so a check that shipped off
         // would be code nobody has ever executed (L535, C3). `CardCheckShipsInReleaseTests` holds it.
         var divergence: Scope.Divergence?
-        if let found = checkOneCardAgainstAFreshBuild(cards: cards, contactsByKey: contactsByKey,
+        if checksACard, let found = checkOneCardAgainstAFreshBuild(cards: cards, contactsByKey: contactsByKey,
                                                       draftBodies: draftBodies,
                                                       corpus: prospects, preamble: pre) {
             // CORRECTION C1: the CORRECT card wins the render. The finding is recorded; the person is not
@@ -3571,7 +3576,7 @@ enum QueueModel {
                                       registry: cardKeyRegistry),
                      // Present whenever a sample was taken, so `checked == false` and "agreed" are
                      // different answers rather than one silence (L98).
-                     cardCheck: Scope.CardCheck(ran: !cards.isEmpty, divergence: divergence),
+                     cardCheck: Scope.CardCheck(ran: checksACard && !cards.isEmpty, divergence: divergence),
                      contradictedCancellations: contradictedCancellations)
     }
 

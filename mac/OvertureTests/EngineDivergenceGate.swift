@@ -116,7 +116,7 @@ enum EngineDivergenceGate {
     static func refuses(_ kind: CardDivergenceRecord.Kind) -> Bool {
         switch kind {
         // The engine and the store disagreed, a card disagreed with a fresh build, or another context saved.
-        case .cardDivergence, .factMismatch, .outputMismatch, .foreignSave:
+        case .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave:
             return true
         // A row was faulted: whether it came back or not, a fault happened in this run.
         case .healed, .healDidNotConverge:
@@ -141,6 +141,10 @@ enum EngineDivergenceGate {
         let named: [(String, Int)] = [
             ("factMismatches", counts.factMismatches),
             ("outputMismatches", counts.outputMismatches),
+            // #4358 slice E4b: the card check at publish and comparison (iv), each a card disagreeing with a fresh
+            // build from the saved show.
+            ("cardDivergences", counts.cardDivergences),
+            ("cardMismatches", counts.cardMismatches),
             ("healed", counts.healed),
             ("healDidNotConverge", counts.healDidNotConverge),
             ("unverifiedTooLong", counts.unverifiedTooLong),
@@ -272,7 +276,7 @@ struct EngineDivergenceGateRuleTests {
 
     @Test func everyKindTheGateRefusesRefusesAndNoOtherDoes() {
         let named: Set<CardDivergenceRecord.Kind> = [
-            .cardDivergence, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
+            .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
             .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped,
         ]
         for kind in CardDivergenceRecord.Kind.allCases where kind != .unrecognised {
@@ -293,6 +297,8 @@ struct EngineDivergenceGateRuleTests {
         let cases: [(String, (inout QueueEngineVerifierCounts) -> Void)] = [
             ("factMismatches x1", { $0.factMismatches = 1 }),
             ("outputMismatches x1", { $0.outputMismatches = 1 }),
+            ("cardDivergences x1", { $0.cardDivergences = 1 }),
+            ("cardMismatches x1", { $0.cardMismatches = 1 }),
             ("healed x1", { $0.healed = 1 }),
             ("healDidNotConverge x1", { $0.healDidNotConverge = 1 }),
             ("unverifiedTooLong x1", { $0.unverifiedTooLong = 1 }),

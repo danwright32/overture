@@ -16,6 +16,13 @@ import SwiftData
 //   - the one class, `CardStore`, is compared through `contents`, the value it holds.
 // `RenderDataComparisonCoversEveryFieldTests` holds this list to RenderData's real members, derived by Mirror,
 // and to the rule that no member is compared by its description.
+//
+// #4358 slice E4b: IN THE APP, moved from the test target, because the queue engine's derivation is now one of
+// its readers: `QueueEnginePass.differingFields` is this comparison, which the engine's floor records and the
+// verifier's comparison (iii) name fields with. One comparator, so the oracle and the verifier cannot answer
+// "do these two passes agree" differently (L263, L370). The engine hands in each pass's card contents as it
+// captured them when the pass was derived (`cards:`), because the verifier compares on its own thread and the
+// card store is a class the main thread goes on writing to as rows are drawn.
 enum RenderDataComparison {
 
     /// One member's comparison: its name exactly as Mirror labels it, and whether the two passes agree on it.
@@ -33,10 +40,25 @@ enum RenderDataComparison {
         fields.filter { !$0.agrees(lhs, rhs) }.map(\.name)
     }
 
+    /// The same comparison with each pass's card contents handed in as captured when it was derived, so the card
+    /// store itself is never read: the verifier's thread compares, and the store is written on the main thread.
+    static func differingFields(_ lhs: QueueView.RenderData, _ rhs: QueueView.RenderData,
+                                cards: (lhs: QueueModel.CardStore.Contents, rhs: QueueModel.CardStore.Contents))
+        -> [String] {
+        fields.filter { field in
+            guard field.name == cardsField else { return !field.agrees(lhs, rhs) }
+            return !(cards.lhs == cards.rhs && preambleAgrees(lhs, rhs))
+        }.map(\.name)
+    }
+
+    /// The member compared through the card store, which the captured form above replaces.
+    static let cardsField = "cards"
+
+
     // Computed rather than stored: a stored static of closures is shared mutable state to the compiler, and
     // building the list costs nothing beside the comparison it serves.
     static var fields: [Field] { [
-        Field(name: "cards", how: .projection) { $0.cards.contents == $1.cards.contents && preambleAgrees($0, $1) },
+        Field(name: cardsField, how: .projection) { $0.cards.contents == $1.cards.contents && preambleAgrees($0, $1) },
         // #4357 step 5: identities now, so compared as the values they are.
         Field(name: "queueScope", how: .value) { $0.queueScope == $1.queueScope },
         Field(name: "selfBooking", how: .value) { $0.selfBooking == $1.selfBooking },
@@ -100,6 +122,7 @@ enum RenderDataComparison {
     /// How each stored member of the card store is accounted for: through `contents`, through the preamble, or
     /// left out with its reason. Held to the store's real members by Mirror, so a member added later has to be
     /// placed here before the guard passes.
+    // copy-inventory:ignore-start  member names and the reasons a comparator leaves one out, never said to Dan
     static let cardStoreMembers: [String: String] = [
         "cards": "contents.cards",
         // #4357 step 5: one member holding both maps, over whatever rows the store was built from.
@@ -110,4 +133,5 @@ enum RenderDataComparison {
         "expectedFirstFrameMisses": "left out: counted by the surfaces that read the store after the pass",
         "unexpectedCardMisses": "left out: counted by the surfaces that read the store after the pass",
     ]
+    // copy-inventory:ignore-end
 }

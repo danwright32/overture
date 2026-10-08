@@ -88,6 +88,30 @@ struct QueueEngineDerivation<Value: Sendable>: Sendable {
     let nextChange: @Sendable (Value) -> Date?
     /// The cards the answer built, so a frame asking only for those is no reason to derive again.
     let builtCardKeys: @Sendable (Value) -> Set<String>
+    /// #4358 slice E4b (#4357 step 8): the pass as the engine's own turn runs it, on the main actor, wrapped in what
+    /// a main-thread pass records (the queue's counts it and times it for the freeze watch). The verifier runs
+    /// `derive` itself, on its own thread, which records nothing: a rebuild nobody waits for is not a pass any
+    /// stall was spent in. Nil runs `derive`.
+    var onTheMainActor: (@MainActor @Sendable (QueueEnginePassInput) -> Value)? = nil
+    /// #4358 slice E4b (#4357 step 9): the card check at publish. One card of an answer about to go on screen, built
+    /// again from the row the MAIN CONTEXT holds, never from the facts the answer was derived from (L70), and the
+    /// answer with the fresh card in its place when they differ (C1: the correct card wins the render), or nil when
+    /// they agree or there was no card to check. Throws when the row could not be read, which the engine counts
+    /// rather than reading as agreement (L215). Nil for a derivation that builds no cards, which is every one but
+    /// the queue's.
+    var checkAtPublish: (@MainActor @Sendable (Value, ModelContext) throws -> QueueEngineCardCheck<Value>?)? = nil
+    /// #4358 slice E4b: the verifier's comparison (iv), made on its own thread after the facts and the output agreed.
+    /// Every card the answer built, built again from models a context of its own reads from `container`, by the
+    /// field names that differ (C7), or none. Nil for a derivation that builds no cards.
+    var compareCards: (@Sendable (Value, ModelContainer) throws -> [String])? = nil
+}
+
+/// What the card check at publish found: the fields that differ, by name only, how many cards the answer held, and
+/// the answer with the fresh card in place of the one it built.
+struct QueueEngineCardCheck<Value> {
+    let fields: [String]
+    let cardsBuilt: Int
+    let corrected: Value
 }
 
 /// One published pass, and which store state and which pass it describes.
@@ -97,6 +121,34 @@ struct QueueEngineOutput<Value> {
     let generation: Int
     let now: Date
     let reasons: Set<QueueEnginePassReason>
+    /// #4358 slice E4b: the inputs that arrive by a signal, as they were read for this pass, so a verification
+    /// rebuilds the output from exactly what it was derived from.
+    let context: QueueEngineContextInputs
+}
+
+/// #4369 (#4358 slice E4b): one scout landing, open from `QueueEngine.openLanding()` until `closeLanding(_:)`, which
+/// every landing entry point calls in a `defer` (the cutover, slice E4d, L514, L515).
+struct QueueEngineLanding: Hashable, Sendable {
+    /// The engine that opened it, by an identity minted at the engine's birth, never its address (L1019): every
+    /// engine numbers its landings from 1, so the number alone cannot say whose landing this is.
+    fileprivate let owner: UUID
+    fileprivate let number: Int
+}
+
+/// #4358 slice E4b (plan item 12): what "Reload this show" did. Every case is produced by a test (L151).
+enum QueueEngineReload: Equatable, Sendable, CaseIterable {
+    /// The row was fetched again, and a read of the saved store through a context of its own now agrees with it.
+    case reloaded
+    /// The row was not out of step, so there was nothing to reload.
+    case alreadyInStep
+    /// The main context holds an unsaved edit on the row, which a fetch would not bring back and Dan would lose.
+    case unsavedEdit
+    /// The row was fetched again and still does not agree with the saved store. Recovery goes on trying.
+    case stillOutOfStep
+    /// The store no longer holds the row.
+    case gone
+    /// The fetch, or the read that checks it, threw. Never read as gone (L215).
+    case unreadable
 }
 
 /// The clock the engine reads and sleeps on, injected so a test sets it rather than waiting (L524).
@@ -437,6 +489,9 @@ final class QueueEngine<Value: Sendable> {
     /// The launch's reads, on a thread of their own, so a read that never returns wedges neither the verifier
     /// nor anything else that shares one.
     @ObservationIgnored private let launchThread = BlockingWorkThread(name: "queue-launch")
+    /// #4358 slice E4b: the inputs that arrive by a signal, read on the main actor whenever a pass derives.
+    @ObservationIgnored private let contextInputs: @MainActor () -> QueueEngineContextInputs
+    @ObservationIgnored private let landingSetup: QueueEngineLandingSetup
 
     // MARK: - What it keeps, keyed by identity (every one is in `identityKeyedState`)
 
@@ -465,6 +520,8 @@ final class QueueEngine<Value: Sendable> {
     @ObservationIgnored private(set) var faults = QueueEngineFaults()
     /// The verification in flight, if any (single flight).
     @ObservationIgnored private var verification: QueueEngineVerifierRun<Value>?
+    /// #4369: rows a landing's capped intake has not read yet, read first in the next turn.
+    @ObservationIgnored private var carried: Set<PersistentIdentifier> = []
 
     // MARK: - The turn and the gate
 
@@ -476,6 +533,18 @@ final class QueueEngine<Value: Sendable> {
     @ObservationIgnored private(set) var deadline: QueueEngineDeadline?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private(set) var counters = QueueEngineCounters()
+
+    // MARK: - The landing (#4369)
+
+    /// The landings open now, by number. A set rather than a count, so a landing closed twice cannot close another.
+    @ObservationIgnored private var openLandings: Set<Int> = []
+    @ObservationIgnored private var landingsOpened = 0
+    /// Whose landings these are: a landing another engine opened closes nothing here.
+    @ObservationIgnored private let landingOwner = UUID()
+    /// The reasons turns held while a landing was open, carried into the one publish that follows.
+    @ObservationIgnored private var heldReasons: Set<QueueEnginePassReason> = []
+    /// Stored values "Reload this show" changed since the last turn, which that turn derives for at once.
+    @ObservationIgnored private var changedByReload = 0
 
     // MARK: - The verifier's state
 
@@ -528,11 +597,17 @@ final class QueueEngine<Value: Sendable> {
          schedule: @escaping QueueEngineSchedule = QueueEngineTurns.nextTurn,
          refused: @escaping @MainActor (Int, Int) -> Void = QueueEngineTurns.refuse,
          verifier: QueueEngineVerifierSetup,
-         launch: QueueEngineLaunchSetup) {
+         launch: QueueEngineLaunchSetup,
+         // No default, on `StageContext`'s rule: a reader nobody handed in would answer "nobody is a client" and
+         // "Gmail is not connected" for every pass, which read as facts rather than as a missing input (L168).
+         contextInputs: @escaping @MainActor () -> QueueEngineContextInputs,
+         landing: QueueEngineLandingSetup = QueueEngineLandingSetup()) {
         self.context = context
         container = context.container
         verifierSetup = verifier
         launchSetup = launch
+        self.contextInputs = contextInputs
+        landingSetup = landing
         self.derivation = derivation
         self.saves = saves
         self.clock = clock
@@ -631,9 +706,11 @@ final class QueueEngine<Value: Sendable> {
     /// applied output is a pass (L78). An applied output claims to describe the engine's facts as they stand, and
     /// is what the verifier compares with a fresh read.
     @discardableResult
-    func publish(_ incoming: QueueEngineOutput<Value>) -> Bool {
-        switch QueueEngineGenerations.verdict(published: output?.generation, incoming: incoming.generation) {
+    func publish(_ arriving: QueueEngineOutput<Value>) -> Bool {
+        switch QueueEngineGenerations.verdict(published: output?.generation, incoming: arriving.generation) {
         case .apply:
+            // The card check runs BEFORE the output goes on screen, so a card it proves wrong is never drawn (C1).
+            let incoming = checkedCard(arriving)
             output = incoming
             // A number the engine did not mint moves the counter past it, so the next turn is not refused for it.
             generation = max(generation, incoming.generation)
@@ -646,6 +723,12 @@ final class QueueEngine<Value: Sendable> {
             refused(published, incoming)
             return false
         }
+    }
+
+    /// One pass in the engine's own turn: the derivation's main actor form when it has one, so what a main-thread
+    /// pass records is recorded, and the plain pass otherwise.
+    private func mainPass(_ input: QueueEnginePassInput) -> Value {
+        derivation.onTheMainActor?(input) ?? derivation.derive(input)
     }
 
     /// The next generation, for an output whose inputs are being fixed NOW. Every publisher takes its number here
@@ -670,6 +753,83 @@ final class QueueEngine<Value: Sendable> {
     /// cutover adds beside the verifier's match count (D7).
     var faultSummary: QueueEngineFaults.Summary { faults.summary(at: clock.now()) }
 
+    // MARK: - The landing (#4369, plan item 4)
+
+    /// Opens a landing: until every landing opened is closed, the intake reads at most the landing batch size of
+    /// rows a turn and carries the rest, and no output is published unless Dan acts (a row an action noted, a view
+    /// input, a reload), which then publishes his change with everything taken in so far. Every landing entry point
+    /// opens one and closes it in a `defer` (the cutover, slice E4d), so a landing that throws still closes.
+    func openLanding() -> QueueEngineLanding {
+        landingsOpened += 1
+        openLandings.insert(landingsOpened)
+        return QueueEngineLanding(owner: landingOwner, number: landingsOpened)
+    }
+
+    /// Closes `landing`. When it was the last one open, a turn follows, which reads what is still carried a batch
+    /// at a time and then publishes ONCE. Closing a landing twice, or one this engine did not open, does nothing.
+    func closeLanding(_ landing: QueueEngineLanding) {
+        guard landing.owner == landingOwner, openLandings.remove(landing.number) != nil,
+              openLandings.isEmpty else { return }
+        scheduleTurn()
+    }
+
+    /// Whether a landing holds the intake and the publish: one is open, or rows it brought are still carried.
+    var isHoldingForALanding: Bool { !openLandings.isEmpty || !carried.isEmpty }
+
+    // MARK: - Reload this show (plan item 12)
+
+    /// "Reload this show": the recovery's own proven refetch (`QueueEngineRecovery.refetchByIdentifier`, #4106 probe
+    /// 0b.4) for one faulted show, asked for by Dan rather than waited for, and checked the way recovery checks it,
+    /// through a context of its own (L345). Refused, by name, while the main context holds an unsaved edit on the
+    /// row: a fetch does not bring a dirty row back, and the edit is Dan's (decision 9(a)). A reload that changed a
+    /// stored value is Dan acting, so the next turn publishes it even while a landing holds the queue.
+    func reload(_ identity: ShowIdentity) -> QueueEngineReload {
+        let id = identity.showID
+        let now = clock.now()
+        guard faults.contains(id) else { return .alreadyInStep }
+        guard !rowsWithUnsavedChanges().contains(id) else { return .unsavedEdit }
+        let contacts = recipientParent.filter { $0.value == id }.map(\.key)
+        var resolution = QueueEngineResolution()
+        var changed = 0
+        let found: Bool
+        do {
+            found = try verifierSetup.refetch(id, .shows, context, contacts)
+        } catch {
+            counters.unreadRows.record(at: now)
+            return .unreadable
+        }
+        if !found {
+            // A fetch finding nothing is a deletion (decision 9(a)); the resolve step takes the fault with it.
+            if remove(id, into: &resolution) { changed += 1 }
+            resolveIdentities(resolution)
+            reloaded(changed)
+            return .gone
+        }
+        if readRow(id, table: .shows, now: now, into: &resolution) { changed += 1 }
+        resolveIdentities(resolution)
+        faults.attempted([id], at: now)
+        reloaded(changed)
+        let stored: FactStore
+        do {
+            stored = try verifierSetup.healCheck([id], container)
+        } catch {
+            // The check could not be read, which says nothing about the row (L11).
+            counters.unreadRows.record(at: now)
+            return .unreadable
+        }
+        guard facts.sameRow(id, as: stored), let entry = faults.healed(id) else { return .stillOutOfStep }
+        verifierCounts.healed += 1
+        writeFinding(.healed, fields: entry.fields, at: now)
+        armRecoveryTimer()
+        return .reloaded
+    }
+
+    private func reloaded(_ changed: Int) {
+        guard changed > 0 else { return }
+        changedByReload += changed
+        scheduleTurn()
+    }
+
     // MARK: - The turn
 
     private func scheduleTurn() {
@@ -684,16 +844,19 @@ final class QueueEngine<Value: Sendable> {
         // Nothing is taken in or derived before the launch's first read lands: a pass now would publish an empty
         // queue (D6). What the intake holds meanwhile waits for the first turn after it.
         guard case .ready = launch.firstPaint else { return }
-        // The fill's next step, if it has one, gets the next turn: one batch per turn, never the table in one.
-        defer { if fillWantsATurn { scheduleTurn() } }
+        // The fill's next step, if it has one, gets the next turn: one batch per turn, never the table in one. So
+        // do rows a landing's capped intake carried (#4369).
+        defer { if fillWantsATurn || !carried.isEmpty { scheduleTurn() } }
         counters.turns += 1
         let now = clock.now()
         drainHeldRepeats(at: now)
         let saveCount = saves.value(for: container)
         let filled = fillTurn(now: now)
         let intook = intakeTurn(now: now)
+        let reloadChanged = changedByReload
+        changedByReload = 0
         // Recovery runs after the intake, so a faulted row a save touched this turn is tried again at once.
-        let changed = filled + intook.changed + recover(now: now, touched: intook.touched)
+        let changed = filled + intook.changed + reloadChanged + recover(now: now, touched: intook.touched)
         counters.rowsChanged += changed
         var reasons = clockDue
         clockDue = []
@@ -701,14 +864,29 @@ final class QueueEngine<Value: Sendable> {
         if !sourcesFired.isEmpty { reasons.insert(.sourceFired) }
         sourcesFired = []
         if viewInputsMoved { reasons.insert(.viewInputs) }
+        // Dan acted when an action noted a row, the surface asked for a different view, or he reloaded a show.
+        let danActed = intook.danActed || viewInputsMoved || reloadChanged > 0
         viewInputsMoved = false
         let healing = outputHealFields
         if healing != nil { reasons.insert(.recovery) }
+        // #4369 (decision 8, C4): while a landing holds the queue, nothing is published unless Dan acted, so every
+        // surface waits for one redraw at the end. What a held turn had a reason to derive is kept for that redraw.
+        if isHoldingForALanding, !danActed {
+            if !reasons.isEmpty {
+                heldReasons.formUnion(reasons)
+                counters.heldTurns += 1
+            }
+            return
+        }
+        reasons.formUnion(heldReasons)
+        heldReasons = []
         guard !reasons.isEmpty else { return }
-        let value = derivation.derive(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now))
+        let context = contextInputs()
+        let value = mainPass(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now,
+                                                           context: context))
         let previous = output
         guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: mintGeneration(), now: now,
-                                        reasons: reasons)) else {
+                                        reasons: reasons, context: context)) else {
             // Unreachable while every publisher mints: a minted number is newer than everything published, minted
             // or not. `publish` has already reported the refusal (a Debug stop), and an output never applied is no
             // pass (L78).
@@ -771,10 +949,12 @@ final class QueueEngine<Value: Sendable> {
         clockDue = []
         sourcesFired = []
         viewInputsMoved = false
-        let value = derivation.derive(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now))
+        let context = contextInputs()
+        let value = mainPass(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now,
+                                                           context: context))
         // Nothing is on screen yet, so the gate applies it whatever its number.
         publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
-                                  reasons: [.first]))
+                                  reasons: [.first], context: context))
         counters.passes += 1
         launch.firstPaint = .ready(at: now, attempts: attempt)
         fillAttempts = 1
@@ -923,9 +1103,10 @@ final class QueueEngine<Value: Sendable> {
 
     // MARK: - Intake and the resolve step
 
-    /// Takes in what the intake holds, resolves identities, and reads again every row it names. Returns how
-    /// many stored values changed, and the rows (as the FactStore keys them) the intake named.
-    private func intakeTurn(now: Date) -> (changed: Int, touched: Set<PersistentIdentifier>) {
+    /// Takes in what the intake holds, resolves identities, and reads again every row it names, at most a landing
+    /// batch of them while a landing holds the intake. Returns how many stored values changed, the rows (as the
+    /// FactStore keys them) the intake named, and whether an action Dan took noted one.
+    private func intakeTurn(now: Date) -> (changed: Int, touched: Set<PersistentIdentifier>, danActed: Bool) {
         let pending = intake.drain()
         var resolution = QueueEngineResolution()
         for (temporary, model) in temporaries {
@@ -1032,14 +1213,38 @@ final class QueueEngine<Value: Sendable> {
         }
 
         var second = QueueEngineResolution()
-        if !everything {
-            for id in shows where readShow(id, now: now, into: &second) { changed += 1 }
-            for id in inquiries where readInquiry(id, now: now, into: &second) { changed += 1 }
-            for id in small where readSmallTableRow(id, now: now, into: &second) { changed += 1 }
+        // The rows an action Dan took noted, as the FactStore keys them: read first, whatever a landing's cap says.
+        let actedOn = rowsOwning(pending.noted.compactMap(current))
+        if everything {
+            // Every row is read, so nothing a landing carried is still owed.
+            carried = []
+            changed += readEverything(into: &second)
+        } else {
+            for id in rowsThisTurn(shows.union(inquiries).union(small), actedOn: actedOn) {
+                guard let table = FactStore.Table.holding(id.entityName) else { continue }
+                if readRow(id, table: table, now: now, into: &second) { changed += 1 }
+            }
         }
-        if everything { changed += readEverything(into: &second) }
         resolveIdentities(second)
-        return (changed, shows.union(inquiries).union(small).union(foreignRows))
+        return (changed, shows.union(inquiries).union(small).union(foreignRows), !pending.noted.isEmpty)
+    }
+
+    /// The rows this turn reads: every one named, and every one a landing carried. While a landing holds the intake
+    /// (#4369), at most `landingSetup.batchSize`, Dan's own first and always, the rest in identifier order so a
+    /// carry is deterministic; what does not fit is carried to the next turn, which `runTurn` asks for.
+    private func rowsThisTurn(_ named: Set<PersistentIdentifier>,
+                              actedOn: Set<PersistentIdentifier>) -> [PersistentIdentifier] {
+        let holding = isHoldingForALanding
+        let all = named.union(carried)
+        carried = []
+        guard holding else { return Array(all) }
+        let first = all.intersection(actedOn)
+        let rest = all.subtracting(first).sorted()
+        let room = max(0, landingSetup.batchSize - first.count)
+        carried = Set(rest.dropFirst(room))
+        let taken = Array(first) + rest.prefix(room)
+        if !taken.isEmpty { counters.landingBatches += 1 }
+        return taken
     }
 
     /// The rows, as the FactStore keys them, that `ids` belong to: a contact's is its show's, and a model the pass
@@ -1178,8 +1383,28 @@ final class QueueEngine<Value: Sendable> {
 
     private func snapshot(of output: QueueEngineOutput<Value>) -> QueueEngineSnapshot<Value> {
         QueueEngineSnapshot(saveCount: output.saveCount, generation: output.generation, facts: facts,
-                            viewInputs: publishedViewInputs ?? viewInputs, now: output.now, value: output.value,
-                            clean: !context.hasChanges)
+                            viewInputs: publishedViewInputs ?? viewInputs, context: output.context, now: output.now,
+                            value: output.value, clean: !context.hasChanges)
+    }
+
+    /// The card check at publish (#4357 step 9): the output as it should go on screen, with the card the check
+    /// proved wrong replaced (C1), and the finding recorded and counted. Unchanged when the derivation builds no
+    /// cards or the card agrees.
+    private func checkedCard(_ incoming: QueueEngineOutput<Value>) -> QueueEngineOutput<Value> {
+        guard let check = derivation.checkAtPublish else { return incoming }
+        let checked: QueueEngineCardCheck<Value>?
+        do {
+            checked = try check(incoming.value, context)
+        } catch {
+            counters.unreadRows.record(at: incoming.now)
+            return incoming
+        }
+        guard let found = checked else { return incoming }
+        verifierCounts.cardDivergences += 1
+        writeFinding(.cardDivergence, fields: found.fields, at: incoming.now, judged: incoming.generation,
+                     cardsBuilt: found.cardsBuilt)
+        return QueueEngineOutput(value: found.corrected, saveCount: incoming.saveCount, generation: incoming.generation,
+                                 now: incoming.now, reasons: incoming.reasons, context: incoming.context)
     }
 
     private func startVerification() {
@@ -1239,6 +1464,13 @@ final class QueueEngine<Value: Sendable> {
             faults.admit(rows, origin: .verifier, at: now)
             armUnverifiedTimer()
             scheduleTurn()
+        case .cardMismatch(let fields, let judged):
+            // Comparison (iv): the facts and the output agreed with the store, and a card built from them did not
+            // agree with the same card built from the saved show. The term disagrees with itself over facts and
+            // over models, which no refetch can heal, so it is recorded and counted, never faulted.
+            verifierCounts.cardMismatches += 1
+            writeFinding(.cardMismatch, fields: fields, at: now, judged: judged)
+            armUnverifiedTimer()
         case .outputMismatch(let fields, let judged):
             verifierCounts.outputMismatches += 1
             writeFinding(.outputMismatch, fields: fields, at: now, judged: judged)
@@ -1262,7 +1494,7 @@ final class QueueEngine<Value: Sendable> {
         // on screen: once more after the next quiet moment (L710).
         let verdict: Bool
         switch result {
-        case .match, .factMismatch, .outputMismatch: verdict = true
+        case .match, .factMismatch, .outputMismatch, .cardMismatch: verdict = true
         case .superseded, .cancelled, .unmeasured: verdict = false
         }
         if verdict { consecutiveRetries = 0 }
@@ -1305,10 +1537,12 @@ final class QueueEngine<Value: Sendable> {
     /// One record into the divergence log, through its cooldown (D8), and into `verifierFindings`. Field NAMES
     /// only, never a show (C7, L222). #4583: it names the output it is about, `judged` for a verification's
     /// verdict and the one on screen otherwise; the log's write stamps the build.
-    private func writeFinding(_ kind: CardDivergenceRecord.Kind, fields: [String], at now: Date, judged: Int? = nil) {
+    private func writeFinding(_ kind: CardDivergenceRecord.Kind, fields: [String], at now: Date, judged: Int? = nil,
+                              cardsBuilt: Int = 0) {
         findingSequence += 1
         let record = CardDivergenceRecord(session: session, sequence: findingSequence, at: now,
-                                          fields: Array(Set(fields)).sorted(), cardsBuilt: 0, stage: nil, kind: kind,
+                                          fields: Array(Set(fields)).sorted(), cardsBuilt: cardsBuilt, stage: nil,
+                                          kind: kind,
                                           generation: judged ?? output?.generation)
         verifierFindings.append(record)
         if verifierFindings.count > Self.findingsKept { verifierFindings.removeFirst() }
@@ -1639,6 +1873,8 @@ extension QueueEngine {
                 engine.recipientParent = next
             }),
             IdentityKeyedState(path: "armed", disposition: .resolved { $0.armed.resolve($1) }),
+            // #4369: a deleted row is no longer owed a read, and a re-keyed one is owed it under its new identifier.
+            IdentityKeyedState(path: "carried", disposition: .resolved { $0.carried.resolve($1) }),
             // A deleted row is out of step with nothing, and a re-keyed one is faulted under its new identifier.
             IdentityKeyedState(path: "faults.entries", disposition: .resolved { $0.faults.resolve($1) }),
             // A run in flight compares outputs as they WERE, whole, so nothing in its ring is purged; a deletion
@@ -1676,5 +1912,80 @@ extension QueueEngine {
             IdentityKeyedState(path: "signals", disposition: .namesInputsNotRows),
             IdentityKeyedState(path: "sourcesFired", disposition: .namesInputsNotRows),
         ]
+    }
+}
+
+// MARK: - The show resolver (#4358 slice E4b, plan item 11)
+
+// What an action resolves its show THROUGH once the cutover (slice E4d) hands the engine to the surfaces: the rows
+// the engine holds, by identifier, never by key, and never through a render pass's captured list (#3690).
+//
+// THE FILL'S FALLBACK. While the launch fill is still taking shows in, a row it has not reached is not held, yet
+// the first output is already on screen and Dan can press it. Such a row is found through the main context by its
+// identifier (`FactStore.Table.liveRow`, which fetches rather than trusting `model(for:)`, whose answer for a row
+// deleted and saved reads as live, #4106 probe 2) and noted dirty, so the next turn takes it in and arms it.
+//
+// THE FAULT REFUSAL. A row the verifier or a foreign save faulted is found and then refused (`isOutOfStep`), so an
+// action can never save the main context's stale copy over the stored one (D7).
+extension QueueEngine: ShowResolver {
+    func liveShow(_ id: PersistentIdentifier) -> Prospect? {
+        if let held = showMembers[id] ?? (temporaries[id] as? Prospect) { return StoreRows.isLive(held) ? held : nil }
+        guard isStillFilling else { return nil }
+        do {
+            guard let show = try FactStore.Table.shows.liveRow(id, in: context) as? Prospect else { return nil }
+            noteChanged(show)
+            return show
+        } catch {
+            // A failed read is not a deletion (L215); the press is refused as a show not found, and counted.
+            counters.unreadRows.record(at: clock.now())
+            return nil
+        }
+    }
+
+    func identities(forKeys keys: Set<String>) -> [String: ShowIdentity] {
+        var out: [String: ShowIdentity] = [:]
+        // Two rows hold one key only between an insert and the save that refuses it; the lower identifier wins, so
+        // the answer does not depend on dictionary order.
+        for (id, row) in facts.shows where keys.contains(row.naturalKey) {
+            if let held = out[row.naturalKey], held.showID < id { continue }
+            out[row.naturalKey] = ShowIdentity(showID: id, naturalKey: row.naturalKey)
+        }
+        let missing = keys.subtracting(out.keys)
+        guard isStillFilling, !missing.isEmpty else { return out }
+        do {
+            let wanted = Array(missing)
+            // In key order where it is read (#4406): two rows holding one key resolve the same way on every read.
+            let found = Prospect.inKeyOrder(try context.fetch(FetchDescriptor<Prospect>(predicate: #Predicate<Prospect> { wanted.contains($0.naturalKey) })))
+            for show in found where out[show.naturalKey] == nil && StoreRows.isLive(show) {
+                noteChanged(show)
+                out[show.naturalKey] = ShowIdentity(show)
+            }
+        } catch {
+            counters.unreadRows.record(at: clock.now())
+        }
+        return out
+    }
+
+    /// Every held show in key order (L343). While the fill runs, the held shows are not yet every show, so the main
+    /// context is read whole instead: this serves only the bulk actions, which already paid a whole read.
+    var everyShow: [Prospect] {
+        if isStillFilling {
+            do {
+                return Prospect.inKeyOrder(try context.fetch(FetchDescriptor<Prospect>()))
+            } catch {
+                // Counted, and the shows held so far stand in: a failed read is not an empty store (L215).
+                counters.unreadRows.record(at: clock.now())
+            }
+        }
+        return Prospect.inKeyOrder(showMembers.values.filter { StoreRows.isLive($0) })
+    }
+
+    func isOutOfStep(_ id: PersistentIdentifier) -> Bool { isFaulted(id) }
+
+    /// Whether the launch has not yet taken every show in: the first read has not landed, or the fill is under way
+    /// or failed part way.
+    private var isStillFilling: Bool {
+        if case .done = launch.fill { return false }
+        return true
     }
 }

@@ -86,7 +86,7 @@ enum VerifierRig {
                                  events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                                  saveCenter: saveCenter, schedule: turns.schedule,
                                  refused: { Issue.record("a generation \($1) was refused over \($0)") }, verifier: setup,
-                                 launch: QueueEngineLaunchSetup(reads: .inTurn))
+                                 launch: QueueEngineLaunchSetup(reads: .inTurn), contextInputs: { EngineHarness.noSignals })
         engine.start()
         turns.run()
         return engine
@@ -99,9 +99,7 @@ enum VerifierRig {
     }
 
     static func outcomes(_ engine: CountsEngine) -> Int {
-        let c = engine.verifierCounts
-        return c.matches + c.factMismatches + c.outputMismatches + c.superseded + c.cancelled
-            + c.unmeasured.values.reduce(0, +)
+        engine.verifierCounts.ended
     }
 }
 
@@ -160,7 +158,7 @@ final class QueueEngineVerifierOutcomeTests {
         var wrong = current.value
         wrong.shows += 7
         engine.publish(QueueEngineOutput(value: wrong, saveCount: current.saveCount, generation: engine.mintGeneration(),
-                                         now: current.now, reasons: [.first]))
+                                         now: current.now, reasons: [.first], context: current.context))
         engine.verifyNow()
         await VerifierRig.finished(engine, beyond: 0, "the verification of a wrong output")
         #expect(engine.verifierCounts.outputMismatches == 1)
@@ -634,7 +632,8 @@ final class QueueEngineVerifierTriggerTests {
     }
 
     @Test func everyVerifierKindHasTheCooldown() {
-        for kind in [CardDivergenceRecord.Kind.factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
+        for kind in [CardDivergenceRecord.Kind.factMismatch, .outputMismatch, .cardMismatch, .foreignSave, .healed,
+                     .healDidNotConverge,
                      .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped] {
             #expect(kind.cooldown == 600, "\(kind)")
         }

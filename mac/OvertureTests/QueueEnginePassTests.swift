@@ -111,13 +111,15 @@ final class QueueEngineGateTests {
         turns.run()
         let current = try #require(engine.output)
         engine.publish(QueueEngineOutput(value: EngineDerivations.Counts(), saveCount: 0,
-                                         generation: current.generation, now: current.now, reasons: [.first]))
+                                         generation: current.generation, now: current.now, reasons: [.first],
+                                         context: current.context))
         #expect(refusals.list.count == 1 && refusals.list.first?.0 == current.generation
                 && refusals.list.first?.1 == current.generation)
         #expect(engine.output?.value == current.value, "a refused output replaced the one on screen")
         // The positive control: a newer one is applied.
         engine.publish(QueueEngineOutput(value: EngineDerivations.Counts(), saveCount: 0,
-                                         generation: current.generation + 1, now: current.now, reasons: [.first]))
+                                         generation: current.generation + 1, now: current.now, reasons: [.first],
+                                         context: current.context))
         #expect(engine.output?.generation == current.generation + 1 && refusals.list.count == 1)
     }
 
@@ -294,7 +296,8 @@ final class QueueEngineClockTests {
         let current = try #require(engine.output)
         // Another caller publishes, numbering its output itself, before the floor's turn.
         engine.publish(QueueEngineOutput(value: current.value, saveCount: current.saveCount,
-                                         generation: current.generation + 1, now: current.now, reasons: [.first]))
+                                         generation: current.generation + 1, now: current.now, reasons: [.first],
+                                         context: current.context))
         #expect(engine.output?.generation == current.generation + 1, "the other caller's output was not applied")
         await waitUntil("the published output's timer is sleeping") { clock.waiting == 1 }
         let passes = engine.counters.passes
@@ -325,7 +328,7 @@ final class QueueEngineClockTests {
         turns.run()
         #expect(engine.output?.generation == early + 1, "the turn did not take the next number")
         engine.publish(QueueEngineOutput(value: current.value, saveCount: current.saveCount, generation: early,
-                                         now: current.now, reasons: [.first]))
+                                         now: current.now, reasons: [.first], context: current.context))
         #expect(refusals.list.count == 1 && refusals.list.first?.1 == early,
                 "an output whose inputs predate the one on screen was applied over it")
         #expect(engine.output?.generation == early + 1)
@@ -356,11 +359,11 @@ final class QueueEngineClockTests {
 // something, none for a write that changed nothing). The seed is printed with every line, so a failure
 // reproduces.
 //
-// WHAT THIS CANNOT YET ASSERT, said every run rather than left out (L460). The plan's second half of the
-// condition is that the engine's OUTPUT equals `QueueRenderPass.make` over the fresh facts at the same pinned
-// `now`. That needs `make` over facts, which needs every term generic over the facts protocols and a RenderData
-// holding no model (#4357), so the output arm prints UNMEASURED for every kind until the cutover (#4358, slice
-// E4) hands the engine that derivation.
+// THE OUTPUT ARM (#4358 slice E4b). The plan's second half of the condition: the engine's OUTPUT equals the queue's
+// own pass (`QueueEngineQueue.derive`, `QueueRenderPass.make` over facts since slice E4a) over the FRESH read, at the
+// output's own instant, view and signal inputs, compared member by member (`RenderDataComparison`). Until E4b this
+// arm printed UNMEASURED, because the engine could only be handed a counting derivation; the engine here now runs
+// the queue's own, so every kind and size is measured and asserted.
 //
 // ITS COST, because the main actor is one serial queue every `@MainActor` suite waits in (testing.md, "How much
 // of the Swift suite runs on the main actor"). The draft of this matrix held it for 63.8 s per run (measured
@@ -370,9 +373,10 @@ final class QueueEngineClockTests {
 // shows get the 401 show store; the rest insert their own rows or touch other tables, and 40 shows serve them.
 // The sizes stay 1, 60 and 300, which is the plan's condition.
 //
-// Three kinds are DECLARED here and run by the slice that builds what they exercise: the scout landing as a
-// bulk kind (#4369), the reconcile tick, and a saved or unsaved change landing on a row the launch fill has
-// not armed yet (D6). Declared rather than left out, so the slice that owns each finds it named.
+// Two kinds are DECLARED here and run by the slice that builds what they exercise: the reconcile tick, and a saved
+// or unsaved change landing on a row the launch fill has not armed yet (D6). Declared rather than left out, so the
+// slice that owns each finds it named. The scout landing (#4369) runs here since slice E4b, with the landing's batch
+// forced to ONE row, so every size takes the multi-batch path the default of 150 reaches only past 150 rows (L101).
 enum EngineChangeKind: String, CaseIterable, Sendable {
     case dismiss
     case bulkReprep
@@ -401,7 +405,6 @@ enum EngineChangeKind: String, CaseIterable, Sendable {
     /// The slice that runs a declared kind, or nil for one this matrix runs.
     var declaredFor: String? {
         switch self {
-        case .scoutLanding: return "#4369, the scout landing as a declared bulk kind, run by the cutover (#4358 E4)"
         case .reconcileTick: return "the reconcile tick's writers, run by the cutover (#4358 E4)"
         case .launchFillUnarmedRow: return "a change on a row the launch fill has not armed, run by the launch slice (#4358 E3)"
         default: return nil
@@ -425,9 +428,10 @@ final class QueueEngineChangeKindMatrixTests {
     static let sizes = [1, 60, 300]
     static let seed: UInt64 = 4358
 
-    @Test func theMatrixNamesTheScoutLandingAsADeclaredBulkKind() {
-        #expect(EngineChangeKind.scoutLanding.declaredFor?.contains("#4369") == true)
-        #expect(EngineChangeKind.allCases.filter { $0.declaredFor == nil }.count >= 20)
+    // #4358 slice E4b: the landing is RUN now, no longer declared for a later slice (L373, the premise consumed).
+    @Test func theMatrixRunsTheScoutLandingAsABulkKind() {
+        #expect(EngineChangeKind.scoutLanding.declaredFor == nil)
+        #expect(EngineChangeKind.allCases.filter { $0.declaredFor == nil }.count >= 21)
     }
 
     @Test(arguments: EngineChangeKind.allCases)
@@ -449,7 +453,9 @@ final class QueueEngineChangeKindMatrixTests {
         }
         try store.context.save()
         let turns = EngineTurns()
-        let engine = EngineHarness.engine(store, EngineDerivations.counts(), turns: turns)
+        // The queue's own derivation, so the output arm is measured; the landing's batch forced to one row (L101).
+        let engine = EngineHarness.engine(store, QueueEngineQueue.derivation(freezeWatch: { nil }), turns: turns,
+                                          landing: QueueEngineLandingSetup(batchSize: 1))
         engine.start()
         turns.run()
         let setUp = clock.now - built
@@ -470,11 +476,25 @@ final class QueueEngineChangeKindMatrixTests {
             let read = clock.now - reading
             let equal = engine.facts == fresh
             let took = engine.counters.passes - passes
+            // The output arm: the pass over the FRESH read, at the output's own instant, view and signal inputs, off
+            // the main actor like the read.
+            let output = try #require(engine.output, "the engine published nothing to compare")
+            let rebuilding = clock.now
+            let input = QueueEnginePassInput(facts: fresh, viewInputs: engine.viewInputs, now: output.now,
+                                             context: output.context)
+            let rebuilt = await Task.detached { QueueEngineQueue.derive(input) }.value
+            let outputFields = QueueEngineQueue.differingFields(output.value, rebuilt)
+            let rebuild = clock.now - rebuilding
             print("engine-matrix seed \(Self.seed) kind \(kind.rawValue) rows \(size): facts "
                   + (equal ? "equal a fresh read" : "DIFFER from a fresh read (\(Self.differing(engine.facts, fresh)))")
-                  + ", passes \(took) (expected \(expectedPasses)); output arm UNMEASURED until make runs over facts"
-                  + "; set up \(setUp), applied \(applied), fresh read \(read)")
+                  + ", passes \(took) (expected \(expectedPasses)); output "
+                  + (outputFields.isEmpty ? "equals the pass over the fresh read"
+                                          : "DIFFERS from the pass over the fresh read in "
+                                              + outputFields.joined(separator: ", "))
+                  + "; set up \(setUp), applied \(applied), fresh read \(read), rebuild \(rebuild)")
             #expect(equal, "seed \(Self.seed) kind \(kind.rawValue) rows \(size): the facts differ from a fresh read")
+            #expect(outputFields.isEmpty, Comment(rawValue: "seed \(Self.seed) kind \(kind.rawValue) rows \(size): the "
+                + "output differs from the pass over a fresh read in " + outputFields.joined(separator: ", ")))
             #expect(took == expectedPasses,
                     "seed \(Self.seed) kind \(kind.rawValue) rows \(size): \(took) passes, expected \(expectedPasses)")
             #expect(engine.facts.shows.keys.allSatisfy { $0.storeIdentifier != nil },
@@ -494,7 +514,7 @@ final class QueueEngineChangeKindMatrixTests {
 
     /// Applies `kind` to `rows` rows, runs the turns it causes, and returns how many passes the gate should
     /// have derived.
-    private func apply(_ kind: EngineChangeKind, rows n: Int, store: EngineStore, engine: CountsEngine,
+    private func apply(_ kind: EngineChangeKind, rows n: Int, store: EngineStore, engine: QueueEngine<QueueEnginePass>,
                        turns: EngineTurns, touched: inout Set<PersistentIdentifier>,
                        rng: inout SeededGenerator) async throws -> Int {
         let context = store.context
@@ -683,7 +703,26 @@ final class QueueEngineChangeKindMatrixTests {
             turns.run()
             #expect(engine.facts == before, "a context source changed a stored fact")
             return 1
-        case .scoutLanding, .reconcileTick, .launchFillUnarmedRow:
+        case .scoutLanding:
+            // #4369: a landing hands back at its awaits, so its rows arrive in several saves while it is open. With
+            // the batch forced to one row, every row is its own turn, and none of those turns publishes.
+            let passes = engine.counters.passes
+            let batches = engine.counters.landingBatches
+            let landing = engine.openLanding()
+            for part in [n / 3, n / 3, n - 2 * (n / 3)] where part > 0 {
+                for _ in 0..<part { store.addShow(contacts: store.int(0...2)) }
+                try commit()
+            }
+            #expect(engine.counters.passes == passes, "rows \(n): the engine published while the landing was open")
+            #expect(engine.counters.landingBatches - batches >= n,
+                    "rows \(n): \(engine.counters.landingBatches - batches) batches, so the multi-batch path did not run")
+            #expect(engine.isHoldingForALanding, "rows \(n): the landing stopped holding before it closed")
+            engine.closeLanding(landing)
+            turns.run()
+            #expect(!engine.isHoldingForALanding)
+            // One publish, at the close.
+            return 1
+        case .reconcileTick, .launchFillUnarmedRow:
             return 0
         }
     }

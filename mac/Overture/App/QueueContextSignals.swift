@@ -54,6 +54,10 @@ enum QueueInputSource: Equatable, Sendable {
             Where the surface records which cards it drew, for the next pass. Written by the render and \
             never read as an input to this one.
             """),
+        "checksACardInThePass": .notAnInput(reason: """
+            Whether the pass checks one of its own cards, which is how the pass runs rather than what it reads. \
+            The queue engine checks at publish instead (#4358 slice E4b).
+            """),
         "producerTables": .notAnInput(reason: """
             A prebuilt copy of a value the pass derives from its own store inputs. The engine owns that \
             table and patches it (plan v7 T4); it is never an input in its own right.

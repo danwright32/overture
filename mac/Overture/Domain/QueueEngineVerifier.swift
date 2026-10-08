@@ -20,7 +20,9 @@ import SwiftData
 // comparisons. (i) facts by identity and (iii) the output from fresh facts are here. (ii) ProducerTables built
 // cold against the retained copy waits for there to BE a retained copy, which is Phase 4b's T4 (#4362); today the
 // pass builds them cold every time, so (iii) covers them. (iv) the card term on background models against cards
-// from extracted facts waits for the engine to build cards, the cutover (#4358, slice E4).
+// from extracted facts is here since #4358 slice E4b, through the derivation's `compareCards`, made only once (i)
+// and (iii) have agreed and only while no save has landed since the read (a later save would make the models
+// newer than the facts they are compared with).
 
 /// One fresh read of the SAVED store, made through a context of its own, and what a count said beside it.
 struct QueueEngineFreshRead: Sendable {
@@ -50,6 +52,8 @@ struct QueueEngineSnapshot<Value: Sendable>: Sendable {
     let generation: Int
     let facts: FactStore
     let viewInputs: QueueEngineViewInputs
+    /// #4358 slice E4b: the inputs that arrived by a signal for this output, which a rebuild derives from.
+    let context: QueueEngineContextInputs
     let now: Date
     let value: Value
     /// Whether the main context held no unsaved change when this was published. The engine's facts include the
@@ -66,6 +70,9 @@ enum QueueEngineVerification: Equatable, Sendable {
     case factMismatch(rows: [PersistentIdentifier: [String]], generation: Int)
     /// The facts agree and the published output does not equal the pass over them, by field name.
     case outputMismatch(fields: [String], generation: Int)
+    /// #4358 slice E4b, comparison (iv): the facts and the output agree, and a card the output built differs from
+    /// the same card built from the saved show's model, by field name.
+    case cardMismatch(fields: [String], generation: Int)
     /// Every read straddled a save, or none landed at a save count a snapshot describes.
     case superseded
     /// The engine stopped the run: more changes arrived than the ring holds, or a row was deleted under it.
@@ -131,7 +138,21 @@ enum QueueEngineVerifier {
             if fresh.isShort { return .unmeasured(.shortRead) }
             if cancelled() { return .cancelled }
             guard let snapshot = ring().last(where: { $0.saveCount == before && $0.clean }) else { return .superseded }
-            return compare(snapshot, with: fresh.facts, derivation: derivation)
+            let verdict = compare(snapshot, with: fresh.facts, derivation: derivation)
+            guard case .match = verdict, let compareCards = derivation.compareCards else { return verdict }
+            // (iv): the cards, from models a context of the comparison's own reads now. A save landing during that
+            // read makes those models newer than the facts they are judged against, so the whole run reads again.
+            let fields: [String]
+            do {
+                fields = try compareCards(snapshot.value, container)
+            } catch {
+                return .unmeasured(.readFailed)
+            }
+            guard saves.value(for: container) == before else { continue }
+            guard fields.isEmpty else {
+                return .cardMismatch(fields: Array(Set(fields)).sorted(), generation: snapshot.generation)
+            }
+            return verdict
         }
         return .superseded
     }
@@ -153,7 +174,8 @@ enum QueueEngineVerifier {
     static func needsAnother(after result: QueueEngineVerification, onScreen: Int?) -> Bool {
         switch result {
         case .superseded, .cancelled: return true
-        case .match(let generation), .factMismatch(_, let generation), .outputMismatch(_, let generation):
+        case .match(let generation), .factMismatch(_, let generation), .outputMismatch(_, let generation),
+             .cardMismatch(_, let generation):
             return generation < (onScreen ?? generation)
         case .unmeasured: return false
         }
@@ -166,7 +188,7 @@ enum QueueEngineVerifier {
         let rows = snapshot.facts.mismatches(against: fresh)
         guard rows.isEmpty else { return .factMismatch(rows: rows, generation: snapshot.generation) }
         let rebuilt = derivation.derive(QueueEnginePassInput(facts: fresh, viewInputs: snapshot.viewInputs,
-                                                             now: snapshot.now))
+                                                             now: snapshot.now, context: snapshot.context))
         let fields = derivation.differingFields(snapshot.value, rebuilt).sorted()
         guard fields.isEmpty else { return .outputMismatch(fields: fields, generation: snapshot.generation) }
         return .match(generation: snapshot.generation)
@@ -456,6 +478,10 @@ struct QueueEngineVerifierCounts: Equatable, Sendable {
     var matches = 0
     var factMismatches = 0
     var outputMismatches = 0
+    /// #4358 slice E4b: cards the check at publish found wrong and replaced before they were drawn, and cards
+    /// comparison (iv) found built differently over facts than over the saved show.
+    var cardDivergences = 0
+    var cardMismatches = 0
     var superseded = 0
     var cancelled = 0
     var unmeasured: [QueueEngineVerification.Unmeasured: Int] = [:]

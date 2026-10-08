@@ -159,6 +159,11 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         case factMismatch
         /// The facts agreed and the output on screen was not the pass over them.
         case outputMismatch
+        /// #4358 slice E4b, the verifier's comparison (iv): the facts and the output agreed with the store, and a card
+        /// the output built differed from the same card built from the saved show. Not corrected (the card may not
+        /// be on screen), and not healed (no refetch changes a term that disagrees with itself), so said apart from
+        /// `cardDivergence`, which its reader says was corrected before it was drawn (L11).
+        case cardMismatch
         /// A save through another context touched these tables, and their rows were faulted (decision 9(a)).
         case foreignSave
         /// A faulted row, or an output, came back into step.
@@ -183,7 +188,7 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         var cooldown: TimeInterval {
             switch self {
             case .cardDivergence: return 0
-            case .noOpDirty, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
+            case .noOpDirty, .factMismatch, .outputMismatch, .cardMismatch, .foreignSave, .healed, .healDidNotConverge,
                  .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped, .unrecognised:
                 return 600
             }

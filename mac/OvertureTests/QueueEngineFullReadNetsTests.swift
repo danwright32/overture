@@ -100,7 +100,7 @@ final class EngineNetRun {
                              clock: .system,
                              events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                              schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand),
-                             launch: QueueEngineLaunchSetup(reads: .inTurn))
+                             launch: QueueEngineLaunchSetup(reads: .inTurn), contextInputs: { EngineHarness.noSignals })
     }
 
     struct LaunchDidNotEnd: Error, CustomStringConvertible {
@@ -117,8 +117,7 @@ final class EngineNetRun {
             return true
         }
         func inFlight(_ c: QueueEngineVerifierCounts) -> Int {
-            c.started - (c.matches + c.factMismatches + c.outputMismatches + c.superseded + c.cancelled
-                         + c.unmeasured.values.reduce(0, +))
+            c.started - c.ended
         }
         let ended = await waitUntil("the launch fill and its forced verification", timeout: .seconds(300)) {
             guard case .done = engine.launch.fill else { return false }
@@ -168,8 +167,7 @@ final class EngineNetRun {
     func verify() async -> Verdict {
         let before = engine.verifierCounts
         func verdicts(_ c: QueueEngineVerifierCounts) -> Int {
-            c.matches + c.factMismatches + c.outputMismatches + c.superseded + c.cancelled
-                + c.unmeasured.values.reduce(0, +)
+            c.ended
         }
         engine.verifyNow()
         let received = await waitUntil("the verifier's verdict", timeout: .seconds(120)) {

@@ -24,7 +24,7 @@ enum LaunchRig {
                     events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
                     saveCenter: saveCenter, schedule: turns.schedule,
                     refused: { Issue.record("a generation \($1) was refused over \($0)") },
-                    verifier: verifier, launch: launch)
+                    verifier: verifier, launch: launch, contextInputs: { EngineHarness.noSignals })
     }
 
     static func inTurn(batchSize: Int = QueueEngineLaunchFill.batchSize) -> QueueEngineLaunchSetup {
@@ -304,7 +304,8 @@ final class QueueEngineLaunchFillTests {
         #expect(engine.facts == fresh)
         let output = try #require(engine.output)
         let oracle = EngineDerivations.counts().derive(QueueEnginePassInput(facts: fresh, viewInputs: engine.viewInputs,
-                                                                             now: output.now))
+                                                                             now: output.now,
+                                                                             context: output.context))
         #expect(output.value == oracle)
         // Admitted means watched: an unsaved edit on it alone reaches the engine.
         moved.fitReason = "edited after its admission"
