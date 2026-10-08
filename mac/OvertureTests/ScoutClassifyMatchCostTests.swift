@@ -77,11 +77,11 @@ struct ScoutClassifyMatchCostTests {
         return Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
     }
 
-    private func median(_ work: () -> Void) -> (median: Double, low: Double, high: Double) {
-        var runs: [Double] = []
-        for _ in 0..<5 { runs.append(seconds(work)) }
-        runs.sort()
-        return (runs[2], runs[0], runs[4])
+    /// The median of five runs with its spread, in seconds. #4617: taken through `Phase0.reading`, which prints
+    /// the median's `probe reading:` line under `metric`, in milliseconds, for the before and after comparison.
+    private func secondsReading(_ metric: String, _ work: () -> Void) -> (median: Double, low: Double, high: Double) {
+        let reading = Phase0.reading(metric, runs: (0..<5).map { _ in seconds(work) * 1000 })
+        return (reading.median / 1000, reading.low / 1000, reading.high / 1000)
     }
 
     @Test func measureWhatRenormalizingCosts() {
@@ -103,15 +103,20 @@ struct ScoutClassifyMatchCostTests {
         }
 
         _ = sweep(clients: clients, history: history)          // warm
-        let whole = median { sweep(clients: clients, history: history) }
         _ = sweep(clients: [], history: [])
-        let noCorpus = median { sweep(clients: [], history: []) }
+        // #4617: the matching cost is the difference between these two arms, so they alternate which goes first,
+        // sample by sample: timed one after the other, the second carried the order effect into the difference.
+        let arms = Phase0.alternating([
+            ("scoutmatch-whole", { sweep(clients: clients, history: history) }),
+            ("scoutmatch-noCorpus", { sweep(clients: [], history: []) }),
+        ]).map { (median: $0.median / 1000, low: $0.low / 1000, high: $0.high / 1000) }
+        let (whole, noCorpus) = (arms[0], arms[1])
 
         // The names a cache would hold: every client name and every history name, tokenized once per
         // event, which is what the sweep does today and what a per-sweep cache would do once.
         let corpusNames = clients.flatMap { HistoryMatch.clientNames($0) } + history.map(\.groupName)
         _ = corpusNames.map(GroupNameMatch.tokens)
-        let normalizing = median {
+        let normalizing = secondsReading("scoutmatch-normalizing") {
             for _ in 0..<Self.events { _ = corpusNames.map(GroupNameMatch.tokens) }
         }
 

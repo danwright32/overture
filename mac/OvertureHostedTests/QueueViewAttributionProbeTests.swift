@@ -379,11 +379,10 @@ enum ViewAttributionProbe {
     }
     static func say(_ line: String) { print("va " + line) }
     static func f(_ v: Double) -> String { v.isNaN ? "n/a" : String(format: "%.1f", v) }
-    static func median(_ v: [Double]) -> Double {
+    static func median(_ v: [Double]) -> Double { // probe-reading-exempt: shares and per round figures; the timings this reports print their lines through Phase0.reading beside them
         let s = v.filter { !$0.isNaN }.sorted()
-        return s.isEmpty ? .nan : s[s.count / 2]
+        return s.isEmpty ? .nan : s[s.count / 2] // probe-reading-exempt: shares and per round figures; the timings this reports print their lines through Phase0.reading beside them
     }
-    static func medianInt(_ v: [Int]) -> Int { v.isEmpty ? 0 : v.sorted()[v.count / 2] }
     static func spread(_ v: [Double]) -> String {
         let s = v.filter { !$0.isNaN }
         guard let lo = s.min(), let hi = s.max() else { return "n/a" }
@@ -605,24 +604,26 @@ struct QueueViewAttributionProbeTests {
         let P = ViewAttributionProbe.self
         let settled = k.readings.filter(\.settled.completed)
         let c = k.readings.map(\.counts)
+        // #4617: the median of round medians as the line the before and after comparison reads.
+        _ = Phase0.reading("va-\(label)-\(k.name)-roundCPU", runs: k.roundCPU.filter { !$0.isNaN })
         P.say("\(label) \(k.name): Debug build | rounds \(k.rounds.count) of \(ViewAttributionProbe.rounds), "
               + "readings \(k.readings.count) (\(k.readings.count - settled.count) never settled) | cpu per reading "
               + "UNDER the sampler, median of round medians \(P.f(P.median(k.roundCPU))) ms, rounds "
               + "\(P.spread(k.roundCPU)) | \(Phase0.load())"
               + (k.failures.isEmpty ? "" : " | FAILURES: " + k.failures.joined(separator: "; ")))
-        P.say("\(label) \(k.name) counts per reading (median, max): queue bodies \(P.medianInt(c.map(\.bodies))), "
-              + "card bodies \(P.medianInt(c.map(\.cardBodies))) (\(c.map(\.cardBodies).max() ?? 0)) over "
-              + "\(P.medianInt(c.map(\.cardsEvaluated))) distinct cards, rows realised "
-              + "\(P.medianInt(c.map(\.realised))) (\(c.map(\.realised).max() ?? 0)), date groups realised "
-              + "\(P.medianInt(c.map(\.groupsRealised))) holding \(P.medianInt(c.map(\.rowsInRealisedGroups))) rows, "
-              + "cards built in the body \(P.medianInt(c.map(\.cardsBuiltInBody))), contacts reached "
-              + "\(P.medianInt(c.map(\.recipientReaches))), stage rows \(P.medianInt(c.map(\.stageRows))) "
+        P.say("\(label) \(k.name) counts per reading (median, max): queue bodies \(Phase0.medianCount(c.map(\.bodies))), "
+              + "card bodies \(Phase0.medianCount(c.map(\.cardBodies))) (\(c.map(\.cardBodies).max() ?? 0)) over "
+              + "\(Phase0.medianCount(c.map(\.cardsEvaluated))) distinct cards, rows realised "
+              + "\(Phase0.medianCount(c.map(\.realised))) (\(c.map(\.realised).max() ?? 0)), date groups realised "
+              + "\(Phase0.medianCount(c.map(\.groupsRealised))) holding \(Phase0.medianCount(c.map(\.rowsInRealisedGroups))) rows, "
+              + "cards built in the body \(Phase0.medianCount(c.map(\.cardsBuiltInBody))), contacts reached "
+              + "\(Phase0.medianCount(c.map(\.recipientReaches))), stage rows \(Phase0.medianCount(c.map(\.stageRows))) "
               + "(\(c.map(\.stageRows).max() ?? 0)), outer ForEach identities (date groups) "
-              + "\(P.medianInt(c.map(\.dateGroups))) (\(c.map(\.dateGroups).max() ?? 0)), queue rows the masthead "
-              + "folds over \(P.medianInt(c.map(\.queueRows))), of which a check missed "
-              + "\(P.medianInt(c.map(\.missedRows))), stage list rows derived in the body "
-              + "\(P.medianInt(c.map(\.stageListRows))), calendar tables built in the body "
-              + "\(P.medianInt(c.map(\.calendarTables))), Reached out rows \(P.medianInt(c.map(\.reachedOutRows)))")
+              + "\(Phase0.medianCount(c.map(\.dateGroups))) (\(c.map(\.dateGroups).max() ?? 0)), queue rows the masthead "
+              + "folds over \(Phase0.medianCount(c.map(\.queueRows))), of which a check missed "
+              + "\(Phase0.medianCount(c.map(\.missedRows))), stage list rows derived in the body "
+              + "\(Phase0.medianCount(c.map(\.stageListRows))), calendar tables built in the body "
+              + "\(Phase0.medianCount(c.map(\.calendarTables))), Reached out rows \(Phase0.medianCount(c.map(\.reachedOutRows)))")
         guard !k.rounds.isEmpty else { return }
         let busy = k.rounds.map { Double($0.busy) }
         P.say("\(label) \(k.name) samples per round (median): busy \(P.f(P.median(busy))), idle "
@@ -705,12 +706,13 @@ struct QueueViewAttributionProbeTests {
                 HostedPassCounting.unmountAndClose(w)
             }
             let cpu = rs.filter(\.settled.completed).map(\.settled.cpuMs)
-            let realised = ViewAttributionProbe.medianInt(rs.map(\.counts.realised))
+            let realised = Phase0.medianCount(rs.map(\.counts.realised))
             let med = ViewAttributionProbe.median(cpu)
+            _ = Phase0.reading("va-\(label)-heightSweep-\(Int(h.width))x\(Int(h.height))", runs: cpu) // #4617
             ViewAttributionProbe.say("\(label) height sweep \(Int(h.width))x\(Int(h.height)): first draw cpu median "
                 + "\(ViewAttributionProbe.f(med)) ms (\(ViewAttributionProbe.spread(cpu))), rows realised \(realised), "
-                + "card bodies \(ViewAttributionProbe.medianInt(rs.map(\.counts.cardBodies))), date groups realised "
-                + "\(ViewAttributionProbe.medianInt(rs.map(\.counts.groupsRealised))), stage rows "
+                + "card bodies \(Phase0.medianCount(rs.map(\.counts.cardBodies))), date groups realised "
+                + "\(Phase0.medianCount(rs.map(\.counts.groupsRealised))), stage rows "
                 + "\(a.focusedRows.count), ms per realised row "
                 + "\(ViewAttributionProbe.f(realised == 0 ? .nan : med / Double(realised))) | \(Phase0.load())")
         }

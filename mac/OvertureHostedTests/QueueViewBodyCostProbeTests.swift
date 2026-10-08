@@ -518,8 +518,8 @@ struct QueueViewBodyCostProbeTests {
 
         mutating func close(cpu: [Double], wall: [Double]) {
             guard !cpu.isEmpty else { return }
-            perKeyMedianCPU.append(cpu.sorted()[cpu.count / 2])
-            perKeyMedianWall.append(wall.sorted()[wall.count / 2])
+            perKeyMedianCPU.append(cpu.sorted()[cpu.count / 2]) // probe-reading-exempt: one key's median, whose distribution line(_:label:) reports
+            perKeyMedianWall.append(wall.sorted()[wall.count / 2]) // probe-reading-exempt: one key's median, whose distribution line(_:label:) reports
             allCPU += cpu; allWall += wall
         }
         var note = ""
@@ -531,6 +531,9 @@ struct QueueViewBodyCostProbeTests {
         guard !k.perKeyMedianCPU.isEmpty else {
             return "0c.8 \(label) \(k.name): no settled reading. \(k.note)" + never
         }
+        // #4617: the median over keys of each distribution, as the lines the before and after comparison reads.
+        _ = Phase0.reading("0c8-\(label)-\(k.name)-cpu", runs: k.perKeyMedianCPU)
+        _ = Phase0.reading("0c8-\(label)-\(k.name)-wall", runs: k.perKeyMedianWall)
         let cpuMax = k.perKeyMedianCPU.max()!, wallMax = k.perKeyMedianWall.max()!
         return "0c.8 \(label) \(k.name): keys \(k.perKeyMedianCPU.count), settled samples \(k.allCPU.count)"
             + " | cpu per-key-median max \(Phase0cView.f(cpuMax)) p99 "

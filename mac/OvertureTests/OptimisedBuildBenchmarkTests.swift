@@ -70,11 +70,13 @@ struct OptimisedBuildBenchmarkTests {
         }
         millis.sort()
         let at: (Int) -> String = { String(format: "%.1f", millis[$0]) }
+        // #4617: the median through Phase0.reading, which prints the line the before and after comparison reads.
+        let reading = Phase0.reading("optimised-build-benchmark", runs: millis)
         // The compiled code's own account of how it was built, beside the log check's account of what
         // the compiler was handed: `_isDebugAssertConfiguration` is true only at -Onone.
         let build = _isDebugAssertConfiguration() ? "compiled -Onone (Debug)" : "compiled optimised"
         print("optimised-build-benchmark: \(build); \(Self.samples) samples of a fixed \(Self.rowCount) row"
-            + " generic sort and fold: median \(at(Self.samples / 2)) ms, p10 \(at(1)) ms,"
+            + " generic sort and fold: median \(String(format: "%.1f", reading.median)) ms, p10 \(at(1)) ms,"
             + " p90 \(at(Self.samples - 2)) ms, min \(at(0)) ms, max \(at(Self.samples - 1)) ms")
     }
 }

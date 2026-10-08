@@ -196,12 +196,11 @@ final class MemoPathDerivationCostProbeTests {
                 let viewport = Set(QueueRenderPass.make(inputs(cards: [])).focusedRows
                     .prefix(QueueViewportAssumption.rows).map(\.id))
                 let before = Phase0.load()
-                let reading = Phase0.Reading(runs: (0..<Self.samples).map { _ in
+                let reading = Phase0.reading("memo-derivation-\(label)", runs: (0..<Self.samples).map { _ in
                     Phase0.time { _ = QueueRenderPass.make(inputs(cards: viewport)) }
                 })
                 print("e4a memo derivation, \(label): \(shows.count) show(s), \(viewport.count) card(s) requested, "
                       + "median of \(Self.samples) " + reading.text + ", \(before) before, \(Phase0.load()) after")
-                print(reading.probeLine("memo-derivation-\(label)"))
                 // #4371 (E4a part 2): the FIRST DRAW, which is where a card the pass did not build is built: the
                 // build asked for no card, as the first build after a mount is, and then each viewport row's card
                 // on demand through the store, as the queue's first frame asks for them. The resolver is made
@@ -209,7 +208,7 @@ final class MemoPathDerivationCostProbeTests {
                 // store change pays it.
                 var onDemand: [Double] = []
                 let drawBefore = Phase0.load()
-                let firstDraw = Phase0.Reading(runs: (0..<Self.samples).map { _ in
+                let firstDraw = Phase0.reading("first-draw-\(label)", runs: (0..<Self.samples).map { _ in
                     Phase0.time {
                         let data = QueueRenderPass.make(inputs(cards: []))
                         let rows = Array(data.focusedRows.prefix(QueueViewportAssumption.rows))
@@ -218,11 +217,14 @@ final class MemoPathDerivationCostProbeTests {
                         onDemand.append(Phase0.time { for row in rows { _ = data.cards.card(for: row, resolving: live) } })
                     }
                 })
+                let cards = Phase0.reading("on-demand-cards-\(label)", runs: onDemand)
                 print("e4a first draw, \(label): pass asked for no card then \(QueueViewportAssumption.rows) card(s) "
                       + "on demand, median of \(Self.samples) " + firstDraw.text + "; the on demand cards alone "
-                      + Phase0.Reading(runs: onDemand).text + ", \(drawBefore) before, \(Phase0.load()) after")
-                print(firstDraw.probeLine("first-draw-\(label)"))
-                print(Phase0.Reading(runs: onDemand).probeLine("on-demand-cards-\(label)"))
+                      + cards.text + ", \(drawBefore) before, \(Phase0.load()) after")
+                // #4617: the two ways the cards get built, timed one after the other in this order in every run, as
+                // every figure #4371 and the E4 PRs quote was. Each is compared across checkouts, which the order
+                // does not bias; a comparison between them inside one run carries it, which this line says.
+                Phase0.fixedOrder(["memo-derivation-\(label)", "first-draw-\(label)"])
             }
             await RealStoreTestLock.shared.release()
         } catch {

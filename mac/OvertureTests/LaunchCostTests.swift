@@ -49,11 +49,11 @@ final class LaunchCostTests {
         return Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
     }
 
-    private func median(_ work: () -> Void) -> (median: Double, low: Double, high: Double) {
-        var runs: [Double] = []
-        for _ in 0..<5 { runs.append(seconds(work)) }
-        runs.sort()
-        return (runs[2], runs[0], runs[4])
+    /// The median of five runs with its spread, in seconds. #4617: taken through `Phase0.reading`, which prints
+    /// the median's `probe reading:` line under `metric`, in milliseconds, for the before and after comparison.
+    private func secondsReading(_ metric: String, _ work: () -> Void) -> (median: Double, low: Double, high: Double) {
+        let reading = Phase0.reading(metric, runs: (0..<5).map { _ in seconds(work) * 1000 })
+        return (reading.median / 1000, reading.low / 1000, reading.high / 1000)
     }
 
     @Test func measureWhatLaunchDoesBeforeTheFirstFrame() throws {
@@ -88,7 +88,7 @@ final class LaunchCostTests {
 
         // Each term as launch calls it. The freeze log read is timed apart from the housekeeping that
         // contains it, because "the log is big" and "compacting it is slow" are different facts.
-        let readTerm = median { _ = FreezeLog.read(at: copiedLog) }
+        let readTerm = secondsReading("launchcost-readTerm") { _ = FreezeLog.read(at: copiedLog) }
         // Housekeeping is run ONCE and not in a median: it compacts, so the second run would be timing
         // an already compacted file, which is a different question from the one launch asks (L102).
         let fresh = try sandboxes.make(named: "launch-cost-housekeeping")
@@ -96,10 +96,10 @@ final class LaunchCostTests {
         try FileManager.default.copyItem(at: copiedLog, to: freshLog)
         let housekeepingSeconds = seconds { _ = FreezeLog.housekeeping(at: freshLog, now: now) }
 
-        let boundaryTerm = median { _ = RunBoundaryViolations.newlyReported(in: live) }
-        let divergenceTerm = median { _ = CardDivergenceReport.newlyReported(in: live, now: now) }
-        let scoutMarkerTerm = median { _ = ScoutExtractService.isRunning(now: now) }
-        let slotTerm = median { _ = PrepQueueService.slotStatus(now: now) }
+        let boundaryTerm = secondsReading("launchcost-boundaryTerm") { _ = RunBoundaryViolations.newlyReported(in: live) }
+        let divergenceTerm = secondsReading("launchcost-divergenceTerm") { _ = CardDivergenceReport.newlyReported(in: live, now: now) }
+        let scoutMarkerTerm = secondsReading("launchcost-scoutMarkerTerm") { _ = ScoutExtractService.isRunning(now: now) }
+        let slotTerm = secondsReading("launchcost-slotTerm") { _ = PrepQueueService.slotStatus(now: now) }
 
         func ms(_ s: Double) -> String { String(format: "%.1f", s * 1000) }
         func spread(_ t: (median: Double, low: Double, high: Double)) -> String {

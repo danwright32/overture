@@ -38,6 +38,11 @@
 # failed runs, or a metric only one side printed. A run that failed or printed no reading is named with its log,
 # never read as a pass (L98). `--rounds` must be even and at least 4, refused before anything takes the lock.
 #
+# ORDER INSIDE A RUN (#4617). A probe timing rival ways of doing one thing inside one run prints a `probe order:`
+# line (`Phase0.orderLine`) saying whether their samples alternated or ran in a fixed order. The report names
+# each such group once, a fixed one as UNBALANCED. Neither biases this comparison, since both sides run the same
+# order; a fixed order biases a comparison BETWEEN the rivals inside one run, which is what the line warns of.
+#
 # Exit 0 no slower (every metric within noise or faster), 1 SLOWER (a measured regression, said even when
 # another metric is unmeasured), 2 UNMEASURED or refused.
 #
@@ -53,6 +58,10 @@ COMPARE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${COMPARE_DIR}/lib/scratch.sh" || { echo "compare-before-after: UNMEASURED: cannot read lib/scratch.sh" >&2; exit 2; }
 
 READING_PREFIX="probe reading: "
+# #4617: `probe order: alternated|fixed <metric>,<metric>,...`, printed by `Phase0.orderLine` where a probe times
+# rival ways of doing one thing inside ONE run. Read into readings.tsv as `#order` rows and reported beside the
+# verdict, so an in-run comparison taken in a fixed order is never left silent.
+ORDER_PREFIX="probe order: "
 
 usage() {
   sed -n '4,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
@@ -97,6 +106,19 @@ readings_from_log() {
     }' "$1"
 }
 
+# <log> <side>: the log's order lines as `#order` rows of readings.tsv (#4617). A line whose arrangement is not
+# one of the two the probe writes, or whose list is not metric words, is dropped rather than guessed at.
+orders_from_log() {
+  awk -v prefix="${ORDER_PREFIX}" -v side="$2" '
+    {
+      at = index($0, prefix)
+      if (at == 0) next
+      n = split(substr($0, at + length(prefix)), f, " ")
+      if (n < 2 || (f[1] != "alternated" && f[1] != "fixed") || f[2] !~ /^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)+$/) next
+      printf "#order\t%s\t%s\t%s\n", f[1], f[2], side
+    }' "$1"
+}
+
 # <readings.tsv>: the per metric report and the verdict, exiting 0, 1 or 2 as the header says.
 analyse() {
   awk '
@@ -114,6 +136,13 @@ analyse() {
     function highest(arr, n,   i, x) { x = arr[1]; for (i = 2; i <= n; i++) if (arr[i] > x) x = arr[i]; return x }
     BEGIN { FS = "\t"; declared = 0; rounds = 0; nm = 0 }
     $1 == "#rounds" { declared = $2 + 0; next }
+    # #4617: one row per run that printed the line; a group is reported once, with the sides that printed it.
+    $1 == "#order" {
+      g = $2 SUBSEP $3
+      if (!(g in groupSides)) { groups[++ng] = g; groupSides[g] = "" }
+      if (index(" " groupSides[g] " ", " " $4 " ") == 0) groupSides[g] = groupSides[g] (groupSides[g] == "" ? "" : " ") $4
+      next
+    }
     /^#/ { next }
     NF == 5 {
       m = $4
@@ -185,6 +214,19 @@ analyse() {
         if (pairs == 2) print "  with 2 pairs, under noise alone this rule calls a change about 1 time in 7: run more rounds before trusting a call"
         if (pairs == 3) print "  with 3 pairs, under noise alone this rule calls a change about 1 time in 24"
         if (ab != ba) printf "  %d round(s) without a partner of the other order are left out\n", (ab > ba ? ab - ba : ba - ab)
+      }
+      # #4617: rival ways of doing one thing timed inside ONE run. Neither arrangement biases the before and after
+      # comparison above, since both sides run the same order; a fixed one biases a comparison BETWEEN them.
+      for (gi = 1; gi <= ng; gi++) {
+        split(groups[gi], parts, SUBSEP)
+        list = parts[2]; gsub(/,/, ", ", list)
+        sides = groupSides[groups[gi]]
+        said = (sides == "before after" || sides == "after before") ? "both sides" : "the " sides " side only"
+        if (parts[1] == "fixed") {
+          printf "ORDER INSIDE A RUN: UNBALANCED for %s (said by %s): timed one after another in the same order, so a comparison between them inside one run carries the order effect on whichever is timed second; each one'"'"'s before and after comparison is not affected, since both sides run that order\n", list, said
+        } else {
+          printf "ORDER INSIDE A RUN: alternated for %s (said by %s): their samples were taken in rotating order, so a comparison between them inside one run is balanced\n", list, said
+        }
       }
       if (slower != "") { print "VERDICT: SLOWER: " slower; exit 1 }
       if (unmeasured > 0) { printf "VERDICT: UNMEASURED: %d metric(s) could not be compared in balanced order\n", unmeasured; exit 2 }
@@ -276,6 +318,8 @@ for (( round = 1; round <= ROUNDS; round++ )); do
       continue
     fi
     printf '%s\n' "${rows}" >> "${READINGS}"
+    orders="$(orders_from_log "${log}" "${side}")"
+    [[ -z "${orders}" ]] || printf '%s\n' "${orders}" >> "${READINGS}"
     echo "${label}: ${when}, $(printf '%s\n' "${rows}" | wc -l | tr -d ' ') reading(s), log ${log}"
   done
 done

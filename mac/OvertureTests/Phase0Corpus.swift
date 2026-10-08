@@ -91,7 +91,9 @@ enum Phase0 {
 
     // #4617: the ways a probe gets a reading, `median5`, `reading` and `alternating` below, each print its
     // `probe reading:` line as they make it, so a probe using them cannot report a reading the before and after
-    // comparison never sees. `emit` is the seam the unit tests read the line through.
+    // comparison never sees. Building a `Reading` directly anywhere else in the test targets is refused by
+    // `ProbeReadingLineGuardTests`, and so is a median a probe takes of its own. `emit` is the seam the unit
+    // tests read the line through.
 
     /// Times `work` five times and prints the reading's line under `metric` (unique within one run: a metric
     /// read twice in one run is UNMEASURED in the comparison).

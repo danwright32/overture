@@ -230,7 +230,7 @@ enum LandingAcceptanceRig {
         var medianWorst: Double? {
             guard !kept.isEmpty else { return nil }
             let sorted = kept.map(\.holds.worst).sorted()
-            return sorted[sorted.count / 2]
+            return sorted[sorted.count / 2] // probe-reading-exempt: the cell's median for its verdict, whose line row(_:_:_:_:) prints
         }
         // The term of the sample with the largest hold, among those counted, or among all when none were.
         var worstTerm: Term? { (kept.isEmpty ? discarded : kept).max { $0.holds.worst < $1.holds.worst }?.holds.worstTerm }
@@ -250,6 +250,9 @@ enum LandingAcceptanceRig {
 
     // One table row: entry, size, variant, then the verdict on this cell.
     nonisolated static func row(_ entry: Entry, _ factor: Int, _ variant: Variant, _ c: Cell) -> String {
+        // #4617: the cell's median worst hold as the line the before and after comparison reads (none when no
+        // sample was kept, so an unmeasured cell is missing there rather than compared as a zero).
+        _ = Phase0.reading("rig-\(entry)-\(factor)x-\(variant)-worstHold", runs: c.kept.map(\.holds.worst))
         let reading: String
         if let median = c.medianWorst {
             let all = c.kept.map(\.holds.worst).sorted()

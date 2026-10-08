@@ -35,13 +35,6 @@ struct BrandCorpusMainThreadProbeTests {
     }
     nonisolated private static var rounds: Int { Int(env["MEASURE_4332_ROUNDS"] ?? "") ?? 5 }
 
-    private static func median(_ values: [Double]) -> Double {
-        let sorted = values.sorted()
-        guard !sorted.isEmpty else { return 0 }
-        return sorted.count % 2 == 1 ? sorted[sorted.count / 2]
-            : (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
-    }
-
     @Test(.enabled(if: Phase0.liveStoreExists, "no live store on this machine"))
     func theCorpusReadsMainThreadTimeOnAndOffTheMainActor() async throws {
         guard Self.enabled else {
@@ -61,33 +54,54 @@ struct BrandCorpusMainThreadProbeTests {
             var offMainWorst: [Double] = []
             var offMainWall: [Double] = []
             for round in 0..<Self.rounds {
-                let before = ModelContext(container)
-                let t0 = Phase0.now()
-                let read = ScoutService.venueBrandCorpus(in: before)
-                onMain.append(Phase0.ms(since: t0))
-                #expect(read.degradedReads.isEmpty)
-
-                let after = ModelContext(container)
-                let monitor = LandingStallMonitor()
-                monitor.start()
-                let t1 = Phase0.now()
-                #expect(ScoutService.flushBeforeLanding(after, save: { try $0.save() }, record: EntryFlushRecord()).refusal == nil)
-                let landed = await ScoutService.venueBrandCorpusOffMain(
-                    container: container, read: ScoutService.readProspectTable,
-                    readOverrides: ScoutService.readProducerOverrides)
-                offMainWall.append(Phase0.ms(since: t1))
-                offMainWorst.append(monitor.stop().worst)
+                func onMainArm() -> ProducerGate.VenueBrands {
+                    let before = ModelContext(container)
+                    let t0 = Phase0.now()
+                    let read = ScoutService.venueBrandCorpus(in: before)
+                    onMain.append(Phase0.ms(since: t0))
+                    #expect(read.degradedReads.isEmpty)
+                    return read.brands
+                }
+                func offMainArm() async -> ProducerGate.VenueBrands {
+                    let after = ModelContext(container)
+                    let monitor = LandingStallMonitor()
+                    monitor.start()
+                    let t1 = Phase0.now()
+                    #expect(ScoutService.flushBeforeLanding(after, save: { try $0.save() }, record: EntryFlushRecord()).refusal == nil)
+                    let landed = await ScoutService.venueBrandCorpusOffMain(
+                        container: container, read: ScoutService.readProspectTable,
+                        readOverrides: ScoutService.readProducerOverrides)
+                    offMainWall.append(Phase0.ms(since: t1))
+                    offMainWorst.append(monitor.stop().worst)
+                    return landed.brands
+                }
+                // #4617: the arms alternate which goes first, round by round. Timed on main first in every round,
+                // the off main arm carried the order effect into `mainThreadRemovedMs`.
+                let onBrands: ProducerGate.VenueBrands, offBrands: ProducerGate.VenueBrands
+                if round % 2 == 0 {
+                    onBrands = onMainArm()
+                    offBrands = await offMainArm()
+                } else {
+                    offBrands = await offMainArm()
+                    onBrands = onMainArm()
+                }
                 // The two arms read the same store, so they must judge the same brands.
-                #expect(landed.brands == read.brands, "the off main corpus differs from the on main one")
+                #expect(offBrands == onBrands, "the off main corpus differs from the on main one")
                 print("probe4332 size=\(factor)x rows=\(rows) round=\(round) onMainMs=\(String(format: "%.1f", onMain.last!)) "
                       + "offMainWorstWaitMs=\(String(format: "%.1f", offMainWorst.last!)) "
                       + "offMainWallMs=\(String(format: "%.1f", offMainWall.last!))")
             }
-            let removed = Self.median(onMain) - Self.median(offMainWorst)
+            // #4617: each median through `Phase0.reading`, which prints the line the before and after comparison
+            // reads. An even number of rounds now reads the upper of the middle two, as every probe reading does.
+            let onMainReading = Phase0.reading("brand-onMain-\(factor)x", runs: onMain)
+            let worstWaitReading = Phase0.reading("brand-offMainWorstWait-\(factor)x", runs: offMainWorst)
+            let wallReading = Phase0.reading("brand-offMainWall-\(factor)x", runs: offMainWall)
+            print(Phase0.orderLine(alternated: true, ["brand-onMain-\(factor)x", "brand-offMainWorstWait-\(factor)x"]))
+            let removed = onMainReading.median - worstWaitReading.median
             print("probe4332 SUMMARY size=\(factor)x rows=\(rows) rounds=\(Self.rounds) "
-                  + "onMainMedianMs=\(String(format: "%.1f", Self.median(onMain))) "
-                  + "offMainWorstWaitMedianMs=\(String(format: "%.1f", Self.median(offMainWorst))) "
-                  + "offMainWallMedianMs=\(String(format: "%.1f", Self.median(offMainWall))) "
+                  + "onMainMedianMs=\(String(format: "%.1f", onMainReading.median)) "
+                  + "offMainWorstWaitMedianMs=\(String(format: "%.1f", worstWaitReading.median)) "
+                  + "offMainWallMedianMs=\(String(format: "%.1f", wallReading.median)) "
                   + "mainThreadRemovedMs=\(String(format: "%.1f", removed))")
         }
     }
