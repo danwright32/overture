@@ -141,18 +141,17 @@ struct ArchiveView: View {
         fingerprint.add(demotedHouses)
         fingerprint.add(watchedSources)
         fingerprint.add(refusedAddresses)
-        // #4570: the memo decides the card half of its own key, from one implementation shared with the
-        // queue: what the held answer already covers is served, and the cards the FIRST frame built on
-        // demand are adopted rather than paid for with a second whole-store derivation on every open.
-        let keys = scopeMemo.cardKeys(serving: cardKeys.takeKeys(), under: fingerprint)
+        // #4570, #4591: the memo decides the card half of its own key, from one implementation shared
+        // with the queue: what the held answer already covers is served, and cards built on demand (the
+        // first frame, a scroll) are adopted rather than paid for with a second whole-store derivation.
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
         // #4356: one instant for the memo and the scope it builds, so they reason about the same moment.
         let now = clock()
-        return scopeMemo.value(fingerprint: fingerprint, cardKeys: keys, now: now,
+        return scopeMemo.value(fingerprint: fingerprint, drawn: cardKeys.takeKeys(), now: now,
                                savesIn: context.container,
                                // #4252: the whole-store scope (277 ms on the live store, 2026-09-25) against
                                // 134 ms to re-arm observation, so the refetch after a save is served.
-                               onRefetch: .serveWhenNothingChanged) {
+                               onRefetch: .serveWhenNothingChanged) { keys in
             QueueModel.scope(from: prospects, answers: orgAnswers,
                              overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                           demotedRows: demotedHouses),

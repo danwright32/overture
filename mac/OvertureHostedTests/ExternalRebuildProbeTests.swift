@@ -460,7 +460,7 @@ struct ExternalRebuildProbeTests {
     // #4570: there used to be ONE DISCARDED REDRAW before the wait, because the first redraw after the list
     // drew derived the whole store on any clock (120 of 120 rows on the frozen arm, measured 2026-10-06).
     // The Archive's first build ran before any row drew, so it prebuilt no card, and the memo keyed on the
-    // card keys saw the first redraw ask for a different set. `ScopeMemo.cardKeys(serving:under:)` now counts the
+    // card keys saw the first redraw ask for a different set. `ScopeMemo.value(fingerprint:drawn:...)` now counts the
     // cards that first frame built on demand as tracked, so the discard is gone and the redraw measured here
     // is the first one after the mount.
     private func rowsAfterARedrawPastTheWindow(clock: @escaping () -> Date) async throws

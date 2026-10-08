@@ -586,18 +586,18 @@ struct QueueView: View {
         // THE CARDS, which the fingerprint cannot see. A pass builds a card only for the rows the last
         // frame drew, inside the memo's observation tracking, and a card built on demand afterwards is
         // built OUTSIDE it, so a field only that card read would never mark the answer stale. So an
-        // answer is reused only when every row the last frame drew was prebuilt by the build that made
-        // it; one row it did not prebuild (a scroll, a row revealed by a removal) is a rebuild, exactly
-        // as it always was. #4570: the one exception is the FIRST frame after a build asked for no card,
-        // whose on-demand cards are built again inside the build's tracking and adopted. The rule lives
-        // on the memo, shared with the Archive (`ScopeMemo.cardKeys(serving:under:)`).
-        let cardKeysForMemo = renderMemo.cardKeys(serving: requested, under: key)
+        // answer is reused as it is only when every row the last frame drew was prebuilt by the build
+        // that made it. #4570, #4591: a row it did not prebuild (the first frame, a scroll, a row revealed
+        // by a removal) has its card built again inside the answer's tracking and adopted, whenever the
+        // answer would otherwise be served; anything else is a rebuild, as it always was. The rule lives on
+        // the memo, shared with the Archive (`ScopeMemo.value(fingerprint:drawn:...)`), which hands the
+        // pass the keys it decided.
         // A save through ANY context is a change too, which `ScopeMemo` itself enforces (`savesIn`).
-        return renderMemo.value(fingerprint: key, cardKeys: cardKeysForMemo, now: now,
+        return renderMemo.value(fingerprint: key, drawn: requested, now: now,
                                 savesIn: context.container,
                                 // #4252: a whole-store pass (364 ms on the live store, 2026-09-25) against
                                 // 134 ms to re-arm observation, so the refetch after a save is served.
-                                onRefetch: .serveWhenNothingChanged) {
+                                onRefetch: .serveWhenNothingChanged) { cardKeysForMemo in
             QueueRenderPass.make(QueueRenderPass.Inputs(
                 allProspects: QueueRenderPass.Corpus(allProspects),
                 inquiries: inquiryRows,
