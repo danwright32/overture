@@ -548,7 +548,12 @@ struct EngineMembersReadWholeTests {
     static func readers(in files: [AppSourceWalk.File]) -> Set<String> {
         var out: Set<String> = []
         for file in files where !owners.contains(file.name) {
-            let lines = file.text.components(separatedBy: "\n").map { $0.components(separatedBy: "//")[0] }
+            // Comments out by the shared tokenizer, never a split on "//", which cut a line at a URL's scheme and
+            // hid any read after it (the chunk review of E4d2, L135). Nothing else skipped: a Debug helper's
+            // read is a read. One entry per line of the file, so the walk upward keeps its line numbers.
+            let scanned = SwiftSource.scannableLines(in: file.text, skipping: [])
+            var lines = Array(repeating: "", count: (scanned.map(\.line).max() ?? 0) + 1)
+            for entry in scanned { lines[entry.line] = entry.code }
             for (index, line) in lines.enumerated()
             where read.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
                 var name = "?"
@@ -580,6 +585,23 @@ struct EngineMembersReadWholeTests {
         #expect(stale.isEmpty, Comment(rawValue:
             "EngineMembersReadWholeTests.waitingOnPhase6 names readers that are gone: "
             + stale.sorted().joined(separator: ", ") + ". Delete them, so the list only shrinks."))
+    }
+
+    // A read after a URL on the same line is still a read: the comment stripper is the tokenizer, not a split on "//".
+    @Test func aReadAfterAURLOnItsLineIsStillFound() {
+        let planted = AppSourceWalk.File(url: URL(fileURLWithPath: "/planted/Planted.swift"), name: "Planted.swift",
+                                         text: """
+            struct Planted {
+                private func countAfterALink() -> Int {
+                    let link = "https://example.invalid/shows"; return engine.everyShow.count + link.count
+                }
+                private func commentedOut() -> Int {
+                    // engine.everyShow.count
+                    return 0
+                }
+            }
+            """)
+        #expect(Self.readers(in: [planted]) == ["Planted.swift.countAfterALink"])
     }
 
     @Test func theReaderNamesTheMemberAPlantedReadSitsIn() {
