@@ -184,6 +184,17 @@ NOSCOPE="$(OVERTURE_COMPARE_RUN="${STUB_RUN}" "${SCRIPT}" --before "${WORK}/befo
   echo "exit=$?")"
 assert_contains "a comparison with no scope is refused" "${NOSCOPE}" "--scope is required"
 
+# An option given LAST with no value once left `shift 2` failing with one argument left, so the loop never
+# ended and the script hung (L110). Each shape runs under a deadline, perl's alarm, so a regression fails
+# here as killed instead of hanging the fixture; a correct refusal returns at once, so nothing waits.
+for option in --before --after --scope --env --rounds --out --analyse; do
+  BARE="$(OVERTURE_COMPARE_RUN="${STUB_RUN}" perl -e 'alarm shift; exec @ARGV' 10 "${SCRIPT}" "${option}" 2>&1; \
+    echo "exit=$?")"
+  assert_contains "${option} given last with no value is refused by name" "${BARE}" \
+    "UNMEASURED: ${option} needs a value, and none was given"
+  assert_contains "${option} given last with no value exits 2 rather than hanging" "${BARE}" "exit=2"
+done
+
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

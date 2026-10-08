@@ -174,6 +174,12 @@ analyse() {
 BEFORE="" AFTER="" SCOPE="" ROUNDS=4 OUT="" ANALYSE=""
 ENVS=()
 while [[ $# -gt 0 ]]; do
+  # An option that takes a value, given last with none: `shift 2` fails with one argument left, leaving $#
+  # at 1, and the loop never ends (L110). Refused by name before anything shifts.
+  case "$1" in
+    --before|--after|--scope|--env|--rounds|--out|--analyse)
+      [[ $# -ge 2 ]] || refuse "$1 needs a value, and none was given" ;;
+  esac
   case "$1" in
     --before) BEFORE="${2:-}"; shift 2 ;;
     --after) AFTER="${2:-}"; shift 2 ;;
