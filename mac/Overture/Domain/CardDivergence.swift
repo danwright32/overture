@@ -105,13 +105,17 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         case runFromSource
         /// An installed copy with no readable installer record, or one whose commit is not a whole commit.
         case notRecorded
+        /// #4358 slice E4c: a test process told the commit it is testing (`CardDivergenceLog.TestRunCommit`), which
+        /// is the merge gate's run over the live clone. Its own case, so a test run's line can never read as an
+        /// installed build's.
+        case testRun
         // Written by nobody: what a later build's spelling decodes to (L255).
         case unrecognised
     }
 
     // #4583: what the gate asks of a line, as ONE value, so "written before stamping" and "stamped by a build
     // that could not name its commit" cannot be read as each other (L622).
-    enum Stamp: Equatable, Sendable {
+    enum Stamp: Hashable, Sendable {
         case unstamped
         case commit(String)
         case commitUnknown(Build)
@@ -231,6 +235,26 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
 
     var compactionKey: CompactionKey { CompactionKey(kind: kind, source: source, fields: fields) }
 
+    // #4358 slice E4c: what the ARCHIVE prune counts as the same record, which is the compaction's key and the
+    // build that wrote it. Keyed on the kind, source and fields alone, a record compacted out of the live file was
+    // pruned behind an OLDER build's record of the same key, so the merge gate, reading only its own commit's
+    // records, could find nothing where its run had written a mismatch. An unstamped line is its own value and so
+    // is a build that could not name its commit (`Stamp`), never folded into one another.
+    //
+    // The live file's compaction keeps `compactionKey`, deliberately: its rescues take slots from the newest
+    // window, and rescuing one example per BUILD would let old builds' rare records crowd out the current one's.
+    //
+    // Kept per build only for the most RECENT builds (`CardDivergenceLog.archiveBuildsKept`); every older build's
+    // records share one value (nil) and so one example per key between them, which keeps the archive bounded.
+    struct ArchiveKey: Hashable, Sendable {
+        let record: CompactionKey
+        let stamp: Stamp?
+    }
+
+    func archiveKey(keepingBuildsOf recent: Set<Stamp>) -> ArchiveKey {
+        ArchiveKey(record: compactionKey, stamp: recent.contains(stamp) ? stamp : nil)
+    }
+
     // A kind or source this build could not name, which only a later build writes.
     var isFromALaterBuild: Bool { kind == .unrecognised || source == .unrecognised || build == .unrecognised }
 }
@@ -307,8 +331,8 @@ enum CardDivergenceLog {
         // one of the four, and the other three are COUNTED rather than dropped, so a gate that matched nothing
         // can say why instead of reading as clean (L98, L517). Nil for a query that is not a whole commit: an
         // abbreviated one matches no stamp, and a refusal is what tells the gate it asked wrongly (L320).
-        // Its reader is the gate, which arrives with the cutover (#4358, slice E4); the unreadable lines are
-        // the gate's to report beside this, from `unreadableLines`.
+        // Its reader is the gate, which is a TEST SUITE the merge path runs by design (`EngineDivergenceGate`, #4358
+        // slice E4c), so no app code ever calls this; the unreadable lines are the gate's to report beside it.
         func byCommit(_ commit: String) -> ByCommit? {
             guard let asked = CardDivergenceLog.BuildStamp.wholeCommit(commit) else { return nil }
             var out = ByCommit()
@@ -343,7 +367,11 @@ enum CardDivergenceLog {
         let build: CardDivergenceRecord.Build
         let commit: String?
 
-        static func of(installed: InstalledBuild?, isRunFromSource: Bool) -> BuildStamp {
+        /// #4358 slice E4c: a test run told a whole commit outranks both, because it is the one case where the
+        /// process knows exactly which source it is running. Anything else it was told changes nothing.
+        static func of(installed: InstalledBuild?, isRunFromSource: Bool,
+                       testRun: TestRunCommit = .notGiven) -> BuildStamp {
+            if case .commit(let commit) = testRun { return BuildStamp(build: .testRun, commit: commit) }
             if isRunFromSource { return BuildStamp(build: .runFromSource, commit: nil) }
             guard let commit = installed.flatMap({ wholeCommit($0.commit) }) else {
                 return BuildStamp(build: .notRecorded, commit: nil)
@@ -354,9 +382,9 @@ enum CardDivergenceLog {
         /// Read at every write rather than once per process: the installer quits every running copy before it
         /// rewrites the record (`mac/build-install.sh`), so whatever the record says while this process runs is
         /// this process's build, and a write is rare enough that one small read is nothing beside it.
-        static func beside(logAt url: URL, isRunFromSource: Bool) -> BuildStamp {
+        static func beside(logAt url: URL, isRunFromSource: Bool, testRun: TestRunCommit) -> BuildStamp {
             of(installed: BuildFreshness.installedRecord(in: url.deletingLastPathComponent()),
-               isRunFromSource: isRunFromSource)
+               isRunFromSource: isRunFromSource, testRun: testRun)
         }
 
         /// A whole commit, forty hexadecimal digits, lowercased, or nil. The record's only free String takes
@@ -365,6 +393,37 @@ enum CardDivergenceLog {
             let lowered = text.lowercased()
             guard lowered.count == 40, lowered.allSatisfy({ $0.isHexDigit && $0.isASCII }) else { return nil }
             return lowered
+        }
+    }
+
+    // #4358 slice E4c (the E4 plan's section 4): the commit a TEST RUN says it is testing, so the merge gate's run
+    // over the live clone stamps its lines with the branch's commit and reads back only its own.
+    //
+    // The merge path hands the head's commit in as `TEST_RUNNER_OVERTURE_GATE_COMMIT`; xcodebuild strips the
+    // prefix, so the test process sees `OVERTURE_GATE_COMMIT`. It is honoured ONLY in a test process and ONLY as
+    // a whole forty digit commit: the installed app never reads it, whatever its environment holds, so a variable
+    // left set on Dan's Mac cannot make his own records read as a test run's. Whether this is a test process is
+    // INJECTED (`read(environment:isTestProcess:)`) so both answers can be driven, and the production answer is
+    // the one the app already uses for its launch (`AppEnvironment.isRunningUnderTests`). A value that is set and
+    // not a whole commit is `.malformed`, which stamps nothing different, and the gate reads it as UNMEASURED
+    // rather than filtering by a commit no line carries (L98).
+    enum TestRunCommit: Equatable, Sendable {
+        /// No variable, or a process that is not a test run: stamped exactly as before.
+        case notGiven
+        /// A test run given something that is not a whole commit: ignored by the stamp.
+        case malformed
+        case commit(String)
+
+        static let variable = "OVERTURE_GATE_COMMIT"
+
+        static func read(environment: [String: String], isTestProcess: Bool) -> TestRunCommit {
+            guard isTestProcess, let given = environment[variable] else { return .notGiven }
+            guard let commit = BuildStamp.wholeCommit(given) else { return .malformed }
+            return .commit(commit)
+        }
+
+        static var current: TestRunCommit {
+            read(environment: ProcessInfo.processInfo.environment, isTestProcess: AppEnvironment.isRunningUnderTests)
         }
     }
 
@@ -556,17 +615,32 @@ enum CardDivergenceLog {
     // delete exactly the rare kind the compaction rescued, a month after it was rescued, which is the
     // defect this log's compaction rule exists to prevent arriving through its own retention (L387, L191).
     //
-    // Bounded by kind rather than by time or count, so the archive can never exceed the number of distinct
-    // keys the app can produce, which is closed enums times a combination of card fields and therefore
-    // small. The
-    // OLDEST example of each kind is the one kept, because the first time a kind appeared is the fact
-    // worth having.
+    // Bounded by kind and build rather than by time, so the archive never holds more than the distinct keys
+    // the app can produce (closed enums times a combination of card fields, and therefore small) times
+    // `archiveBuildsKept` plus one. The OLDEST example of each kind is the one kept, because the first time a
+    // kind appeared is the fact worth having.
+    //
+    // #4358 slice E4c: one example of each key PER BUILD THAT WROTE IT (`archiveKey`) for the most recent
+    // `archiveBuildsKept` builds, so a newer build's record is never pruned behind an older build's record of the
+    // same kind, source and fields, which is the record the merge gate reads by commit. Keyed per build with no
+    // limit, the archive would grow by a few lines with every installed build for ever, which removes the ceiling
+    // this prune exists to hold (L669). So builds are ranked by the newest record each wrote, the most recent keep
+    // their own examples, and every older build's records share one example per key, the oldest, which is the
+    // first time that kind appeared at all and is what the rule above protects. A record written before the stamp
+    // is one more build (`unstamped`), ranked the same way.
+    static let archiveBuildsKept = 10
+
     static func prunedArchive(_ records: [CardDivergenceRecord]) -> ArchivePruned {
-        var seen: Set<CardDivergenceRecord.CompactionKey> = []
+        var newest: [CardDivergenceRecord.Stamp: Date] = [:]
+        for record in records { newest[record.stamp] = max(newest[record.stamp] ?? record.at, record.at) }
+        // Ties broken by the stamp's own spelling, so which build keeps its examples never depends on hash order.
+        let recent = Set(newest.sorted { ($0.value, "\($0.key)") > ($1.value, "\($1.key)") }
+            .prefix(archiveBuildsKept).map(\.key))
+        var seen: Set<CardDivergenceRecord.ArchiveKey> = []
         var kept: [CardDivergenceRecord] = []
         var dropped: [CardDivergenceRecord] = []
         for record in records {
-            if seen.insert(record.compactionKey).inserted {
+            if seen.insert(record.archiveKey(keepingBuildsOf: recent)).inserted {
                 kept.append(record)
             } else {
                 dropped.append(record)
@@ -639,18 +713,21 @@ enum CardDivergenceLog {
     //
     // #4583: `isRunFromSource` is the one input the stamp cannot read from the folder, defaulting to the real
     // answer on `BuildFreshnessPanel`'s precedent, so a test can stamp as the installed copy it is not.
+    // #4358 slice E4c: `testRun` likewise, defaulting to what this process was told (`TestRunCommit.current`).
     @discardableResult
     static func append(_ record: CardDivergenceRecord, to url: URL,
-                       isRunFromSource: Bool = StoreLocation.isDebugBuild) -> Bool {
+                       isRunFromSource: Bool = StoreLocation.isDebugBuild,
+                       testRun: TestRunCommit = .current) -> Bool {
         guard record.kind.cooldown == 0 else { return false }
-        return write(record, to: url, isRunFromSource: isRunFromSource)
+        return write(record, to: url, isRunFromSource: isRunFromSource, testRun: testRun)
     }
 
     // #4354: the cooled form. Writes the record, carrying the repeats its window held back, or counts it as
     // a repeat and writes nothing. Returns whether a line was written.
     @discardableResult
     static func append(_ record: CardDivergenceRecord, to url: URL, through cooldown: inout Cooldown,
-                       isRunFromSource: Bool = StoreLocation.isDebugBuild) -> Bool {
+                       isRunFromSource: Bool = StoreLocation.isDebugBuild,
+                       testRun: TestRunCommit = .current) -> Bool {
         // Admitted on a copy and committed only once the line is written: a failed write that still opened
         // the window would suppress every repeat for its length and lose the count it carried (L368).
         var proposed = cooldown
@@ -660,7 +737,7 @@ enum CardDivergenceLog {
             return false
         case .write(let suppressedRepeats):
             guard write(record.carrying(suppressedRepeats: suppressedRepeats), to: url,
-                        isRunFromSource: isRunFromSource) else { return false }
+                        isRunFromSource: isRunFromSource, testRun: testRun) else { return false }
             cooldown = proposed
             return true
         }
@@ -671,17 +748,19 @@ enum CardDivergenceLog {
     // ended, and admitting it would open a new one and zero the very count it exists to carry (L710).
     @discardableResult
     static func appendDrained(_ held: Cooldown.Held, session: String, sequence: Int, at now: Date, to url: URL,
-                              isRunFromSource: Bool = StoreLocation.isDebugBuild) -> Bool {
+                              isRunFromSource: Bool = StoreLocation.isDebugBuild,
+                              testRun: TestRunCommit = .current) -> Bool {
         write(CardDivergenceRecord(session: session, sequence: sequence, at: now, fields: [], cardsBuilt: 0, stage: nil,
                                    kind: held.kind, source: held.source, suppressedRepeats: held.suppressedRepeats),
-              to: url, isRunFromSource: isRunFromSource)
+              to: url, isRunFromSource: isRunFromSource, testRun: testRun)
     }
 
     // #4583: THE ONE PLACE a new line enters the live file, so it is where the build is stamped (L593): every
     // writer reaches it, and none can skip it. A compaction or an archive REWRITES lines through `line(for:)`
     // and never comes here, so a rewritten record keeps the stamp it was written with, absent included.
-    private static func write(_ record: CardDivergenceRecord, to url: URL, isRunFromSource: Bool) -> Bool {
-        let stamped = record.stamped(BuildStamp.beside(logAt: url, isRunFromSource: isRunFromSource))
+    private static func write(_ record: CardDivergenceRecord, to url: URL, isRunFromSource: Bool,
+                              testRun: TestRunCommit) -> Bool {
+        let stamped = record.stamped(BuildStamp.beside(logAt: url, isRunFromSource: isRunFromSource, testRun: testRun))
         guard let line = line(for: stamped) else { return false }
         return appending(line + "\n", to: url)
     }

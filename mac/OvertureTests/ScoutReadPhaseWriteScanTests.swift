@@ -56,7 +56,9 @@ struct ScoutReadPhaseWriteScanTests {
             "`p.sourceIds` on an AssembledProspect, the classify pass's own value, not a model row",
     ]
 
-    private static func storedByEntity() -> [String: Set<String>] {
+    // Also the vocabulary #4370's landing write scan reads (`LandingWrittenTypesScanTests`), so both scans name
+    // a model write by the one set of attributes SwiftData persists.
+    static func storedByEntity() -> [String: Set<String>] {
         var out: [String: Set<String>] = [:]
         for entity in AppSchema.schema.entities {
             out[entity.name] = Set(entity.attributes.map(\.name)).union(entity.relationships.map(\.name))

@@ -62,13 +62,13 @@ struct TheDivergenceLogStampsItsBuildTests {
         try installRecord(commit: Self.sha, in: dir)
         let url = CardDivergenceLog.url(in: dir)
         var cooldown = CardDivergenceLog.Cooldown()
-        #expect(CardDivergenceLog.append(record(1), to: url, isRunFromSource: false))
+        #expect(CardDivergenceLog.append(record(1), to: url, isRunFromSource: false, testRun: .notGiven))
         #expect(CardDivergenceLog.append(record(2, kind: .factMismatch, generation: 7), to: url,
-                                         through: &cooldown, isRunFromSource: false))
+                                         through: &cooldown, isRunFromSource: false, testRun: .notGiven))
         let held = CardDivergenceLog.Cooldown.Held(kind: .factMismatch, source: .reconcile, suppressedRepeats: 3)
         #expect(CardDivergenceLog.appendDrained(held, session: "s", sequence: 3,
                                                 at: Date(timeIntervalSince1970: 1_800_001_000), to: url,
-                                                isRunFromSource: false))
+                                                isRunFromSource: false, testRun: .notGiven))
         let records = CardDivergenceLog.read(at: url).records
         #expect(records.map(\.sequence) == [1, 2, 3])
         for record in records {
@@ -86,7 +86,7 @@ struct TheDivergenceLogStampsItsBuildTests {
         let dir = try sandboxes.make(named: "4583-from-source")
         try installRecord(commit: Self.sha, in: dir)
         let url = CardDivergenceLog.url(in: dir)
-        #expect(CardDivergenceLog.append(record(1), to: url, isRunFromSource: true))
+        #expect(CardDivergenceLog.append(record(1), to: url, isRunFromSource: true, testRun: .notGiven))
         let written = try #require(CardDivergenceLog.read(at: url).records.first)
         #expect(written.stamp == .commitUnknown(.runFromSource))
         #expect(written.commit == nil)
@@ -96,7 +96,7 @@ struct TheDivergenceLogStampsItsBuildTests {
     @Test func anInstalledCopyWithNoRecordIsStampedAsNotRecorded() throws {
         let dir = try sandboxes.make(named: "4583-no-record")
         let url = CardDivergenceLog.url(in: dir)
-        #expect(CardDivergenceLog.append(record(1), to: url, isRunFromSource: false))
+        #expect(CardDivergenceLog.append(record(1), to: url, isRunFromSource: false, testRun: .notGiven))
         let written = try #require(CardDivergenceLog.read(at: url).records.first)
         #expect(written.stamp == .commitUnknown(.notRecorded))
         #expect(written.stamp != .unstamped)
@@ -111,7 +111,7 @@ struct TheDivergenceLogStampsItsBuildTests {
             #"{"at":"2026-10-07T10:00:00Z","build":"installed","cardsBuilt":0,"commit":"\#(Self.otherSha)","fields":["venue"],"sequence":1,"session":"s"}"#
         ).records.first)
         #expect(carried.stamp == .commit(Self.otherSha))
-        #expect(CardDivergenceLog.append(carried, to: url, isRunFromSource: false))
+        #expect(CardDivergenceLog.append(carried, to: url, isRunFromSource: false, testRun: .notGiven))
         #expect(CardDivergenceLog.read(at: url).records.first?.stamp == .commit(Self.sha))
     }
 
@@ -124,7 +124,7 @@ struct TheDivergenceLogStampsItsBuildTests {
         let old = #"{"at":"2026-09-08T10:00:00Z","cardsBuilt":20,"fields":["stage"],"sequence":0,"session":"old"}"#
         let other = #"{"at":"2026-09-09T10:00:00Z","build":"installed","cardsBuilt":20,"commit":"\#(Self.otherSha)","fields":["venue"],"generation":4,"sequence":0,"session":"other"}"#
         try (old + "\n" + other + "\n").write(to: url, atomically: true, encoding: .utf8)
-        for n in 1...4 { #expect(CardDivergenceLog.append(record(n), to: url, isRunFromSource: false)) }
+        for n in 1...4 { #expect(CardDivergenceLog.append(record(n), to: url, isRunFromSource: false, testRun: .notGiven)) }
 
         let outcome = CardDivergenceLog.compact(at: url, cap: 4)
         #expect(outcome == .archived(count: 2), "the fixture did not compact: \(outcome)")
@@ -160,6 +160,132 @@ struct TheDivergenceLogStampsItsBuildTests {
         // (L320): an abbreviated commit is the likeliest mistake a gate makes.
         #expect(read.byCommit(String(Self.sha.prefix(7))) == nil)
         #expect(read.byCommit("") == nil)
+    }
+
+    // MARK: - #4358 slice E4c: a test run's commit, and the archive keyed by build
+
+    // The existing tests above pass `testRun: .notGiven`, so a run with the gate's variable set cannot change what
+    // they assert: the variable is inherited by every test in that process (L439).
+
+    // A test run told a whole commit stamps its lines as a test run of it, whatever the installer's record says and
+    // however it was built, and the gate's filter finds them.
+    @Test func aTestRunToldAWholeCommitStampsItsLinesAsATestRunOfIt() throws {
+        let dir = try sandboxes.make(named: "4358-e4c-test-run")
+        try installRecord(commit: Self.otherSha, in: dir)
+        let url = CardDivergenceLog.url(in: dir)
+        var cooldown = CardDivergenceLog.Cooldown()
+        #expect(CardDivergenceLog.append(record(1), to: url, isRunFromSource: true, testRun: .commit(Self.sha)))
+        #expect(CardDivergenceLog.append(record(2, kind: .factMismatch), to: url, through: &cooldown,
+                                         isRunFromSource: false, testRun: .commit(Self.sha)))
+        let records = CardDivergenceLog.read(at: url).records
+        #expect(records.map(\.build) == [.testRun, .testRun])
+        #expect(records.allSatisfy { $0.stamp == .commit(Self.sha) })
+        #expect(CardDivergenceLog.read(at: url).byCommit(Self.sha)?.written.count == 2)
+    }
+
+    // The variable is honoured only in a test process and only as a whole commit, and the production answer to
+    // "is this a test process" is true here, inside the test host.
+    @Test func theGateCommitIsReadOnlyInATestProcessAndOnlyAsAWholeCommit() {
+        typealias TestRun = CardDivergenceLog.TestRunCommit
+        let given = [TestRun.variable: Self.sha.uppercased()]
+        #expect(TestRun.read(environment: given, isTestProcess: true) == .commit(Self.sha))
+        #expect(TestRun.read(environment: given, isTestProcess: false) == .notGiven)
+        #expect(TestRun.read(environment: [:], isTestProcess: true) == .notGiven)
+        for malformed in [String(Self.sha.prefix(7)), Self.sha + "0", "", String(repeating: "g", count: 40),
+                          "Marguerite Eddowes"] {
+            #expect(TestRun.read(environment: [TestRun.variable: malformed], isTestProcess: true) == .malformed,
+                    Comment(rawValue: "`\(malformed)` was not read as malformed"))
+        }
+        // A process that is not a test run, and a malformed commit, stamp exactly what #4583 stamps.
+        let installed = InstalledBuild(commit: Self.otherSha, commitDate: Date(timeIntervalSince1970: 1_800_000_000),
+                                       repoPath: "/code/overture", provenance: .main)
+        for isRunFromSource in [true, false] {
+            let before = CardDivergenceLog.BuildStamp.of(installed: installed, isRunFromSource: isRunFromSource)
+            for ignored in [TestRun.read(environment: given, isTestProcess: false), .malformed] {
+                #expect(CardDivergenceLog.BuildStamp.of(installed: installed, isRunFromSource: isRunFromSource,
+                                                        testRun: ignored) == before)
+            }
+        }
+        // The production predicate, and the production reading through it.
+        #expect(AppEnvironment.isRunningUnderTests)
+        #expect(TestRun.current == TestRun.read(environment: ProcessInfo.processInfo.environment, isTestProcess: true))
+    }
+
+    // THE ARCHIVE KEY (the E4 plan's section 4). 250 records of an older commit and one mismatch of the branch's
+    // commit share (kind, source, fields); the branch's is compacted into the archive behind an older one of the same
+    // key, and the prune must keep it, so the gate's read by commit still finds it.
+    @Test func aBranchsRecordSurvivesTheArchiveBehindAnOlderCommitsRecordOfTheSameKey() throws {
+        let dir = try sandboxes.make(named: "4358-e4c-archive-key")
+        let url = CardDivergenceLog.url(in: dir)
+        func stamped(_ sequence: Int, commit: String, build: CardDivergenceRecord.Build) -> String? {
+            CardDivergenceLog.line(for: record(sequence, kind: .factMismatch)
+                .stamped(CardDivergenceLog.BuildStamp(build: build, commit: commit)))
+        }
+        // One older record first, then the branch's, then the rest of the older commit's: 251 lines, 200 kept live.
+        var lines = [stamped(0, commit: Self.otherSha, build: .installed)]
+        lines.append(stamped(1, commit: Self.sha, build: .testRun))
+        for n in 2...250 { lines.append(stamped(n, commit: Self.otherSha, build: .installed)) }
+        let text = lines.compactMap { $0 }
+        #expect(text.count == 251)
+        try (text.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+
+        #expect(CardDivergenceLog.compact(at: url) == .archived(count: 51))
+        #expect(CardDivergenceLog.pruneArchive(besideLogAt: url) == .removed(count: 49))
+
+        let live = CardDivergenceLog.read(at: url)
+        let archive = CardDivergenceLog.read(at: CardDivergenceLog.archiveURL(besideLogAt: url))
+        let both = CardDivergenceLog.Read(records: live.records + archive.records)
+        let found = try #require(both.byCommit(Self.sha))
+        #expect(found.written.map(\.sequence) == [1], Comment(rawValue:
+            "the branch's record is gone after the prune: \(archive.records.map(\.sequence))"))
+        #expect(archive.records.map(\.sequence) == [0, 1])
+    }
+
+    // Each stamp is its own value in the key, `unstamped` and a build that could not name its commit included.
+    @Test func theArchiveKeepsOneOfEachKeyPerStampUnstampedIncluded() throws {
+        let unstamped = try #require(CardDivergenceLog.read(
+            #"{"at":"2026-10-07T10:00:00Z","cardsBuilt":0,"fields":["venue"],"kind":"factMismatch","sequence":0,"session":"old","source":"reconcile"}"#
+        ).records.first)
+        func by(_ build: CardDivergenceRecord.Build, _ commit: String?, _ n: Int) -> CardDivergenceRecord {
+            record(n, kind: .factMismatch).stamped(CardDivergenceLog.BuildStamp(build: build, commit: commit))
+        }
+        let records = [unstamped, unstamped, by(.runFromSource, nil, 1), by(.runFromSource, nil, 2),
+                       by(.notRecorded, nil, 3), by(.installed, Self.sha, 4), by(.installed, Self.sha, 5),
+                       by(.installed, Self.otherSha, 6), by(.testRun, Self.sha, 7)]
+        let pruned = CardDivergenceLog.prunedArchive(records)
+        // A test run and an installed build of the same commit are one value: the key is what wrote it, and that
+        // is a commit when there is one.
+        #expect(pruned.records.map(\.sequence) == [0, 1, 3, 4, 6])
+        #expect(pruned.dropped == 4)
+    }
+
+    // THE BOUND (L669). Keyed per build with no limit the archive would gain lines with every build for ever, so only
+    // the most recent `archiveBuildsKept` builds keep an example each, and every older build shares one per key: the
+    // oldest, the first time that kind was seen at all.
+    @Test func theArchiveKeepsPerBuildExamplesOnlyForTheMostRecentBuilds() {
+        let kept = CardDivergenceLog.archiveBuildsKept
+        let builds = kept + 5
+        // Each build writes two records of one key, an hour apart; later builds write later. A commit per build.
+        var records: [CardDivergenceRecord] = []
+        for b in 0..<builds {
+            let commit = String(format: "%040x", b + 1)
+            for r in 0..<2 {
+                let sequence = b * 2 + r
+                records.append(CardDivergenceRecord(session: "s", sequence: sequence,
+                                                    at: Date(timeIntervalSince1970: 1_800_000_000 + Double(sequence) * 3600),
+                                                    fields: ["venue"], cardsBuilt: 0, stage: nil, kind: .factMismatch,
+                                                    source: .reconcile)
+                    .stamped(CardDivergenceLog.BuildStamp(build: .installed, commit: commit)))
+            }
+        }
+        let pruned = CardDivergenceLog.prunedArchive(records)
+        // One example for the five older builds together (the very first record), and one for each recent build.
+        let firstOfEachRecent = (builds - kept..<builds).map { $0 * 2 }
+        #expect(pruned.records.map(\.sequence) == [0] + firstOfEachRecent,
+                Comment(rawValue: "kept \(pruned.records.map(\.sequence))"))
+        #expect(pruned.records.count == kept + 1)
+        // A prune of what it kept removes nothing more: the rule is stable.
+        #expect(CardDivergenceLog.prunedArchive(pruned.records).dropped == 0)
     }
 
     // A later build's spelling of `build` reads as unrecognised rather than failing the line, and a file
