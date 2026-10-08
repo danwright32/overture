@@ -614,7 +614,7 @@ struct QueueEngineNoticeCopyTests {
         var counters = QueueEngineCounters()
         counters.fullReads = 2
         counters.foreignSaves.record(at: Self.at)
-        let line = QueueEngineNoticeCopy.logLine(matches: 0, lastMatchedAt: nil,
+        let line = QueueEngineNoticeCopy.verifierLogLine(matches: 0, lastMatchedAt: nil,
                                                  faults: .init(count: 1, oldestSince: Self.at, stuck: 0),
                                                  counters: counters)
         for part in ["verifier matches 0", "last matched never", "faulted rows 1", "full reads 2", "foreign saves 1",

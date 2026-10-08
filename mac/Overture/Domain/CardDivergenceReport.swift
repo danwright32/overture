@@ -167,7 +167,7 @@ enum QueueEngineNoticeCopy {
 
     /// The four full-read nets and the verifier's state as one log line, so #4343's real-use day can be read from the
     /// log (the E4 plan's section 1, point 1). Never shown to Dan.
-    static func logLine(matches: Int, lastMatchedAt: Date?, faults: QueueEngineFaults.Summary,
+    static func verifierLogLine(matches: Int, lastMatchedAt: Date?, faults: QueueEngineFaults.Summary,
                         counters: QueueEngineCounters) -> String {
         let iso = ISO8601DateFormatter()
         // copy-inventory:ignore-start  a developer log line, never shown to Dan (#4358)

@@ -125,7 +125,7 @@ struct ShowIdentity: Equatable, Hashable, Sendable {
             }
         }
 
-        // #4532: the same three causes, said for Cmd+Z. Separate from `sentence` because two of those
+        // #4532: the same causes, said for Cmd+Z. Separate from `sentence` because two of those
         // speak of a row Dan pressed and tell him to press it again, and pressing Cmd+Z again reverses the
         // NEXT action on the stack rather than retrying this one (L111). So these say what happened and
         // that nothing was undone, and ask for nothing. `org` is the name the Edit menu showed, which an
