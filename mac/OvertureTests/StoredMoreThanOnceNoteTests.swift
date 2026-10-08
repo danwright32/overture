@@ -12,6 +12,7 @@ import SwiftData
 // This is the card saying so, in the place he already meets the show, rather than a report on a screen
 // nothing links to (L546). `linkedEngagementNote` beside it is the precedent: EngagementLink finds the
 // same production at other venues and the card carries one line about it.
+@MainActor
 @Suite("A card says when the same show is stored more than once (#3282)")
 struct StoredMoreThanOnceNoteTests {
 
@@ -84,7 +85,7 @@ struct StoredMoreThanOnceNoteTests {
         #expect(data.rows.count == 1,
                 "two rows of one show are one card since #4030: \(data.rows.map(\.id))")
         let row = try #require(data.rows.first { $0.id == "run" })
-        #expect(data.cards.card(for: row).sameShowKeys == ["single"])
+        #expect(data.cards.card(for: row, resolving: all).sameShowKeys == ["single"])
     }
 
     // The negative half. Two rows at one venue under one title on nights that do not overlap are the
@@ -99,7 +100,7 @@ struct StoredMoreThanOnceNoteTests {
 
         var data = QueueModel.scope(from: all, now: Date())
         let row = try #require(data.rows.first { $0.id == "oct11" })
-        #expect(data.cards.card(for: row).sameShowKeys.isEmpty)
+        #expect(data.cards.card(for: row, resolving: all).sameShowKeys.isEmpty)
     }
 
     // Judged over the WHOLE corpus, not the caller's rows: a second row for this show may itself be
@@ -117,6 +118,6 @@ struct StoredMoreThanOnceNoteTests {
 
         var data = QueueModel.scope(from: [shown], corpus: all, now: Date())
         let row = try #require(data.rows.first { $0.id == "shown" })
-        #expect(data.cards.card(for: row).sameShowKeys == ["hidden"])
+        #expect(data.cards.card(for: row, resolving: all).sameShowKeys == ["hidden"])
     }
 }

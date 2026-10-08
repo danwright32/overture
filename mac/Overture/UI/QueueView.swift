@@ -593,7 +593,7 @@ struct QueueView: View {
         // the memo, shared with the Archive (`ScopeMemo.value(fingerprint:drawn:...)`), which hands the
         // pass the keys it decided.
         // A save through ANY context is a change too, which `ScopeMemo` itself enforces (`savesIn`).
-        return renderMemo.value(fingerprint: key, drawn: requested, now: now,
+        return renderMemo.value(fingerprint: key, drawn: requested, resolving: liveProspects, now: now,
                                 savesIn: context.container,
                                 // #4252: a whole-store pass (364 ms on the live store, 2026-09-25) against
                                 // 134 ms to re-arm observation, so the refetch after a save is served.
@@ -1893,7 +1893,8 @@ struct QueueView: View {
     @ViewBuilder private func prospectRow(_ row: QueueScopeRow, data: RenderData,
                                           departure: DepartureReason?,
                                           departingCard: QueueItem?) -> some View {
-        let item = departingCard ?? data.cards.card(for: row)
+        // #4371: a card the pass did not prebuild resolves its show through the live shows, never the pass's.
+        let item = departingCard ?? data.cards.card(for: row, resolving: liveProspects)
         if let departure, departure.showsSendDelight {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
             // .identity), then the glide-up removal plays when `departing` clears. Reduced Motion drops

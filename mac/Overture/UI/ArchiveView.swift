@@ -126,6 +126,11 @@ struct ArchiveView: View {
     // render while never invalidating anything itself: it is a plain class, so writing to it is not a
     // change SwiftUI observes.
     @State private var scopeMemo = ScopeMemo<QueueModel.Scope>()
+    // #4371: the shows a card the pass did not prebuild resolves its show through, by identifier. The store the
+    // pass builds holds each show's identity rather than the model, so a drawn row finds it here, refreshed by
+    // every body before anything is drawn (the queue's `LiveProspects`, for its reason, #4322). Indexed rather
+    // than the array itself, which would walk every show in the store once per card drawn on demand.
+    @State private var liveProspects = LiveProspects()
 
     private func makeScope() -> QueueModel.Scope {
         // DRAINED ON EVERY EVALUATION, whatever the memo then decides, and that is not a detail.
@@ -147,7 +152,8 @@ struct ArchiveView: View {
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
         // #4356: one instant for the memo and the scope it builds, so they reason about the same moment.
         let now = clock()
-        return scopeMemo.value(fingerprint: fingerprint, drawn: cardKeys.takeKeys(), now: now,
+        return scopeMemo.value(fingerprint: fingerprint, drawn: cardKeys.takeKeys(), resolving: liveProspects,
+                               now: now,
                                savesIn: context.container,
                                // #4252: the whole-store scope (277 ms on the live store, 2026-09-25) against
                                // 134 ms to re-arm observation, so the refetch after a save is served.
@@ -199,6 +205,8 @@ struct ArchiveView: View {
         // called as a statement because `body` is a ViewBuilder, which takes a declaration and not a bare
         // void expression.
         let _ = freezeWatch?.recordPass()
+        // #4371: before the pass and the rows, so a card drawn on demand resolves against the shows this body has.
+        let _ = liveProspects.adopt(prospects)
         // #3492: derived ONCE per render pass and handed down, the same shape #1774 established for
         // the queue. A second reason beyond cost: two independent derivations of one query can in
         // principle disagree, so the count beside the title and the list beneath it were computed
@@ -296,7 +304,7 @@ struct ArchiveView: View {
             PinnedScrollHolder { proxy, pinned in
                 LazyVStack(alignment: .leading, spacing: OVSpacing.md) {
                     ForEach(filtered) { scopeRow in
-                        row(scopeRow, cards: cards, context: context, feedback: feedback,
+                        row(scopeRow, cards: cards, resolving: liveProspects, context: context, feedback: feedback,
                             dayOffOffer: dayOffOffer, outboundSendSince: outboundSending[scopeRow.id])
                     }
                 }
@@ -361,10 +369,10 @@ struct ArchiveView: View {
     // #3655 Phase 5: THE ROW REQUEST, on #3654's contract. It takes a ROW and asks the store, which is
     // what records the key for the next pass and what counts a miss. A card is built on the spot when the
     // pass did not predict this row, so the render is always correct and never a placeholder (L67).
-    func row(_ scopeRow: QueueScopeRow, cards: QueueModel.CardStore,
+    func row(_ scopeRow: QueueScopeRow, cards: QueueModel.CardStore, resolving shows: some ShowResolver,
              context: ModelContext, feedback: ActionFeedback,
              dayOffOffer: DayOffOfferRequest = DayOffOfferRequest(), outboundSendSince: Date? = nil) -> some View {
-        let item = cards.card(for: scopeRow)
+        let item = cards.card(for: scopeRow, resolving: shows)
         // #3690: through `ShowsInHand`, so the array is read on a press rather than captured per row.
         // #4357 slice G1: the day and instant the cards were built at, not the wall clock read while drawing.
         return ProspectRowFactory.row(item, today: cards.preamble.day, now: cards.preamble.now,

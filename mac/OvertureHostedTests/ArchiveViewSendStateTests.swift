@@ -47,7 +47,7 @@ struct ArchiveViewSendStateTests {
 
         let item = approvedItemWithDraft()
 
-        _ = try view.row(QueueScopeRow(item), cards: store(holding: item),
+        _ = try view.row(QueueScopeRow(item), cards: store(holding: item), resolving: [Prospect](),
                          context: context(), feedback: ActionFeedback())
             .inspect().find(button: SendConfirmCopy.openReview)
     }
@@ -58,7 +58,7 @@ struct ArchiveViewSendStateTests {
 
         let item = approvedItemWithDraft()
 
-        let rendered = view.row(QueueScopeRow(item), cards: store(holding: item),
+        let rendered = view.row(QueueScopeRow(item), cards: store(holding: item), resolving: [Prospect](),
                                 context: try context(), feedback: ActionFeedback(),
                                 outboundSendSince: since)
         #expect((try? rendered.inspect().find(button: SendConfirmCopy.openReview)) == nil)

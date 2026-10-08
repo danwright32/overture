@@ -313,20 +313,25 @@ extension ScopeMemo where Value: CarriesCardStore {
     /// (`servesRefetch`). In the unmarked case the cards' tracking EXTENDS the build's generation; in the
     /// refetch case the refetch is served here and the cards are tracked in the same re-arm. Anything else
     /// derives, exactly as it always did.
+    ///
+    /// #4371: `shows` is the surface's live resolver, the one its rows draw their cards through, because an adopted
+    /// card is built again the way its draw built it (a store over the models holds its shows by identity).
     func value(fingerprint: ScopeFingerprint,
                drawn: Set<String>,
+               resolving shows: some ShowResolver,
                now: Date,
                staleAfter: Staleness = .seconds(ScopeMemo.staleAfterSeconds),
                savesIn store: ModelContainer,
                onRefetch: Refetch,
                build: (Set<String>) -> Value) -> Value {
-        let keys = cardKeys(serving: drawn, under: fingerprint, now: now, staleAfter: staleAfter,
+        let keys = cardKeys(serving: drawn, resolving: shows, under: fingerprint, now: now, staleAfter: staleAfter,
                             savesIn: store, onRefetch: onRefetch)
         return value(fingerprint: fingerprint, cardKeys: keys, now: now, staleAfter: staleAfter,
                      savesIn: store, onRefetch: onRefetch) { build(keys) }
     }
 
-    private func cardKeys(serving drawn: Set<String>, under fingerprint: ScopeFingerprint, now: Date,
+    private func cardKeys(serving drawn: Set<String>, resolving shows: some ShowResolver,
+                          under fingerprint: ScopeFingerprint, now: Date,
                           staleAfter: Staleness, savesIn store: ModelContainer,
                           onRefetch: Refetch) -> Set<String> {
         guard let key, let value, let prebuilt = value.cards.requestedKeys else { return drawn }
@@ -339,11 +344,11 @@ extension ScopeMemo where Value: CarriesCardStore {
         let revealed = drawn.subtracting(prebuilt)
         var adopted = false
         if refetched {
-            rearm(fingerprint) { adopted = value.cards.adopt(revealed) }
+            rearm(fingerprint) { adopted = value.cards.adopt(revealed, resolving: shows) }
         } else {
             let generation = staleFlag.current
             withObservationTracking {
-                adopted = value.cards.adopt(revealed)
+                adopted = value.cards.adopt(revealed, resolving: shows)
             } onChange: { [staleFlag] in
                 staleFlag.set(ifArmedAt: generation)
             }

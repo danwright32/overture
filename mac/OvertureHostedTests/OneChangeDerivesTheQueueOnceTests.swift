@@ -236,6 +236,49 @@ struct OneChangeDerivesTheQueueOnceTests {
             + "\(why.joined(separator: " | ")) (#4106)"))
     }
 
+    // #4371 (E4a part 2): ONE card action re-runs ONE card's body, through the real queue over the memo path.
+    //
+    // The card store the pass publishes holds each show by identity since #4371, and a card it did not
+    // prebuild resolves its show through the live shows at draw time. What this pins is that drawing through
+    // that resolver changes nothing a card body sees: the cards the action did not touch are the same values
+    // as before and skip their bodies (`ScoutCardInputs`), and the one it touched redraws. Counted per card with
+    // the card's own body counter (#4260), never timed (L63).
+    //
+    // THE POSITIVE CONTROLS FIRST (L159): the mount drew at least two cards, so a zero below is a body that was
+    // asked and skipped, and the touched card is one of them, so its redraw can be seen at all.
+    @Test func oneCardActionReRunsOneCardBody() async throws {
+        let c = try container()
+        let h = host(c)
+        defer { tearDown(h) }
+        let beforeMount = QueueRenderCounter.cardBodyCounts()
+        seed(h.context)
+        await brought(up: h)
+        let mounted = QueueRenderCounter.cardBodyCounts()
+        let drawn = mounted.filter { $0.value > (beforeMount[$0.key] ?? 0) && $0.key.hasPrefix("row-") }
+            .map(\.key).sorted()
+        #expect(drawn.count >= 2, Comment(rawValue:
+            "bringing the queue up ran the bodies of \(drawn) only, so fewer than two cards were drawn and the "
+            + "zeros below would mean nothing"))
+
+        let all = try prospects(h.context)
+        let targetKey = try #require(drawn.first, "no card was drawn, so there is no card to press")
+        let target = try #require(all.first { $0.naturalKey == targetKey })
+        let beforeAction = QueueRenderCounter.cardBodyCounts()
+        ProspectMutations.correctClassification(QueueItem(target), discipline: .theater, shows: all,
+                                                context: h.context, feedback: h.feedback)
+        _ = await settle(h.hosting)
+        let after = QueueRenderCounter.cardBodyCounts()
+        let reRun = Dictionary(uniqueKeysWithValues: drawn.map { ($0, (after[$0] ?? 0) - (beforeAction[$0] ?? 0)) })
+
+        #expect(target.discipline == "theater", "the correction did not land, so nothing below was measured")
+        #expect((reRun[targetKey] ?? 0) >= 1, Comment(rawValue:
+            "the card whose genre was corrected did not redraw, so it still draws the old genre (L14)"))
+        let others = reRun.filter { $0.key != targetKey && $0.value != 0 }
+        #expect(others.isEmpty, Comment(rawValue:
+            "correcting ONE card's genre re-ran these other cards' bodies \(others.sorted { $0.key < $1.key }), "
+            + "so every card action redraws every card on screen (#4322, #4371)"))
+    }
+
     // A whole night, through `dismissAll`, the mutation the night's Dismiss confirmation calls. Several
     // rows change in one write, and that must still be one derivation rather than one per row.
     @Test func dismissingAWholeNightDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {
@@ -357,11 +400,28 @@ struct OneChangeDerivesTheQueueOnceTests {
     // (#4252), so the cards are now adopted under the same re-arm that serves it.
     //
     // This is the shape every other test here sets up in `brought(up:)`, so on main each of them started
-    // from a queue that had just derived twice. Not reproduced, so stated as a candidate only: a runner slow
-    // enough to deliver that refetch after the settle went quiet would count the second derivation against
-    // the change under test, which is the reason #4591's two CI flakes recorded.
+    // from a queue that had just derived twice. #4591 offered a late refetch as the cause of its CI flakes,
+    // unreproduced. #4609 measured the one that remained: a fresh store at a recycled address, below.
     @Test func showsArrivingUnderAMountedQueueDeriveItOnce() async throws {
-        let c = try container()
+        try await showsArriving(in: container())
+    }
+
+    // #4609: the same, over a store made at the ADDRESS of one that took a save through a second context and
+    // was released, which is what an earlier test in a broad run leaves behind.
+    //
+    // `StoreSaveCount` kept its "this store has taken a foreign save" fact by `ObjectIdentifier`, an address,
+    // so the fresh store inherited it. A store with foreign saves never has a refetch served (#4252), so the
+    // save's refetch rebuilt the whole queue: `allProspects, prospects | nothing this view reads`, the exact
+    // pair #4609's broad run recorded, and every saved-change test here was exposed the same way. Run alone
+    // the address is never one a foreign save left, which is why the test only ever failed in company.
+    @Test func showsArrivingUnderAQueueOverARecycledStoreDeriveItOnce() async throws {
+        let recycled = try #require(try RecycledStore.whereAForeignSavedOneDied(AppSchema.models) { other in
+            other.insert(ExcludedTown(town: "Poughkeepsie"))
+        }, "UNMEASURED: no container was made at the address of a released foreign-saved one, so nothing was measured")
+        try await showsArriving(in: recycled)
+    }
+
+    private func showsArriving(in c: ModelContainer) async throws {
         let h = host(c)
         defer { tearDown(h) }
         _ = await settle(h.hosting)
@@ -375,7 +435,9 @@ struct OneChangeDerivesTheQueueOnceTests {
         #expect(why.count == 1, Comment(rawValue:
             "shows arriving under a mounted queue derived it \(why.count) times: \(why.joined(separator: " | ")). "
             + "One is the shows; a second is the first frame's cards bought with another whole-store pass "
-            + "because the save's refetch had marked the answer before they could be adopted (#4591)"))
+            + "because the save's refetch had marked the answer before they could be adopted (#4591), or a "
+            + "refetch the memo refused to serve because the store reads as foreign-saved: "
+            + "\(StoreSaveCount.shared.hasForeignSaves(in: c)) (#4609)"))
     }
 
     // #4591: a removal that REVEALS rows derives the queue once.

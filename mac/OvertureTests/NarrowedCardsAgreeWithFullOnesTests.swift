@@ -103,7 +103,7 @@ struct NarrowedCardsAgreeWithFullOnesTests {
                 // The other half of the mechanism: a card the pass did NOT prebuild, resolved when the
                 // row arrives on screen. It must be the same card, because it is decorated from the same
                 // tables, and this is where that would break first if the store stopped keeping them.
-                mine = narrowed.cards.card(for: row)
+                mine = narrowed.cards.card(for: row, resolving: shows)
             } else {
                 mine = narrowed.cards.alreadyBuilt(row.id)
                 if mine == nil { continue }
