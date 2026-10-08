@@ -3,7 +3,7 @@
 #
 #   scripts/compare-before-after.sh --before <checkout> --after <checkout> \
 #     --scope '-only-testing:OvertureTests/MemoPathDerivationCostProbeTests' \
-#     --env TEST_RUNNER_MEASURE_4358_E4A=1 [--rounds 4] [--out <dir>]
+#     --env TEST_RUNNER_MEASURE_4358_E4A=1 [--rounds 6] [--out <dir>]
 #   scripts/compare-before-after.sh --analyse <readings.tsv>
 #
 # WHY IT EXISTS. A probe measures ONE side per run, so a "no slower" claim has always been two runs of it,
@@ -18,23 +18,30 @@
 # shared fixture at fixtures/probe-reading/lines.txt keeps the two sides agreeing, L26) goes into
 # readings.tsv. Then, per metric, over the rounds in which both sides read it exactly once:
 #
-#   pooled median per side   the median of that side's run medians
-#   order effect             half the gap between the after minus before difference in rounds where after ran
-#                            second and in rounds where it ran first: how much slower the second run reads
-#   order balanced change    the mean of those two group means, in which the order effect cancels
-#   spread                   the wider of the two sides' own ranges of run medians
+#   pairs                    the k-th round run before first beside the k-th run after first. In each, the order
+#                            effect enters once with each sign, so half the sum of their two after minus before
+#                            differences is the change with the order cancelled
+#   order balanced change    the mean of the pairs
+#   order effect             the mean of half the gap inside each pair: how much slower the second run reads
+#   pooled median per side   the median of that side's run medians over the paired rounds
 #
-# and calls the change SLOWER or FASTER only when it is larger than the spread, WITHIN NOISE otherwise.
+# THE RULE. SLOWER or FASTER only when EVERY pair moved the same way AND their mean is larger than the pairs'
+# own range; WITHIN NOISE otherwise. Judged against the pairs, never against the raw spread of each side's run
+# medians, which still carries the order effect: on #4614's data that spread was 67.4 ms, so any change under
+# about twice the order penalty would have read as noise, the "hides one" failure this exists to stop (L172,
+# L209). Measured by simulation under normal noise and no change, the rule calls a change about 1 time in 7
+# with 2 pairs, 1 in 24 with 3 and 1 in 100 with 4, so the default is 6 rounds (3 pairs), and the report says
+# so beside any verdict drawn from fewer than 4 pairs.
 #
-# WHEN IT REFUSES. A metric with no round in one of the two orders is UNMEASURED, because one order alone
-# cannot tell the change from the order the runs went in: one round, every round but one failed, or a metric
-# only one side printed. A run that failed or printed no reading is named with its log, never read as a pass
-# (L98). `--rounds` must be even and at least 2, refused before anything takes the lock.
+# WHEN IT REFUSES. A metric with fewer than 2 complete pairs is UNMEASURED: one order alone cannot tell the
+# change from the order the runs went in, and one pair has no range to judge against. That is too few rounds,
+# failed runs, or a metric only one side printed. A run that failed or printed no reading is named with its log,
+# never read as a pass (L98). `--rounds` must be even and at least 4, refused before anything takes the lock.
 #
 # Exit 0 no slower (every metric within noise or faster), 1 SLOWER (a measured regression, said even when
 # another metric is unmeasured), 2 UNMEASURED or refused.
 #
-# COST. Every run takes the shared test lock, builds, and runs the probe; four rounds are eight of them. The
+# COST. Every run takes the shared test lock, builds, and runs the probe; six rounds are twelve of them. The
 # report states how long each took, including any wait for the lock, and the total.
 #
 # Seams, so its own fixture never takes the lock or waits (L2, L524): OVERTURE_COMPARE_RUN is the command for
@@ -123,18 +130,17 @@ analyse() {
       slower = ""; unmeasured = 0; within = 0; faster = 0
       for (i = 1; i <= nm; i++) {
         m = metrics[i]
-        split("", B); split("", A)
-        nb = 0; na = 0; ab = 0; ba = 0; sab = 0; sba = 0; twice = 0; complete = 0; byRound = ""
+        split("", abD); split("", baD); split("", abB); split("", abA); split("", baB); split("", baA)
+        split("", B); split("", A); split("", P)
+        ab = 0; ba = 0; twice = 0; byRound = ""
         for (r = 1; r <= rounds; r++) {
           kb = m SUBSEP r SUBSEP "before"; ka = m SUBSEP r SUBSEP "after"
           cb = (kb in count) ? count[kb] : 0; ca = (ka in count) ? count[ka] : 0
           if (cb > 1 || ca > 1) { twice++; continue }
           if (cb != 1 || ca != 1) continue
-          complete++
           b = value[kb]; a = value[ka]; d = a - b
-          B[++nb] = b; A[++na] = a
-          if (beforePos[m SUBSEP r] == "first") { ab++; sab += d; how = "after second" }
-          else { ba++; sba += d; how = "after first" }
+          if (beforePos[m SUBSEP r] == "first") { ab++; abD[ab] = d; abB[ab] = b; abA[ab] = a; how = "after second" }
+          else { ba++; baD[ba] = d; baB[ba] = b; baA[ba] = a; how = "after first" }
           byRound = byRound (byRound == "" ? "" : ", ") sprintf("%+.1f (%s)", d, how)
         }
         if (twice > 0) {
@@ -142,27 +148,43 @@ analyse() {
           unmeasured++
           continue
         }
-        if (ab < 1 || ba < 1) {
-          printf "%s: UNMEASURED: %d complete round(s), %d with before run first and %d with after run first. ", m, complete, ab, ba
-          print "One order alone cannot tell the change from the order the runs went in."
+        # The k-th round run before first is paired with the k-th run after first. Inside a pair the order
+        # effect enters once with each sign, so half their sum is the change with the order cancelled, and
+        # half their difference is the order effect.
+        pairs = ab < ba ? ab : ba
+        if (pairs < 2) {
+          printf "%s: UNMEASURED: %d complete pair(s) of rounds, from %d round(s) with before run first and %d with after run first. ", m, pairs, ab, ba
+          print "A verdict needs at least 2 pairs, each one round of each order, so the order effect cancels inside every pair."
           unmeasured++
           continue
         }
-        mab = sab / ab; mba = sba / ba
-        change = (mab + mba) / 2; order = (mab - mba) / 2
+        nb = 0; na = 0; sumP = 0; sumO = 0; positives = 0; negatives = 0; byPair = ""
+        for (k = 1; k <= pairs; k++) {
+          P[k] = (abD[k] + baD[k]) / 2
+          sumP += P[k]; sumO += (abD[k] - baD[k]) / 2
+          if (P[k] > 0) positives++
+          if (P[k] < 0) negatives++
+          B[++nb] = abB[k]; B[++nb] = baB[k]; A[++na] = abA[k]; A[++na] = baA[k]
+          byPair = byPair (byPair == "" ? "" : ", ") sprintf("%+.1f", P[k])
+        }
+        change = sumP / pairs; order = sumO / pairs
+        judgeRange = highest(P, pairs) - lowest(P, pairs)
         pb = sorted_median(B, nb); pa = sorted_median(A, na)
-        spreadB = highest(B, nb) - lowest(B, nb); spreadA = highest(A, na) - lowest(A, na)
-        spread = spreadB > spreadA ? spreadB : spreadA
-        if (change > spread) { verdict = "SLOWER"; slower = slower (slower == "" ? "" : ", ") m }
-        else if (change < -spread) { verdict = "FASTER"; faster++ }
+        # The rule: a change is called only when EVERY pair moved the same way AND their mean is larger than the
+        # range of the pairs. Never against the raw spread of run medians, which still carries the order effect.
+        if (positives == pairs && change > judgeRange) { verdict = "SLOWER"; slower = slower (slower == "" ? "" : ", ") m }
+        else if (negatives == pairs && -change > judgeRange) { verdict = "FASTER"; faster++ }
         else { verdict = "WITHIN NOISE"; within++ }
         printf "%s: %s\n", m, verdict
         printf "  before pooled median %.1f ms over %d runs (%.1f to %.1f)\n", pb, nb, lowest(B, nb), highest(B, nb)
         printf "  after pooled median %.1f ms over %d runs (%.1f to %.1f)\n", pa, na, lowest(A, na), highest(A, na)
         printf "  order effect: the side run second read %.1f ms %s\n", (order < 0 ? -order : order), (order < 0 ? "faster" : "slower")
         percent = pb > 0 ? sprintf(" (%+.1f%%)", change / pb * 100) : ""
-        printf "  order balanced difference: %+.1f ms%s, against a spread of %.1f ms\n", change, percent, spread
+        printf "  order balanced difference: %+.1f ms%s, the mean of %d pairs (%s), whose range is %.1f ms\n", change, percent, pairs, byPair, judgeRange
         printf "  after minus before, round by round: %s\n", byRound
+        if (pairs == 2) print "  with 2 pairs, under noise alone this rule calls a change about 1 time in 7: run more rounds before trusting a call"
+        if (pairs == 3) print "  with 3 pairs, under noise alone this rule calls a change about 1 time in 24"
+        if (ab != ba) printf "  %d round(s) without a partner of the other order are left out\n", (ab > ba ? ab - ba : ba - ab)
       }
       if (slower != "") { print "VERDICT: SLOWER: " slower; exit 1 }
       if (unmeasured > 0) { printf "VERDICT: UNMEASURED: %d metric(s) could not be compared in balanced order\n", unmeasured; exit 2 }
@@ -171,7 +193,7 @@ analyse() {
     }' "$1"
 }
 
-BEFORE="" AFTER="" SCOPE="" ROUNDS=4 OUT="" ANALYSE=""
+BEFORE="" AFTER="" SCOPE="" ROUNDS=6 OUT="" ANALYSE=""
 ENVS=()
 while [[ $# -gt 0 ]]; do
   # An option that takes a value, given last with none: `shift 2` fails with one argument left, leaving $#
@@ -202,9 +224,9 @@ fi
 [[ -n "${SCOPE}" ]] || refuse "--scope is required, naming the probe suite by its type"
 [[ -n "${BEFORE}" && -d "${BEFORE}" ]] || refuse "no checkout at ${BEFORE:-<none given>} for --before"
 [[ -n "${AFTER}" && -d "${AFTER}" ]] || refuse "no checkout at ${AFTER:-<none given>} for --after"
-if ! [[ "${ROUNDS}" =~ ^[0-9]+$ ]] || (( ROUNDS < 2 || ROUNDS % 2 == 1 )); then
-  refuse "--rounds must be an even number of at least 2 (got ${ROUNDS}): one round, or an unpaired one, \
-cannot tell a change from the order the runs went in"
+if ! [[ "${ROUNDS}" =~ ^[0-9]+$ ]] || (( ROUNDS < 4 || ROUNDS % 2 == 1 )); then
+  refuse "--rounds must be an even number of at least 4 (got ${ROUNDS}): a verdict needs at least 2 pairs, \
+each one round of each order, so the order effect cancels inside every pair"
 fi
 
 if [[ -z "${OUT}" ]]; then
