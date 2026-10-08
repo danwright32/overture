@@ -259,6 +259,66 @@ final class ScopeMemo<Value> {
 
 }
 
+/// #4570: a memoised answer that carries the pass's card store, which is what lets the memo decide the
+/// card half of its own key (`ScopeMemo.cardKeys(serving:under:)`) for every surface from one implementation.
+protocol CarriesCardStore {
+    var cards: QueueModel.CardStore { get }
+}
+
+extension QueueModel.Scope: CarriesCardStore {}
+extension QueueView.RenderData: CarriesCardStore {}
+
+extension ScopeMemo where Value: CarriesCardStore {
+
+    /// The card keys to key this evaluation on, given the keys the LAST FRAME DREW (drained from the
+    /// registry by the caller, on every evaluation, as the header's part 3 requires).
+    ///
+    /// Two rules, and both are about cards the held answer can already serve with its tracking intact.
+    ///
+    /// 1. COVERED. Every drawn key was prebuilt by the build that made the held answer, so that build's
+    ///    key set is handed back and the answer is served: a frame drawing fewer rows than the last pass
+    ///    prebuilt needs nothing new. This was the queue's own rule (`cardKeysForMemo`, #4106); the Archive
+    ///    now shares it rather than carrying a second copy (L613).
+    ///
+    /// 2. THE FIRST FRAME, #4570. A surface's first build runs before any row has drawn, so it is asked
+    ///    for NO card, and every row the first frame draws is built on demand (#3654's expected first-frame
+    ///    miss). The first evaluation after that frame then asked for those keys, which the held answer did
+    ///    not prebuild, and derived the whole store a second time to bring them inside the tracking: 120 of
+    ///    120 rows on a frozen clock, about 277 ms on the live store, on every Archive open, since RootView
+    ///    redraws above the sheet within moments of mounting it. Instead those cards are ADOPTED: built
+    ///    again inside tracking armed at the build's own generation (`CardStore.adopt`), so a field only a
+    ///    card reads still marks the answer stale, and counted as requested, so the key holds still. A
+    ///    mount costs one derivation.
+    ///
+    ///    Only when the held build was asked for no card at all. A SCROLL, a row revealed by a removal, a
+    ///    filter widening on a screen that had drawn, each asks for a key the last pass did not prebuild
+    ///    and derives exactly as it always did, which is #3654's contract; this changes the mount and
+    ///    nothing else.
+    ///
+    /// Anything else hands back what was drawn, which differs from the held key and derives.
+    ///
+    /// `fingerprint` is the one this evaluation will key on, and adoption requires it to match the held
+    /// answer's: a row deleted since the build moves the fingerprint, and building a card again from a
+    /// deleted model is a read of data that is gone, so the answer is derived instead. A stale answer is
+    /// about to be rebuilt anyway, so adopting into it would be work thrown away.
+    func cardKeys(serving drawn: Set<String>, under fingerprint: ScopeFingerprint) -> Set<String> {
+        guard let key, let value, let prebuilt = value.cards.requestedKeys else { return drawn }
+        if drawn.isSubset(of: prebuilt) { return prebuilt }
+        guard prebuilt.isEmpty, key.cardKeys.isEmpty, !staleFlag.isSet,
+              key.fingerprint == fingerprint.finalized() else { return drawn }
+        let generation = staleFlag.current
+        var adopted = false
+        withObservationTracking {
+            adopted = value.cards.adopt(drawn)
+        } onChange: { [staleFlag] in
+            staleFlag.set(ifArmedAt: generation)
+        }
+        guard adopted else { return drawn }
+        self.key = Key(fingerprint: key.fingerprint, cardKeys: drawn)
+        return drawn
+    }
+}
+
 /// The identity half of a `ScopeMemo` key: each input collection hashed by its elements' identities, in
 /// order. Sees an insert, a delete, a replacement and a reorder exactly; sees no field edit at all,
 /// which is observation tracking's job.
@@ -317,6 +377,15 @@ final class StaleFlag: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         flag = false
         generation += 1
+        return generation
+    }
+
+    /// #4570: the generation the latest `arm()` started, WITHOUT starting a new one, for tracking that
+    /// EXTENDS what the build armed rather than replacing it (`ScopeMemo.cardKeys(serving:under:)`). A new
+    /// generation there would silence the build's own tracking, so a later edit only the build read would
+    /// no longer mark the answer stale.
+    var current: Int {
+        lock.lock(); defer { lock.unlock() }
         return generation
     }
 

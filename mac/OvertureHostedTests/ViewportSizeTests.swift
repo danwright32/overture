@@ -94,7 +94,16 @@ struct ViewportSizeTests {
             }
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2))
         }
-        window?.close()
+        // #4571: LEFT MOUNTED on purpose, the one teardown in this suite the counting guard cannot have.
+        // Unmounted, this Archive host killed the test host on the next save into SwiftData (the second
+        // size's seed): `EXC_BREAKPOINT` inside a `_SwiftData_SwiftUI` notification observer, #3874's
+        // signature, four runs out of four on 2026-10-07, including this suite run alone and with the run
+        // loop turned for a second after the unmount. The view only counts through `WorkTally`, which is
+        // task local, so a leftover is charged only to a measurement it is evaluated inside.
+        if let window {
+            HostedPassCounting.closeLeavingMounted(window, because: "unmounting this Archive host kills "
+                + "the test host on the next SwiftData save (#3874's signature, measured 2026-10-07)")
+        }
         return work.queueItems
     }
 

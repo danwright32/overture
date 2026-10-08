@@ -40,14 +40,17 @@ enum HostedPassCounting {
     }
 
     // #4534: the same teardown for a harness hosted through `AnyView` when the caller holds only its
-    // WINDOW, which is all `Phase0cViewRig.host` hands back. Every `NSHostingView<AnyView>` directly in the
-    // window's content view is emptied before the window closes. A window holding none cannot be
+    // WINDOW, which is all `Phase0cViewRig.host` hands back. Every `NSHostingView<AnyView>` that IS the
+    // window's content view or sits directly in it is emptied before the window closes. A window holding none cannot be
     // unmounted from here, and that is RECORDED rather than closed quietly, because a quiet close is the
     // leftover this exists to prevent. Optional, because several suites keep the window in a variable a
     // failed build leaves nil, and a nil window has nothing in any graph.
     static func unmountAndClose(_ window: NSWindow?, sourceLocation: SourceLocation = #_sourceLocation) {
         guard let window else { return }
-        let hostings = (window.contentView?.subviews ?? []).compactMap { $0 as? NSHostingView<AnyView> }
+        // #4571: the content view ITSELF as well as its subviews, because some harnesses install the hosting
+        // view as the window's content view (`HandedRowsStayLiveTests`) rather than adding it beneath one.
+        let views = [window.contentView].compactMap { $0 } + (window.contentView?.subviews ?? [])
+        let hostings = views.compactMap { $0 as? NSHostingView<AnyView> }
         if hostings.isEmpty {
             Issue.record(Comment(rawValue: "this window holds no AnyView hosting view, so its view could not "
                 + "be unmounted and stays in the SwiftUI graph after the close; hand the hosting view to "
