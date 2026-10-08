@@ -388,6 +388,11 @@ struct QueueEngineLaunchSetup {
     var admit: @MainActor (Set<PersistentIdentifier>, ModelContext) throws
         -> (shows: [Prospect], inquiries: [Inquiry]) = QueueEngineLaunchSetup.fetchMissing
     var batchSize = QueueEngineLaunchFill.batchSize
+    /// #4358 slice E4d: a press's look for a show the fill has not taken in yet, read from the store. A seam so the
+    /// read that THROWS, which no fixture store can be made to do, can be produced (`readFailed`, L215).
+    var pressRead: @MainActor (PersistentIdentifier, ModelContext) throws -> Prospect? = {
+        try FactStore.Table.shows.liveRow($0, in: $1) as? Prospect
+    }
     /// A monotonic clock in seconds, which each batch is timed on. Only measured, never decided from.
     var uptime: @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 
@@ -1963,7 +1968,7 @@ extension QueueEngine: ShowResolver {
         }
         guard isStillFilling else { return nil }
         do {
-            guard let show = try FactStore.Table.shows.liveRow(id, in: context) as? Prospect else {
+            guard let show = try launchSetup.pressRead(id, context) else {
                 failedReads.remove(id)
                 return nil
             }

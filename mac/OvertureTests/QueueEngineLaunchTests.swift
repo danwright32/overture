@@ -313,6 +313,34 @@ final class QueueEngineLaunchFillTests {
         #expect(engine.facts.shows[moved.persistentModelID]?.fitReason == "edited after its admission")
     }
 
+    // #4358 slice E4d (the lessons review of E4d1, L11, L215): a press's look for a show the fill has not reached yet
+    // that THROWS is refused as unreadable while the fill runs, and stops being a fact once the fill has taken every
+    // row in. Seen to fail by answering `readFailed` from the set alone.
+    @Test func aLookThatThrewDuringTheFillIsUnreadableOnlyUntilTheFillEnds() throws {
+        let store = try EngineStore(shows: 6, seed: 409)
+        let turns = EngineTurns()
+        var setup = LaunchRig.inTurn(batchSize: 1)
+        let failing = try #require(try store.shows().last).persistentModelID
+        setup.pressRead = { id, context in
+            if id == failing { throw CocoaError(.fileReadUnknown) }
+            return try FactStore.Table.shows.liveRow(id, in: context) as? Prospect
+        }
+        let engine = LaunchRig.engine(store, turns, launch: setup)
+        engine.start()
+        turns.runOne()
+        turns.runOne()
+        #expect(!LaunchRig.fillEnded(engine), "the fill ended before the press, so nothing below is during it")
+        #expect(engine.liveShow(failing) == nil)
+        #expect(engine.readFailed(failing), "a look that threw during the fill is not remembered as one")
+        turns.run()
+        #expect(LaunchRig.report(engine) != nil, "the fill never finished: \(engine.launch.fill)")
+        // Asked before any press finds the row, so only the fill having ended can answer it.
+        #expect(!engine.readFailed(failing), Comment(rawValue:
+            "after the fill every row is held, so a show the engine cannot find has gone, but this one still reads "
+            + "as a failed read (L11)"))
+        #expect(engine.liveShow(failing) != nil, "the fill never took the show in")
+    }
+
     // An identifier read that cannot be made measures nothing, so the shortfall is unmeasured, never "none" (L215).
     @Test func aShortfallCheckThatCannotReadIsUnmeasuredNeverNone() throws {
         let store = try EngineStore(shows: 3, seed: 408)
