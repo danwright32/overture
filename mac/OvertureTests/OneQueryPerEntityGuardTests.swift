@@ -35,16 +35,9 @@ enum QueryPairAudit {
         let why: String
     }
 
-    static let accepted: [Accepted] = [
-        Accepted(file: "RootView.swift", entity: "Prospect",
-                 why: """
-                 `toPrep` is filtered to kept shows with no draft and `allProspects` is the whole table. \
-                 Measured on the live store 2026-09-05: the filtered descriptor returned 1 row and cost \
-                 1.3 ms, against 85.2 ms for the 632 rows QueueView's second query returned, because the \
-                 cost is per row returned. Deriving it in memory would also delete \
-                 PrepQueueBuilder.needsPrepPredicate, whose existence #367 records as deliberate.
-                 """),
-    ]
+    // #4358 slice E4d emptied it: RootView's two queries over Prospect (`toPrep` and `allProspects`) went with the
+    // cutover, and no file holds a pair any more.
+    static let accepted: [Accepted] = []
 
     enum Finding: Equatable, CustomStringConvertible {
         case nothingWalked
@@ -163,51 +156,13 @@ struct OneQueryPerEntityGuardTests {
     @Test("the reader still sees the queries the app actually declares")
     func theReaderStillFindsQueries() {
         let all = appFiles.flatMap(QueryPairAudit.declarations(in:))
-        #expect(all.count > 20, "found only \(all.count) @Query declarations, so the reader is broken")
-        // #3846 RE-AIMED THIS POSITIVE CONTROL. It named the queue's and the Archive's own prospect
-        // queries, which were the two the issue was about, and both are gone: RootView holds the app's one
-        // whole-table read and hands the rows down, because two identical bare descriptors in two live
-        // views share nothing (158.8 ms against 159.5 ms over 1,238 rows, measured 2026-09-12). A control
-        // naming a declaration the app no longer has fails on the correct code while measuring nothing
-        // (L220, L252), so it names the OWNER instead, which is the declaration that must still be there.
-        #expect(all.contains(where: { $0.file == "RootView.swift" && $0.entity == "Prospect" }),
-                "the owner's prospect query was not seen, so nothing here was measured")
-        #expect(all.contains(where: { $0.file == "QueueView.swift" && $0.entity == "OrgReachabilityAnswer" }),
-                "the queue's other queries were not seen either, so the reader is not reading this file")
-    }
-
-    // #3507's own change, asserted directly rather than only through the absence of a finding: an absence
-    // is what a broken reader also produces.
-    //
-    // #3846 took the number from ONE to NONE. #3507 removed the queue's second prospect query because
-    // SwiftData satisfied each independently; #3846 found that RootView holds a third of the same shape
-    // and the queue renders inside it, so the app read the whole table twice on every store change with no
-    // sheet open at all. The queue now takes the rows from RootView. The claim is unchanged in kind and
-    // its number has moved, which is what a change that splits or moves work does to every guard
-    // calibrated against the old one (L220).
-    @Test("the queue and the Archive read the prospect table through the owner, not themselves")
-    func theQueueHoldsNoProspectQuery() {
-        for name in ["QueueView.swift", "ArchiveView.swift"] {
-            let file = appFiles.filter { $0.name == name }
-            #expect(file.count == 1, "\(name) was not found, so this asserted nothing")
-            let prospectQueries = file.flatMap(QueryPairAudit.declarations(in:))
-                .filter { $0.entity == "Prospect" }
-            #expect(prospectQueries.isEmpty, Comment(rawValue:
-                "\(name) holds \(prospectQueries.map(\.property)) over Prospect. RootView already holds "
-                + "one and presents this view, so each of these is a second whole table read on every "
-                + "store change"))
-        }
-
-        let root = appFiles.filter { $0.name == "RootView.swift" }
-        let owned = root.flatMap(QueryPairAudit.declarations(in:))
-            .filter { $0.entity == "Prospect" }
-            .map(\.property)
-        // `toPrep` is the FILTERED one (#367's needsPrep predicate), which reads a fraction of the table
-        // and is not what this rule is about; `allProspects` is the whole-table read this change made the
-        // only one of its kind on the always-visible path.
-        #expect(owned.contains("allProspects"), Comment(rawValue:
-            "RootView holds \(owned) over Prospect, and the whole-table read the queue and the Archive "
-            + "now depend on is not among them"))
+        #expect(all.count > 10, "found only \(all.count) @Query declarations, so the reader is broken")
+        // #4358 slice E4d RE-AIMED THIS POSITIVE CONTROL again. It named RootView's prospect query, the app's one
+        // whole table read since #3846, and the cutover deleted it with every other query over the shows: the
+        // queue engine holds them (`NoQueryOverShowsOrContactsTests` forbids any). So it names a query the app
+        // still holds, the Archive's organisation answers.
+        #expect(all.contains(where: { $0.file == "ArchiveView.swift" && $0.entity == "OrgReachabilityAnswer" }),
+                "the Archive's queries were not seen, so the reader is not reading the app")
     }
 
     @Test("every accepted pair carries a reason")

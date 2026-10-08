@@ -62,23 +62,9 @@ struct ARepeatedDerivationIsFoundTests {
     // A declaration this scan has judged and let stand, each with the reason it is allowed. An entry with
     // no written reason is evidence nobody reasoned about it (L233), so the shape of this table forces
     // one. Keyed `File.declaration`.
-    static let allowed: [String: String] = [
-        "RootView.allRows": """
-        read twice, but the second is inside `archiveItems: { allRows }`, a closure Archive evaluates when \
-        it opens rather than a value this draw computes. One draw reads it once. This is the exemption the \
-        header calls case 1, and it is the reason the rule is per body evaluation rather than per \
-        reference.
-        """,
-        "QueueView.items": """
-        read five times, and every one of the five is an ACTION path this text scan cannot tell from draw \
-        code: two scroll-jump handlers, a send that snapshots one card, and the finish-missed-shows \
-        control. Checked one at a time on 2026-09-12, not assumed. The body itself never reads it: \
-        `data.items` is what every draw uses, and #1771 and #1772 are the two issues that made it so, \
-        each naming the word difference. The remaining reads reach the region only because the body names \
-        the functions those actions live in, which is the same limit #3829 recorded for `WatchlistEditing` \
-        and settled the same way (L362).
-        """,
-    ]
+    // #4358 slice E4d emptied it: `QueueView.items` became the press-time `actionItems()`, and RootView's `allRows`
+    // reads the engine's rows, so neither is a repeated derivation any more.
+    static let allowed: [String: String] = [:]
 
     private static func appViewFiles() -> [(name: String, text: String)] {
         AppSourceWalk.urls(under: RepoRoot.mac.appendingPathComponent("Overture"))

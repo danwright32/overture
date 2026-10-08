@@ -44,7 +44,7 @@ struct ReachedOutRowArchiveJumpGuardTests {
     // a closure it cannot call.
     @Test func rootViewNoLongerHandsQueueViewAnArchiveJump() {
         #expect(!rootView.isEmpty)
-        guard let callSite = rootView.range(of: "QueueView(deepLinkedKey:") else {
+        guard let callSite = rootView.range(of: "QueueView(engine:") else {
             Issue.record("QueueView call site not found in RootView")
             return
         }

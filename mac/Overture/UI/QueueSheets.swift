@@ -164,6 +164,8 @@ struct QueueSheetHost<Content: View>: View {
     // #1597: cleared when a probe is approved, so the bar Dan ticked empties with the run he started.
     let probeSelection: ProbeSelectionState
     let onProbe: (Set<String>) -> Void
+    // #4358 slice E4d: the inquiries the queue engine holds, read when the edit sheet opens, for its duplicate check.
+    let inquiries: () -> [Inquiry]
     // #1743: answers the day off offer the dismissal produced, if any, so this host can hold it until the
     // confirmation has gone.
     let onDismissNight: (NightDismiss, [String]) -> DayOffOfferRequest.Pending?
@@ -272,7 +274,7 @@ struct QueueSheetHost<Content: View>: View {
                            gmailConnected: gmailConnected)
             }
             // #1504: the same sheet that logs one, opened on an existing record.
-            .sheet(item: $sheets.editingInquiry) { InquiryIntakeSheet(editing: $0) }
+            .sheet(item: $sheets.editingInquiry) { InquiryIntakeSheet(editing: $0, existing: inquiries()) }
             // #2718: Dan's manual route, for when the search found their reply and did not back it.
             .sheet(item: $sheets.manualLinkTarget) { target in
                 LinkReplyPicker(prospect: target.prospect, recipient: target.recipient) {

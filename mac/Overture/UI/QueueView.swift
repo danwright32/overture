@@ -10,14 +10,6 @@ struct QueueView: View {
     // is absent, which would turn a missed injection into a crash of the whole app (and does crash any
     // test that builds this view directly). Nil simply means this surface records nothing.
     @Environment(QueueUndoStack.self) private var undoStack: QueueUndoStack?
-    // #2365: which watched calendars are a past client's, so Scout offers a returning client's season a
-    // year ahead. Optional for the same reason undoStack is, and `.none` when absent, which holds every
-    // show to the ordinary window rather than crashing.
-    @Environment(ClientRoster.self) private var clientRoster: ClientRoster?
-    // #3760: the app's own freeze instrument, so this surface can say it ran a render pass. Optional for
-    // exactly the reason `undoStack` above is: a non-optional Observable lookup fatal errors when the
-    // object is absent, and a missed injection must cost a count rather than the whole app.
-    @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     @Environment(ActionFeedback.self) private var feedback   // #285: shared acknowledgment surface
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924: dismiss-to-day-off picker request
 
@@ -26,92 +18,28 @@ struct QueueView: View {
     // feed and was never acted on (#133) is drawn struck-through by ProspectRowView rather than hidden:
     // the hiding copy of that rule lived in QueueModel.queueOrder, unreachable from the app since #1567
     // and deleted in #2348.
-    // #3507: DERIVED, not queried. This was a second `@Query` over `Prospect`, differing from
-    // `allProspects` below only in scope, and SwiftData satisfies each independently: measured against the
-    // live store on 2026-09-05, a repeat of the identical descriptor cost 96% of the cold one over 1153
-    // rows, so the table was materialised twice on every store notification for a saving of nothing.
-    //
-    // Read from HERE only by the action handlers, which run on a press rather than during a render. The
-    // render path takes what the pass derived once (`QueueRenderPass.make`), because this property walks
-    // the whole store on every access and one of its call sites is per row. (#4357 step 5: the pass
-    // publishes the scope as identities, `data.queueScope`, and no model.)
-    // #4322: through `liveProspects`, never `allProspects` directly, because an action closure can outlive
-    // the body that built it (see `LiveProspects`).
-    private var prospects: [Prospect] { QueueModel.queueScope(liveProspects.rows) }
-    @State private var liveProspects = LiveProspects()
+    // #4358 slice E4d (plan v7 Phases 4 and 5): THE QUEUE ENGINE IS WHERE EVERY SHOW AND TABLE COMES FROM. This view
+    // used to hold eight `@Query` properties (the organisation answers, the producer corrections, the watchlist, the
+    // struck addresses, the inquiries and the two town tables) and take RootView's whole-table read of the shows,
+    // and derived the whole queue from them through a render memo on every evaluation. The engine now holds all of
+    // them as values and publishes one pass per change (`QueueEngineQueue`), which is what this body draws. No
+    // default, on `allProspects`' old rule: a queue nobody handed an engine has nothing to draw, which must be a
+    // missing input rather than an empty queue (L168, L67).
+    let engine: QueueEngineHost.Engine
 
-    // #1598 Phase 5: the organisation answer ledger, and EVERY prospect including the dismissed ones the
-    // query above filters out. Both are @Query on the #990/#991 excluded-towns precedent, so a check
-    // settling re-renders every sibling show in the same frame instead of waiting for the next rebuild,
-    // and so the producer gate is judged against the whole store: built from the filtered list, a show
-    // Dan dismisses could silently change which organisations qualify and evaporate an answer he paid
-    // for, with nothing on screen to say so.
-    @Query private var orgAnswers: [OrgReachabilityAnswer]
-    // #3846: the whole store, HANDED DOWN by RootView rather than queried again here.
-    //
-    // It was `@Query private var allProspects: [Prospect]`, a bare descriptor over the whole table, and
-    // RootView holds one of exactly the same shape. Measured 2026-09-12 on the live store: two identical
-    // bare descriptors held by two live views share NOTHING, the second costing 99.6% of the first
-    // (158.8 ms against 159.5 ms over 1,238 rows), which is what #3507 found for two held by one view.
-    // Both of these views are always on screen, so the app read the whole prospect table TWICE on every
-    // single store change, against an end-to-end change of 350.7 ms.
-    //
-    // NO DEFAULT, deliberately. An empty default would let a caller that forgot it render an empty queue
-    // that looks exactly like a store with nothing in it, which is a missing value presented as a
-    // measurement (L168, L67).
-    // #1719: Dan's own producer/house corrections. @Query rather than a context read, so applying one
-    // re-derives the queue immediately instead of at the next relaunch.
-    @Query private var promotedProducers: [PromotedProducer]
-    @Query private var demotedHouses: [DemotedHouse]
-    // #1825: the watchlist, so a card can tell a link to THIS show from a fallback to the source's own
-    // calendar. @Query rather than a context read, on the same precedent as the corrections above: adding
-    // or removing a source re-labels the affected cards immediately.
-    @Query private var watchedSources: [WatchedSource]
-    // #2392: the addresses Dan has struck. @Query on the same precedent as the corrections above: a
-    // strike must take the address off the card in the same frame, not at the next rebuild.
-    @Query private var refusedAddresses: [RefusedContactAddress]
+    // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc, then by key (the scope's own
+    // order, `QueueModel.queueScope`). Read from HERE only by the action handlers, which run on a press rather than
+    // during a render, through the engine's members, which are the live rows by identity (#4322's rule, now the
+    // engine's: an action closure can outlive the body that built it, and the engine's members cannot go stale).
+    private var prospects: [Prospect] { QueueModel.queueScope(engine.everyShow) }
 
-    // #1436: hire inquiries fold into the same queue. Un-replied ones show in the to-send stage,
-    // replied ones in reached-out (StageNavigation.stage(for:)); closed ones leave.
-    @Query private var inquiries: [Inquiry]
-    // The inquiry Dan is composing a first reply to (nil = none).
-    // #2128: the prospect half of the same thing. A panel over the queue, so the compose box's text lives
-    // one level down and typing cannot re-derive the store (the #1774 / #1922 / #1923 class).
-    // #2130: the nudge or closing note the row's control is about to send, held so Dan approves the exact
-    // email first. Its own state rather than pendingConfirm, whose onSend is wired to the pitch send.
-    // #1504: the inquiry whose logged details Dan is correcting (nil = none).
-
-    // #991: Dan's stored town refusals. A @Query so ADDING one re-renders the queue and the gate
-    // re-decides every row against the new union at once, which is the "no migration" property #990's
-    // derived verdict makes possible.
-    @Query private var excludedTownRows: [ExcludedTown]
-    private var userExcludedTowns: Set<String> { Set(excludedTownRows.map(\.town)) }
-    // #1221: seed towns Dan has un-skipped. Read the same way (a @Query) so an un-skip re-decides every
-    // affected row the instant it changes, with no migration (the geo verdict is derived, #990).
-    @Query private var allowedSeedTownRows: [AllowedSeedTown]
-    private var allowedSeedTowns: Set<String> { Set(allowedSeedTownRows.map(\.town)) }
-
-    // #1570: Dan's standing geography refusals as one value, handed to StageNavigation so the stage
-    // lists, the pill counts and the masthead all apply them. They used to reach only the masthead.
-    // #3742: the producer tables, memoised on their own inputs rather than on the pass's.
-    //
-    // A SECOND memo beside whatever else this view holds, and deliberately not folded into one: the
-    // pass's key changes on every store change, and these two tables change only when a presenter, a
-    // venue or an override does. Folding them together would make this table rebuild on every strike
-    // and dismissal, which is exactly the 68 ms #3742 exists to stop paying.
-    @State private var producerTablesMemo = ScopeMemo<QueueModel.ProducerTables>()
-    // #4106: the whole pass, reused across body evaluations that change nothing it reads. See the key in
-    // `makeRenderData` for what it decides by and why.
-    @State private var renderMemo = ScopeMemo<RenderData>()
-
+    // The town refusals the engine holds, for a press that decides a stage outside a pass.
     private var geo: GeoRefusals {
-        GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)
+        GeoRefusals(userExcludedTowns: Set(engine.facts.excludedTowns.values.map(\.town)),
+                    allowedSeedTowns: Set(engine.facts.allowedSeedTowns.values.map(\.town)))
     }
-    // #2365: the client verdict for every watched source, decided once per read of this property rather
-    // than per show (#1429 measured the per-row shape freezing a sheet).
-    private var clientWindow: ClientWindow {
-        clientRoster?.window(for: watchedSources) ?? .none
-    }
+    // #2365: the client verdict the engine's last pass was derived with, never read again here.
+    private var clientWindow: ClientWindow { engine.output?.context.clients ?? .none }
 
     @State private var pendingConfirm: PendingSend?
     // #1500: a whole night waiting on its confirm (nil = none). Holds the keys the group was SHOWING when
@@ -177,20 +105,10 @@ struct QueueView: View {
     // focused mode showing exactly those leads (a flat list, ignoring the pipeline split and filters so
     // even a booked lead that falls out of both pipelines still appears), with a "Show all" exit.
     @Binding var deepLinkedKeys: LeadsDeepLink?
-    // #3846: see the note beside `orgAnswers`. RootView's single whole-table read, handed down.
-    let allProspects: [Prospect]
-    // #4106 Step V: where the body's RenderData comes from. The memo one serves nothing, so
-    // `makeRenderData` derives exactly as it always did; a provider that serves a prebuilt pass is a test
-    // seam for timing the body alone (Phase 0c.8), and `QueueRenderDataProviderWiringTests` keeps it out
-    // of the app (L718). Defaulted to the memo one so every harness that names none runs the real path.
-    var renderDataProvider: any QueueRenderDataProvider = QueueMemoRenderData()
-    // #4516: the clock a pass is judged by, read ONCE per pass in `makeRenderData`, which is the instant
-    // the stages, the run markers and the render memo's two second window all use. The app passes nothing
-    // and gets the wall clock, so nothing it does changes. A hosted test passes a FROZEN clock, so a
-    // derivation count it asserts is about the memo's key rather than the runner's speed: on GitHub's
-    // runner the next evaluation could land past the window and derive again with nothing changed
-    // (`OneChangeDerivesTheQueueOnceTests`). `TheAppHandsNoSurfaceAClockTests` holds the app to the default.
-    var clock: () -> Date = Date.init
+    // #4106 Step V: a pass to draw INSTEAD of the engine's, for a test that times the body alone (Phase 0c.8). Nil in
+    // the app, which draws the engine's published pass; `QueueRenderDataProviderWiringTests` keeps every provider out
+    // of the app (L718).
+    var renderDataProvider: (any QueueRenderDataProvider)? = nil
     @State private var focusedKeys: [String]?
     // #1140: which STAGE the focused view is showing, when it was entered by tapping a stage pill (nil
     // for the #308 away-alert leads path). Set, the focused list re-derives its membership and heading
@@ -250,17 +168,33 @@ struct QueueView: View {
 
     // #1308 Layer 2: the pending "Check reachability" confirm, holding the date's candidate keys.
 
-    private var items: [QueueItem] {
-        QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,
-                         overrides: ProducerOverrides(promotedRows: promotedProducers,
-                                                      demotedRows: demotedHouses),
-                         sources: watchedSources,
-                         refusals: ContactRefusal.ledger(from: refusedAddresses),
-                         // #3014: shows a live prep is drafting take no inherited org answer while a
-                         // check is running, so a check on a sibling show cannot change the contact
-                         // under a draft. Cached (LiveRunHoldings), never read from disk here: this
-                         // body re-derives on every render.
-                         heldKeys: LiveRunHoldings.current)
+    // Every show in scope as a CARD, for the handful of presses that ask a whole-queue question about cards (the
+    // self booking clash, the calendar clash before a prep, the group a jump lands on, the snapshot a send's leaving
+    // delight draws). A FUNCTION called at the press, never a computed property read during a render (L383). #4358
+    // slice E4d: the small tables are read here, at the press, from the main context the engine holds, because this
+    // view no longer queries them; a table that cannot be read is said in the log and taken as empty for this press
+    // only, which can only leave a clash unwarned, never invent one.
+    private func actionItems() -> [QueueItem] {
+        let context = engine.modelContext
+        func table<Row: PersistentModel>(_: Row.Type) -> [Row] {
+            do {
+                return try context.fetch(FetchDescriptor<Row>())
+            } catch {
+                // copy-inventory:ignore-start  developer diagnostic log, never shown to Dan (#4358)
+                AgentLog.note("Queue press could not read \(Row.self): \(error.localizedDescription)")
+                // copy-inventory:ignore-end
+                return []
+            }
+        }
+        return QueueModel.items(from: prospects, answers: table(OrgReachabilityAnswer.self), corpus: engine.everyShow,
+                                overrides: ProducerOverrides(promotedRows: table(PromotedProducer.self),
+                                                             demotedRows: table(DemotedHouse.self)),
+                                sources: table(WatchedSource.self),
+                                refusals: ContactRefusal.ledger(from: table(RefusedContactAddress.self)),
+                                // #3014: shows a live prep is drafting take no inherited org answer while a
+                                // check is running, so a check on a sibling show cannot change the contact
+                                // under a draft. Cached (LiveRunHoldings), never read from disk here.
+                                heldKeys: LiveRunHoldings.current)
     }
 
     private var today: String { QueueModel.easternToday() }
@@ -427,257 +361,63 @@ struct QueueView: View {
         }
     }
 
-    // #1913: the derivation itself lives in QueueRenderPass, over plain values, so what one pass costs
-    // can be measured in a test. A SwiftUI body cannot be evaluated in one, so anything left in here is
-    // unmeasurable by construction. What stays is gathering: reading this view's own state and the three
-    // file-backed answers, and handing them over.
     // #3654: what the last frame drew, and where this frame's requests are recorded.
     //
     // `@State` so it survives the body evaluations, and a plain class rather than an observed object
-    // because the row-request component writes to it DURING a render. Reading it here, once, before the
-    // pass, is what makes the ordering contract true: keys registered during frame N feed the map for
-    // frame N+1.
+    // because the row request writes to it DURING a render. Taken once per body, before anything is drawn, and
+    // handed to the engine as this view's request (`handTheEngineThisView`), which is what makes the ordering
+    // contract true: keys registered during frame N feed the pass for frame N+1.
     @State private var cardKeys = QueueModel.CardKeyRegistry()
-    // #3654 step 4c: this process, and a number counting up inside it. A record's identity is the pair,
-    // because a sequence restarts at 1 in every launch and is not an identity on its own (L186, and
-    // `FreezeLog.reportedIdsKey`, which records what keying on the bare number cost).
-    @State private var cardCheckSession = UUID().uuidString
-    @State private var cardCheckSequence = 0
 
-    // #3654 step 4c: the WRITE side of the in-app check, which the pass deliberately does not do.
+    // #4358 slice E4d (plan v7 Phases 4 and 5): THE PASS THIS BODY DRAWS is the one the queue engine published. The
+    // derivation, the freeze watch's pass count and cost, and the card check all happen in the engine's turn
+    // (`QueueEngineQueue`), never in this body, so a body evaluation that changes nothing costs nothing and a store
+    // change costs one pass however many times SwiftUI asks for this body. Nil until the launch's first read lands,
+    // which is drawn as the launch state and never as an empty queue (D6).
     //
-    // Two things land here and they are different facts. A divergence is appended to its own file, once,
-    // so a launch can say it. And a STAMP records that the check ran at all, throttled to once a minute,
-    // because without it an empty file means both "every card matched" and "nothing ever looked", and a
-    // monitor that has never once passed is not measuring anything (L557, L98).
-    private func recordCardCheck(_ check: QueueModel.Scope.CardCheck, now: Date) {
-        guard check.ran else { return }
+    // A served pass (a test timing the body alone, Phase 0c.8) is drawn in its place and carries no corrected card.
+    private func drawnPass() -> QueueEnginePass? {
+        if let served = renderDataProvider?.servedRenderData() {
+            return QueueEnginePass(data: served, builtCards: served.cards.contents, nextChange: nil, checkKey: nil,
+                                   toPrep: [])
+        }
+        return engine.output?.value
+    }
+
+    // What this surface asks the engine for: the stage it shows and the cards the last frame drew. Handing the same
+    // view is no reason for a pass, and nor are the cards, which the next pass prebuilds (`QueueEngine.setViewInputs`).
+    // The engine keeps it as unobserved state and schedules any pass for its own next turn, so nothing here writes
+    // what a body reads.
+    private func handTheEngineThisView() {
+        // A body that drew no row since the last one (a redraw from above, a sheet) keeps the request it had, so the
+        // next pass still prebuilds the cards on screen rather than none.
+        let drawn = cardKeys.takeKeys()
+        engine.setViewInputs(QueueEngineViewInputs(focusedStage: focusedStage, focusedKeys: focusedKeys,
+                                                   requestedCardKeys: drawn.isEmpty
+                                                       ? engine.viewInputs.requestedCardKeys : drawn))
+    }
+
+    // #3654 step 4c's STAMP, kept now that the check runs at the engine's publish: a launch must be able to tell "every
+    // card the check sampled matched" from "nothing ever looked", and a monitor that has never once passed is not
+    // measuring anything (L557, L98). Stamped once per published pass that had a card to check, throttled to once a
+    // minute. The divergences themselves are written by the engine's own check (`QueueEngine.checkedCard`).
+    private func stampTheCardCheck(_ pass: QueueEnginePass) {
+        guard pass.checkKey != nil else { return }
+        let now = Date()
         let defaults = UserDefaults.standard
         let last = defaults.object(forKey: CardDivergenceLog.lastRanKey) as? Date
         if CardDivergenceReport.shouldStamp(last: last, now: now) {
             defaults.set(now, forKey: CardDivergenceLog.lastRanKey)
         }
-        guard let divergence = check.divergence else { return }
-        cardCheckSequence += 1
-        let record = CardDivergenceRecord(session: cardCheckSession, sequence: cardCheckSequence,
-                                          at: now, fields: divergence.fields,
-                                          cardsBuilt: divergence.cardsBuilt, stage: focusedStage?.rawValue)
-        CardDivergenceLog.append(record, to: CardDivergenceLog.url(in: StoreLocation.handoffDirectory))
-    }
-
-    private func makeRenderData() -> RenderData {
-        // #4106 Step V: a served pass is drawn as it is, ahead of the stamp below, because nothing was
-        // derived and counting it would record a pass that never ran. Production's provider serves nil.
-        if let served = renderDataProvider.servedRenderData() { return served }
-        // #3760: the main thread stamps, the watchdog reads. Here rather than inside `QueueRenderPass`
-        // because that is a pure static derivation and this is a side effect on the app's own instrument;
-        // the guard that keeps every future call site honest is a source test, not this comment.
-        freezeWatch?.recordPass()
-        // #3815: how long this pass takes, reported when it returns. `defer` so every return path pays it,
-        // including a future early one, rather than the single return this function happens to have today
-        // (L515 is the other direction of the same care).
-        //
-        // `DispatchTime` rather than `Date`, because this measures a DURATION and the wall clock can be
-        // adjusted underneath it; the uptime clock cannot go backwards.
-        let passStarted = DispatchTime.now().uptimeNanoseconds
-        defer {
-            freezeWatch?.recordPassCost(
-                seconds: Double(DispatchTime.now().uptimeNanoseconds - passStarted) / 1_000_000_000)
-        }
-        let now = clock()
-        // Asked ONCE: five of the inputs below are decided from it, and it reads marker files.
-        // #3646: `slotStatus` rather than `runInFlight`, because the surfaces need each SLOT as well as
-        // the single composed answer, and this is the one place in a pass that may go to disk for them.
-        // Same two marker reads either way: `runInFlight` is this call now.
-        let runStatus = PrepQueueService.slotStatus(now: now)
-        let inFlight = runStatus.inFlight
-        // #3186: asked ONLY while a check is really running. Both read a marker from disk, and this
-        // runs once per render pass, so an idle queue must not pay for them (#1770).
-        let checkRunSince = inFlight == .reachabilityCheck
-            ? PrepQueueService.lastRunStartedAt(slot: .check) : nil
-        let checkLookups = inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil
-        let replyRunAlive = ReplyClassifyService.isRunning(now: now)
-        // #1770: read once for the whole pass, from the cache rather than from the token file.
-        let gmailConnected = GmailConnection.shared.isConnected
-        let clients = clientWindow
-        // #3654: the rows the LAST frame drew. Drained on EVERY evaluation, hit or miss, which is what
-        // `ScopeMemo`'s header requires: skipping the drain on a hit would let the registry accumulate
-        // every frame's keys and quietly grow the next real pass.
-        let requested = cardKeys.takeKeys()
-
-        // #4106: ONE derivation per change, however many times the body is evaluated for it.
-        //
-        // WHAT WAS MEASURED. Every action Dan took on 2026-09-21 left the same signature in the freeze
-        // log, a stall covering two passes and then one covering one, and a hosted `QueueView` shows the
-        // same shape: one dismiss derived the whole store twice, the first reporting `prospects` and the
-        // second `nothing this view reads`; one genre edit derived twice, `rows changed` then `nothing
-        // this view reads` (`OneChangeDerivesTheQueueOnceTests`). The cause is two notifications of ONE
-        // write arriving in different updates: the model's own observation fires the moment a field is
-        // set, so the body re-derives while the store still has the save in flight, and then the query
-        // publishes its fresh results after the save and the body is evaluated again over identical
-        // data. Neither notification is wrong, and neither can be removed from here: the first is how an
-        // edit in place reaches the screen at all, and the second is SwiftData's.
-        //
-        // So the second evaluation is made cheap rather than prevented, the same remedy `ArchiveView`
-        // (#3879) and `SourcesView` (#4112) already use. Every input the pass reads is named below: the
-        // model collections by identity, everything else by value, and a field edited in place is caught
-        // by the observation tracking inside the memo. That also covers every OTHER evaluation that
-        // changes nothing this pass reads (a banner, an undo entry, a sheet, `RootView` redrawing), which
-        // cannot be enumerated from here and each used to cost a whole-store pass (L471).
-        //
-        // WHAT A HIT DOES NOT DO. The freeze log's `passes` still counts this body's EVALUATIONS, as the
-        // two lines at the top of this function always have, because Dan's log holds thousands of records
-        // taken under that meaning (L683). A hit shows up there as a pass with almost no `passSeconds`.
-        //
-        // EVERY QUERY IS READ HERE, OUTSIDE THE BUILD, and the build only ever sees these locals. A
-        // `@Query` keeps its results on an observable object of its own, and read inside the build it
-        // becomes something the memo observes: measured, with them inside, the first thing to mark the
-        // answer stale after a save was that storage, from inside `_SwiftData_SwiftUI`. What a query's
-        // results ARE is the fingerprint's job (identity, in order), so outside is where they belong.
-        //
-        // THE SAVED CHANGE'S SECOND DERIVATION, and how #4252 removed it. With the queries outside, the
-        // next thing to mark it stale is the refetched ROWS: SwiftData calls `willSet` on the fields of
-        // every row it refetches after a save, changed or not, and observation alone cannot tell that from
-        // an edit. `ScopeMemo` now recognises it by what supported API states for nothing: no save since
-        // the build, nothing unsaved in the main context, and no other context has ever saved into the
-        // store. Then the refetch is served the answer the change already derived and observation is
-        // re-armed on every stored property (`ScopeMemo.Refetch`, `ScopeObservation.swift`).
-        let orgAnswerRows = orgAnswers
-        let inquiryRows = inquiries
-        let sources = watchedSources
-        let refused = refusedAddresses
-        let promoted = promotedProducers
-        let demoted = demotedHouses
-        let excluded = excludedTownRows
-        let allowed = allowedSeedTownRows
-        // The Debug diagnostic reads the same queries (counts of them), so it is taken here too.
-        let trace = renderTrace
-        let resolvedGeo = GeoRefusals(userExcludedTowns: Set(excluded.map(\.town)),
-                                      allowedSeedTowns: Set(allowed.map(\.town)))
-        var key = ScopeFingerprint()
-        key.add(allProspects)
-        // Named by the query rather than by the local above, so `ScopeMemoInputsAreCompleteGuardTests`
-        // can match each one against what this body reads. Same array either way.
-        key.add(inquiries)
-        key.add(orgAnswers)
-        key.add(watchedSources)
-        key.add(refusedAddresses)
-        key.add(promotedProducers)
-        key.add(demotedHouses)
-        // What `geo` reads, which `ScopeMemoInputsAreCompleteGuardTests` says it cannot follow through a
-        // computed property. Resolved above from the same two reads, so the key and the pass agree.
-        key.add(excludedTownRows)
-        key.add(allowedSeedTownRows)
-        // And the town NAMES, because `resolvedGeo` is built from them OUTSIDE the build, where the memo's
-        // tracking cannot see a row's `town` edited in place; the identity half above sees only a row
-        // added or removed. The same gap #4112 closed on the Sources sheet.
-        key.add(value: resolvedGeo.userExcludedTowns)
-        key.add(value: resolvedGeo.allowedSeedTowns)
-        key.add(value: clients.clientSourceIds)
-        key.add(value: focusedStage?.rawValue)
-        key.add(value: focusedKeys)
-        key.add(value: gmailConnected)
-        key.add(value: String(describing: inFlight))
-        key.add(value: runStatus.prepSlotRunning)
-        key.add(value: runStatus.checkSlotRunning)
-        key.add(value: checkRunSince)
-        key.add(value: checkLookups)
-        key.add(value: replyRunAlive)
-        // THE CARDS, which the fingerprint cannot see. A pass builds a card only for the rows the last
-        // frame drew, inside the memo's observation tracking, and a card built on demand afterwards is
-        // built OUTSIDE it, so a field only that card read would never mark the answer stale. So an
-        // answer is reused as it is only when every row the last frame drew was prebuilt by the build
-        // that made it. #4570, #4591: a row it did not prebuild (the first frame, a scroll, a row revealed
-        // by a removal) has its card built again inside the answer's tracking and adopted, whenever the
-        // answer would otherwise be served; anything else is a rebuild, as it always was. The rule lives on
-        // the memo, shared with the Archive (`ScopeMemo.value(fingerprint:drawn:...)`), which hands the
-        // pass the keys it decided.
-        // A save through ANY context is a change too, which `ScopeMemo` itself enforces (`savesIn`).
-        return renderMemo.value(fingerprint: key, drawn: requested, resolving: liveProspects, now: now,
-                                savesIn: context.container,
-                                // #4252: a whole-store pass (364 ms on the live store, 2026-09-25) against
-                                // 134 ms to re-arm observation, so the refetch after a save is served.
-                                onRefetch: .serveWhenNothingChanged) { cardKeysForMemo in
-            // #4358 slice E4a (#4357 step 8): the pass is pure, so its Debug record is taken HERE, beside the
-            // derivation it describes, exactly once per build as it was inside the pass.
-            let data = QueueRenderPass.make(QueueRenderPass.Inputs(
-                allProspects: QueueRenderPass.Corpus(allProspects),
-                inquiries: inquiryRows,
-                orgAnswers: orgAnswerRows,
-                sources: sources,
-                refusals: ContactRefusal.ledger(from: refused),
-                overrides: ProducerOverrides(promotedRows: promoted, demotedRows: demoted),
-                context: StageContext(now: now, geo: resolvedGeo, clients: clients),
-                focusedStage: focusedStage,
-                focusedKeys: focusedKeys,
-                gmailConnected: gmailConnected,
-                runInFlight: inFlight,
-                // #3646: the two slot facts, from the same single reading above.
-                prepSlotRunning: runStatus.prepSlotRunning,
-                checkSlotRunning: runStatus.checkSlotRunning,
-                checkRunSince: checkRunSince,
-                checkLookups: checkLookups,
-                replyRunAlive: replyRunAlive,
-                // #3654: the rows the LAST frame drew, and the register this one writes into. Taken
-                // rather than read, so the set is what the last frame drew and not everything Dan has
-                // scrolled past since the app opened.
-                requestedCardKeys: cardKeysForMemo,
-                cardKeyRegistry: cardKeys,
-                producerTables: producerTables(overrides: ProducerOverrides(promotedRows: promoted,
-                                                                            demotedRows: demoted),
-                                               now: now)))
-            #if DEBUG
-            QueueRenderCounter.recordDerivation(inputs: trace, rows: data.rows)
-            #endif
-            return data
-        }
-    }
-
-    // #3742: built once and reused until a presenter, a venue or an override moves. The key is derived
-    // from those inputs and from nothing cheaper (L40): the shows are mapped here, the key is taken from
-    // that mapping, and the tables are built from the same mapping on a miss, so the three can never
-    // describe different store states.
-    //
-    // #4106: its own declaration rather than inline in `makeRenderData`, so that
-    // `ScopeMemoInputsAreCompleteGuardTests` can hold the render memo's key to the `.add` rule while this
-    // one keeps the content key its exemption names. Called only on a render memo MISS, so a hit does not
-    // pay the per show mapping either.
-    //
-    // The overrides arrive as an argument, built by the caller from the two queries it read outside the
-    // render memo's build, for the reason written above that memo's key.
-    private func producerTables(overrides: ProducerOverrides, now: Date) -> QueueModel.ProducerTables {
-        let shows = allProspects.map(ProducerGate.Show.init)
-        return producerTablesMemo.value(
-            fingerprint: QueueModel.ProducerTables.key(shows: shows, overrides: overrides),
-            // NO clock window. These tables read no clock at all, so a staleness bound here would be
-            // one rebuild of a 68 ms table every two seconds of active use, bought for nothing.
-            cardKeys: [], now: now, staleAfter: .never,
-            // No save count: this key hashes the presenter and venue CONTENT the tables read, so a save
-            // that changed either is already a different key, and one that did not cannot change the
-            // tables. Keying on saves would rebuild a 68 ms table on every write for nothing.
-            savesIn: nil) {
-            QueueModel.ProducerTables(shows: shows, overrides: overrides)
-        }
     }
 
     #if DEBUG
-    // #1930: a fingerprint of what this view derives FROM, so an idle re-derivation can name its own
-    // cause. Counts and small state values only: nothing here may cost a fetch or a filesystem stat, or
-    // the diagnostic becomes part of the problem it measures. The two run markers are absent for exactly
-    // that reason, and #1922's four transient send values because reading one would put back the
-    // dependency that issue removed.
+    // #1930: a fingerprint of what this view draws FROM, so a redraw can name its own cause. Counts and small state
+    // values only: nothing here may cost a fetch or a filesystem stat. #4358 slice E4d: the store's half is the
+    // engine's published generation, since this view holds no query any more.
     private var renderTrace: [String: String] {
         [
-            // #3507: counted without deriving the scope, which is a whole-store walk this diagnostic
-            // must not pay for (the rule this dictionary's own header states).
-            "prospects": "\(allProspects.count { $0.statusRaw != "dismissed" })",
-            "allProspects": "\(allProspects.count)",
-            "orgAnswers": "\(orgAnswers.count)",
-            "inquiries": "\(inquiries.count)",
-            "excludedTowns": "\(excludedTownRows.count)",
-            "allowedSeedTowns": "\(allowedSeedTownRows.count)",
-            "promotedProducers": "\(promotedProducers.count)",
-            "demotedHouses": "\(demotedHouses.count)",
+            "generation": "\(engine.output?.generation ?? -1)",
             "gmail": "\(GmailConnection.shared.isConnected)",
             "stage": String(describing: focusedStage),
             "focusedKeys": "\(focusedKeys?.count ?? -1)",
@@ -686,57 +426,49 @@ struct QueueView: View {
             "today": today,
         ]
     }
-    #else
-    private var renderTrace: [String: String] { [:] }
     #endif
 
     var body: some View {
         #if DEBUG
-        _ = QueueRenderCounter.recordRender(surface: QueueRenderCounter.queueBodySurface)
+        _ = QueueRenderCounter.recordRender(surface: QueueRenderCounter.queueBodySurface, inputs: renderTrace)
         #endif
-        // #4322: before anything is drawn, so every action closure reads the shows this body was given.
-        let _ = liveProspects.adopt(allProspects)
-        let buildsBefore = renderMemo.builds
-        let data = makeRenderData()
-        // #3654 step 4c: recorded here, where the pass's answer arrives, rather than inside the pass.
-        // #4106: and only when a pass actually RAN. A reused answer carries the check the build made, and
-        // recording it again would write the same divergence once per body evaluation.
-        if renderMemo.builds != buildsBefore { recordCardCheck(data.cardCheck, now: Date()) }
+        let _ = handTheEngineThisView()
+        // Read once, so the whole body draws one pass.
+        guard let pass = drawnPass() else {
+            return AnyView(QueueLaunchView(launch: engine.launch, retry: { engine.retryLaunch() }))
+        }
+        let data = pass.data
         // #3658 Phase 8: the eight sheets, presented by the host rather than by this body, so raising one
-        // no longer invalidates the body that derives the store. The content is a CLOSURE for
-        // `QueueScrollHolder`'s reason (#1774): a built view would be constructed here, which is the pass
-        // this keeps out of the way.
-        return QueueSheetHost(
+        // no longer invalidates the body that draws the queue. The content is a CLOSURE for
+        // `QueueScrollHolder`'s reason (#1774): a built view would be constructed here.
+        return AnyView(QueueSheetHost(
             sheets: sheets,
             gmailConnected: data.gmailConnected,
             probeSelection: probeSelection,
             onProbe: { onProbeReachability($0) },
+            inquiries: { engine.everyInquiry },
             onDismissNight: { pending, keys in dismissNight(pending, keys: keys) },
             onRowNudge: { pending, body in performRowNudge(pending, body: body) },
             content: { mainContent(data) })
             // #3474: the Dock tile and the menu bar glyph read a PUBLISHED number, because neither can
-            // hold a SwiftData query. Until now the only writer was the 30 minute reconcile, so both
-            // stated a count up to half an hour old: measured on the live store 2026-09-02, Dan recorded
-            // an ending at 11:31:15 and the menu bar still read 1 at 11:31:41, while the Follow-ups pill
-            // beside it read zero, because that pill derives live from the store.
-            //
-            // Published from `data.agentInputs.followUpsDue`, which IS the pill's number, so the badge is
-            // a reader of one derivation rather than a second sweep that happens to agree (L16). Keyed on
-            // the value, so it writes when the number changes rather than on every redraw.
+            // hold a SwiftData query. Published from `data.agentInputs.followUpsDue`, which IS the pill's number,
+            // so the badge is a reader of one derivation rather than a second sweep that happens to agree (L16).
+            // Keyed on the value, so it writes when the number changes rather than on every redraw.
             // #3890: keyed on both numbers, so a reply answered while another thing comes due (the total
             // unchanged) still republishes the reply count the menu names.
             .task(id: [data.agentInputs.followUpsDue, data.agentInputs.repliesToAnswer]) {
                 DueBadge.publish(data.agentInputs.followUpsDue, replies: data.agentInputs.repliesToAnswer)
+            }
+            .onChange(of: engine.output?.generation, initial: true) { _, _ in
+                if let published = engine.output?.value { stampTheCardCheck(published) }
             }
             .sendConfirmAndReconnectAlerts(
                 pendingConfirm: $pendingConfirm,
                 showReconnect: $showReconnect,
                 onSend: { performSend($0) },
                 onConnectGmail: onConnectGmail
-            )
+            ))
     }
-
-
 
     // #1597: everything the selection bar and its confirm need, computed ONCE from the ticked dates.
     // Both read this, so the total Dan watches while choosing is the total he approves.
@@ -802,7 +534,8 @@ struct QueueView: View {
             // queue a second time on every render, one word away from the snapshot the caller already holds.
             allItems: data.rows,
             today: today, stage: focusedStage,
-            overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
+            overrides: ProducerOverrides(promoted: Set(engine.facts.promotedProducers.values.map(\.orgKey)),
+                                         demoted: Set(engine.facts.demotedHouses.values.map(\.orgKey))),
             geo: geo,
             checkRunning: data.checkRunning,
             onRun: { keys, title, message in
@@ -865,7 +598,7 @@ struct QueueView: View {
         }
         let offer = ProspectMutations.dismissAll(keys, reason: pending.reason, dateLabel: pending.dateLabel,
                                                  nightDate: pending.date,
-                                                 shows: prospects, context: context, feedback: feedback,
+                                                 shows: engine, context: context, feedback: feedback,
                                                  undo: undoStack)
         // Cleared after the exit plays, never before the rebuild lands: clearing early would drop the
         // snapshots while the real rows are still in the queue's answer, and the whole night would flash
@@ -1026,7 +759,7 @@ struct QueueView: View {
     // (`InquiryIdentity.inquiry(for:...)`). The row used to capture the model the pass took when it ran.
     private func inquiryRowView(_ row: InquiryRow, identity: InquiryIdentity?,
                                 style: InquiryRowView.Style) -> some View {
-        let pressed = { InquiryIdentity.inquiry(for: identity, name: row.inquirerName, in: inquiries,
+        let pressed = { InquiryIdentity.inquiry(for: identity, name: row.inquirerName, in: engine.everyInquiry,
                                                 feedback: feedback) }
         return InquiryRowView(
             row: row, style: style,
@@ -1251,6 +984,7 @@ struct QueueView: View {
         focusedStage = nil   // #1140: a named leads set, not a stage; keep it frozen, don't re-derive.
         // #1794: nil restores the generic new-leads heading, which is the away-alert path's answer.
         focusedHeading = heading
+        let items = actionItems()
         let target = QueueModel.firstVisibleKey(keys, among: items)
         // #1573: drive the scroll position to the group holding the lead instead of clearing it and
         // asking for the row. The old comment here claimed this view was "a flat list without scroll
@@ -1307,9 +1041,9 @@ struct QueueView: View {
         //
         // #4062: resolved against the list the stage actually DRAWS. Reached out groups by reach out date,
         // so a performance date group id named nothing there and the jump was dropped.
-        jumpTarget = QueueModel.jumpScrollGroupID(for: key, onStage: focusedStage, items: items,
+        jumpTarget = QueueModel.jumpScrollGroupID(for: key, onStage: focusedStage, items: actionItems(),
                                                   reachedOut: QueueModel.reachedOutStageEntries(
-                                                      reachedOut, inquiries: inquiries, now: Date()))
+                                                      reachedOut, inquiries: engine.everyInquiry, now: Date()))
             .map(QueueJumpRequest.init(group:))
         // Stage two: once that group is on screen its rows are realized, so nudge the row itself to the
         // top. If this runs before the layout settles it simply no-ops, leaving Dan on the right date,
@@ -1581,7 +1315,7 @@ struct QueueView: View {
                             // pass, which that change caused, no longer lists it.
                             case .show(let snapshot):
                                 if case .found(let prospect, let recipient) = ReachedOutSnapshot.resolve(
-                                    snapshot, in: liveProspects) {
+                                    snapshot, in: engine) {
                                 let next = snapshot.next
                                 // #2644: the row is wrapped so it can SEE a send of its own in flight.
                                 // Without this it took (pair, now) only, so pressing "Send a closing
@@ -1893,8 +1627,9 @@ struct QueueView: View {
     @ViewBuilder private func prospectRow(_ row: QueueScopeRow, data: RenderData,
                                           departure: DepartureReason?,
                                           departingCard: QueueItem?) -> some View {
-        // #4371: a card the pass did not prebuild resolves its show through the live shows, never the pass's.
-        let item = departingCard ?? data.cards.card(for: row, resolving: liveProspects)
+        // #4371: a card the pass did not prebuild is built from what the pass's store holds; the engine's store holds
+        // values, so it never asks the resolver, which is the engine itself.
+        let item = departingCard ?? card(for: row, in: data)
         if let departure, departure.showsSendDelight {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
             // .identity), then the glide-up removal plays when `departing` clears. Reduced Motion drops
@@ -1924,6 +1659,13 @@ struct QueueView: View {
             // Nil whenever the row also has a real clash, so the two lines never stack.
             let workableNote = QueueModel.selfBookingWorkableNote(for: item, in: data.selfBooking)
             VStack(alignment: .leading, spacing: 4) {
+                // #4358 slice E4d (plan item 12): the engine knows Overture's copy of this show is out of step with
+                // the saved one, so every action on it is refused (`ShowIdentity.Refusal.outOfStep`) until it is
+                // reloaded. Outside the card's equatable content, so it appears and leaves with the engine's
+                // observed fault set whether or not the card itself changed.
+                if let showID = item.showID, engine.outOfStepShows.contains(showID) {
+                    OutOfStepRow(onReload: { reload(item) })
+                }
                 if let marker = selfBookingMarker {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.exclamationmark")
@@ -1945,7 +1687,7 @@ struct QueueView: View {
                 // #4322: equatable on what the card is drawn from, so a served change that moves nothing
                 // this card draws skips its body. See `ScoutCardInputs`.
                 let offeredEarly = QueueModel.saysOfferedEarlyAsAClient(item, stage: focusedStage)
-                let towns = (excluded: userExcludedTowns, allowed: allowedSeedTowns)
+                let towns = (excluded: data.geo.userExcludedTowns, allowed: data.geo.allowedSeedTowns)
                 // #4357 slice G1: the row judges on the PASS's clock, the instant its card was built at,
                 // rather than the wall clock read again while drawing (the #4356 part 3 note).
                 let passDay = EasternDate.today(data.now)
@@ -1960,7 +1702,7 @@ struct QueueView: View {
                     // says it is "read from HERE only by the action handlers, which run on a press rather
                     // than during a render"; handing `data.queueScope` broke that rule, and handing the
                     // property directly would run its whole-store filter and sort once per rendered row.
-                    ProspectRowFactory.row(item, today: passDay, now: data.now, shows: ShowsInHand { prospects }, context: context, feedback: feedback,
+                    ProspectRowFactory.row(item, today: passDay, now: data.now, shows: ShowsInHand(resolver: engine), context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
                                           timingSurface: .queue,
@@ -2005,6 +1747,28 @@ struct QueueView: View {
         }
     }
 
+    // #3654: THE ROW REQUEST's two halves, in one place: the key is noted for the next pass (the engine's pass
+    // records nothing into this view's registry, so the request is noted here), and the card comes from the drawn
+    // pass's store. #4358 slice E4d (C1): when the engine's check at publish proved this card wrong, the fresh card
+    // it built is drawn instead, which only the published pass carries.
+    private func card(for row: QueueScopeRow, in data: RenderData) -> QueueItem {
+        cardKeys.note(row.id)
+        let built = data.cards.card(for: row, resolving: engine)
+        guard let published = engine.output?.value, published.data.cards === data.cards else { return built }
+        return published.corrected[row.id] ?? built
+    }
+
+    // #4358 slice E4d (plan item 12): "Reload this show", said in the card's feedback line in the words of what the
+    // reload did, whichever it was.
+    private func reload(_ item: QueueItem) {
+        guard let identity = ShowIdentity(item) else {
+            feedback.acknowledge(ShowIdentity.Refusal.gone.sentence(org: item.groupName), tone: .warning)
+            return
+        }
+        let outcome = engine.reload(identity)
+        feedback.acknowledge(outcome.sentence(org: item.groupName), tone: outcome == .reloaded ? .info : .warning)
+    }
+
     // #1219: Approve and per-row Re-prep are committing moments Dan gated. Both launch straight from the
     // row (Re-prep starts a Prep run, Approve advances toward send), so each is routed through this check:
     // if the show sits on a date that already holds a committed pitch, confirm past it deliberately;
@@ -2013,10 +1777,10 @@ struct QueueView: View {
         guardPrepClashes(item) {
             Task { @MainActor in
                 if let onLaunchPrep {
-                    await ProspectMutations.reprep(item, mode: mode, shows: prospects, context: context,
+                    await ProspectMutations.reprep(item, mode: mode, shows: engine, context: context,
                                                    feedback: feedback, startPrep: onLaunchPrep)
                 } else {
-                    await ProspectMutations.reprep(item, mode: mode, shows: prospects, context: context,
+                    await ProspectMutations.reprep(item, mode: mode, shows: engine, context: context,
                                                    feedback: feedback)
                 }
             }
@@ -2034,6 +1798,7 @@ struct QueueView: View {
     // The title and the proceed label come from the clashes actually found rather than being passed in,
     // because a sentence naming the wrong kind of clash is worse than a generic one.
     private func guardPrepClashes(_ item: QueueItem, proceed: @escaping () -> Void) {
+        let items = actionItems()
         let clash = QueueModel.selfBookingClash(for: item, in: QueueModel.selfBookingIndex(items))
         let selfBooking = clash.flatMap { SelfBookingCopy.prepConfirmMessage([$0]) }
         let calendar = PrepLaunchCopy.calendarClashMessage(
@@ -2059,19 +1824,20 @@ struct QueueView: View {
     // is said on the press. The rebuild below resolves the same card SILENTLY, because it runs inside the
     // sheet's body evaluation, where an acknowledgement would be a write during a render.
     private func requestSend(_ item: QueueItem) {
-        guard let model = prospects.show(for: item, feedback: feedback),
+        guard let model = engine.show(for: item, feedback: feedback),
               var confirmation = SendConfirmation(prospect: model, approving: true) else { return }
         // #1219: warn at the committing moment when a DIFFERENT committed show shares this date, naming it
         // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
         // already-emailed one, and compares against the whole queue so a show in any stage still counts.
-        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, in: QueueModel.selfBookingIndex(items))
+        confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(
+            for: item, in: QueueModel.selfBookingIndex(actionItems()))
         // #2017: the sheet redraws for whatever he ticks, so the To line, the preview's greeting and the
         // promise underneath describe the email actually about to leave rather than the default one.
         let warning = confirmation.selfBookingWarning
         pendingConfirm = PendingSend(
             id: item.id, confirmation: confirmation,
             rebuild: { selected, together in
-                guard let model = ShowIdentity(item)?.resolve(in: prospects).show else { return nil }
+                guard let model = ShowIdentity(item)?.resolve(in: engine).show else { return nil }
                 // #4168: the choice is PASSED, never written. This used to set `sendsTogetherOverride` on
                 // the live model and restore it in a `defer`, which is two writes to an observed SwiftData
                 // model inside a SwiftUI body evaluation. `SendConfirmSheet.current` was read seven times
@@ -2113,7 +1879,7 @@ struct QueueView: View {
     // been merged or moved, and its contact having been struck off are three different things and only
     // one of them is "could not find that show" (L11, L260).
     private func closeOut(_ row: ReachedOutSnapshot, as outcome: ShowOutcome) {
-        let resolved = ReachedOutSnapshot.resolve(row, in: prospects)
+        let resolved = ReachedOutSnapshot.resolve(row, in: engine)
         guard case .found(let p, _) = resolved else {
             feedback.acknowledge(resolved.sentence(org: row.org), tone: .warning)
             return
@@ -2123,7 +1889,7 @@ struct QueueView: View {
             sendState.depart(snapshot.id, as: snapshot, because: .closedOut)
         }
         ProspectMutations.recordOutcome(snapshot, outcome,
-                                        shows: prospects, context: context,
+                                        shows: engine, context: context,
                                         feedback: feedback, undo: undoStack)
         // Cleared after the exit plays. Never before the rebuild lands: clearing early would drop the
         // snapshot while the real row is still in the queue's answer, and the row Dan just closed out
@@ -2146,7 +1912,7 @@ struct QueueView: View {
     // A refusal is SAID, in the wording that names its own cause, because a control whose failure is
     // written nowhere leaves pressing it again as the only diagnosis available (L148, L11).
     private func linkReplyFromAnotherThread(_ row: ReachedOutSnapshot) {
-        let resolved = ReachedOutSnapshot.resolve(row, in: prospects)
+        let resolved = ReachedOutSnapshot.resolve(row, in: engine)
         guard case .found(let p, let r) = resolved else {
             feedback.acknowledge(resolved.sentence(org: row.org), tone: .warning)
             return
@@ -2159,12 +1925,12 @@ struct QueueView: View {
         // #361: snapshot the row now, while it's still present, so its leaving delight can render after
         // the send removes it from `visible`. Only a send that EMPTIES the show (onSent fullySent) plays
         // it; a partial send on a multi-recipient show keeps the row, so no exit yet.
-        let snapshot = items.first(where: { $0.id == naturalKey })
+        let snapshot = actionItems().first(where: { $0.id == naturalKey })
         // #2050: approve-then-send, as ONE action, because the sheet Dan just read IS the approval. On a
         // show that is already approved (a retry, or one approved before this change) it sends without
         // re-approving. The pair lives in ProspectMutations, not here, so it has a seam a test can reach.
         guard let confirmed = snapshot else { return }
-        ProspectMutations.approveAndSend(confirmed, shows: prospects, context: context, feedback: feedback,
+        ProspectMutations.approveAndSend(confirmed, shows: engine, context: context, feedback: feedback,
                                       selecting: selecting, together: together,
                                       markSending: { sendState.markSending($0) },
                                       clearSending: { sendState.clearSending($0) },
@@ -2315,14 +2081,14 @@ struct QueueView: View {
         // #2710: one branch now. The conversation track's only email was the closing note, which is gone,
         // so a row nudge is a follow-up and nothing else.
         ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
-                                       shows: prospects, context: context, feedback: feedback,
+                                       shows: engine, context: context, feedback: feedback,
                                        body: body,
                                        markSending: { sendState.markSending($0) },
                                        clearSending: { sendState.clearSending($0) })
     }
 
     private func sendReply(_ item: QueueItem, _ recipientId: String) {
-        ProspectMutations.sendReply(item, recipientId, shows: prospects, context: context, feedback: feedback,
+        ProspectMutations.sendReply(item, recipientId, shows: engine, context: context, feedback: feedback,
                                     markSending: { sendState.markReplySending($0) },
                                     clearSending: { sendState.clearReplySending($0) },
                                     onNeedsReconnect: { showReconnect = true })
@@ -2799,6 +2565,103 @@ struct ReachabilityProbeControl: View {
                 // date, which now stays on a finished date: one control, and one that spends nothing and
                 // writes nothing until the selection bar's confirm.
             }
+        }
+    }
+}
+
+// #4358 slice E4d (plan item 12): the line a card carries while the queue engine knows Overture's copy of its show is
+// out of step with the saved one, and the button that reloads it (`QueueEngine.reload`). Every action on such a show
+// is refused until then (`ShowIdentity.Refusal.outOfStep`), so the line names the one control that unsticks it (L80,
+// L111).
+//
+// COLD READ, 2026-10-08, in the order Dan meets it: a card in his queue shows this line in gold, above everything else
+// on it, with the button beside it. "Saved one" rather than "the store", which is not his word (L399). It says what
+// is wrong and what to do, and nothing about how the app found out, which would be the interface explaining itself
+// (L604).
+struct OutOfStepRow: View {
+    let onReload: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+            Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                .accessibilityHidden(true)
+            Text(OutOfStepCopy.line)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(OutOfStepCopy.button, action: onReload)
+                .buttonStyle(.plain)
+                .foregroundStyle(OVColor.forestText)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(OVColor.goldText)
+    }
+}
+
+enum OutOfStepCopy {
+    static let line = "Overture's copy of this show is out of step with the saved one. Reload it before changing anything."
+    static let button = "Reload this show"
+}
+
+// #4358 slice E4d (plan item 2, D6): what the queue shows before the engine's first pass lands, and when the first
+// read could not be used. Never an empty queue: an empty queue and a queue not yet read look alike, and only one of
+// them would be true (L10, L67). Loading carries the time it has taken, so a slow read and a stuck one are told apart
+// (Dan's rule for anything that takes time); a failure names what failed and offers the one way on, which is the
+// engine's `retryLaunch()`.
+//
+// COLD READ, 2026-10-08, each branch in the order Dan meets it: the window opens, this sits where the queue will be
+// for about a second, then the queue replaces it. "Your saved shows" for what is being read (L399). Each failure says
+// what happened and that nothing was changed, and the button says what pressing it does.
+struct QueueLaunchView: View {
+    let launch: QueueEngineLaunchState
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: OVSpacing.sm) {
+            switch launch.firstPaint {
+            case .failed(let why, _, _):
+                Text(QueueLaunchCopy.failed(why))
+                    .font(.system(size: 13))
+                    .foregroundStyle(OVColor.ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(QueueLaunchCopy.retry, action: retry)
+            case .notStarted, .loading, .ready:
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    HStack(spacing: OVSpacing.xs) {
+                        ProgressView().controlSize(.small)
+                        Text(QueueLaunchCopy.loading)
+                            .font(.system(size: 13))
+                            .foregroundStyle(OVColor.inkSoft)
+                        if case .loading(let since, _) = launch.firstPaint,
+                           let elapsed = RunProgress.elapsedLabel(since: since, now: context.date) {
+                            Text(elapsed).font(.system(size: 13)).monospacedDigit().foregroundStyle(OVColor.inkFaint)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(OVSpacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(OVColor.canvas)
+    }
+}
+
+enum QueueLaunchCopy {
+    static let loading = "Loading your queue"
+    static let retry = "Try again"
+
+    static func failed(_ why: QueueEngineLaunchFailure) -> String {
+        switch why {
+        case .readFailed:
+            return "Overture could not read your saved shows, so your queue is not shown yet. Nothing was changed."
+        case .shortRead:
+            return "Overture read fewer of your saved shows than are stored, so your queue is not shown rather than "
+                + "shown with some missing. Nothing was changed."
+        case .timedOut:
+            return "Reading your saved shows took longer than Overture waits, so your queue is not shown yet. "
+                + "Nothing was changed."
+        case .wedged:
+            return "An earlier read of your saved shows has not finished, so your queue is not shown yet. "
+                + "Nothing was changed."
         }
     }
 }

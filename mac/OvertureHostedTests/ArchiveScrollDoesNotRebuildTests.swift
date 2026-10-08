@@ -128,7 +128,7 @@ struct ArchiveScrollDoesNotRebuildTests {
         // TheWallClock` shows the window doing exactly that on the wall clock. Unmounted before its window
         // closes, so no later test can wake it.
         let clock = HostedPassCounting.frozenClock()
-        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows, clock: clock) }
+        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: []), clock: clock) }
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())

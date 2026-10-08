@@ -16,7 +16,8 @@ import Foundation
 // for no reason, so its absence there is part of the rule rather than an accident of where it was written.
 @Suite("The queue counts its own whole-store derivations (#1774)", .sharesTheRenderCounter)
 struct QueueDerivationCounterTests {
-    private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
+    // #4358 slice E4d: the queue derives in the engine's turn, through the derivation `QueueEngineQueue` hands it.
+    private var engineQueue: String { SourceGuardHelper.source("Overture/App/QueueEngineQueue.swift") }
 
     // #1933: the log is bounded, by the same rotation every other log in this app uses.
     //
@@ -94,15 +95,17 @@ struct QueueDerivationCounterTests {
 
     // The one place that may count is the one place that derives. Counting anywhere else would report a
     // number that is not the thing under test.
-    // #4358 slice E4a (#4357 step 8): that place is the CALLER now, the memo path's build in `makeRenderData`,
-    // which runs the pass and records it beside it, once per build, because the pass itself records nothing
-    // (`QueueRenderPassIsPureTests` holds the pass to that).
+    // #4358 slice E4a (#4357 step 8): that place is the CALLER, because the pass itself records nothing
+    // (`QueueRenderPassIsPureTests` holds the pass to that). Since slice E4d the caller is the engine's main actor
+    // pass (`QueueEngineQueue.derivation`'s `onTheMainActor`), once per pass a turn runs; the verifier's rebuilds run
+    // the plain `derive` and are not passes.
     @Test func onlyTheWholeStoreDerivationIsCounted() {
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "makeRenderData", in: queueView) else {
-            Issue.record("expected to find the memo path that runs the render pass")
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "derivation", in: engineQueue) else {
+            Issue.record("expected to find the queue's derivation for the engine")
             return
         }
-        #expect(body.contains("QueueRenderPass.make("), "the counted body does not run the pass")
+        #expect(body.contains("derivation.onTheMainActor = { input in") && body.contains("let pass = derive(input)"),
+                "the counted body does not run the pass")
         #expect(body.contains("QueueRenderCounter.recordDerivation("))
         // Once per derivation, not once per field of the snapshot.
         #expect(body.components(separatedBy: "QueueRenderCounter.recordDerivation(").count - 1 == 1)
@@ -110,8 +113,8 @@ struct QueueDerivationCounterTests {
 
     // Gated out of Release, at both ends: the counter itself and the call that feeds it.
     @Test func theCounterIsDebugOnly() {
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "makeRenderData", in: queueView) else {
-            Issue.record("expected to find the memo path that runs the render pass")
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "derivation", in: engineQueue) else {
+            Issue.record("expected to find the queue's derivation for the engine")
             return
         }
         guard let callIndex = body.range(of: "QueueRenderCounter.recordDerivation(")?.lowerBound else {

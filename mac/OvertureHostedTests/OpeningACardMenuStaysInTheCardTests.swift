@@ -75,8 +75,26 @@ struct OpeningACardMenuStaysInTheCardTests {
         }
     }
 
+    // RootView's part: it builds the queue in its OWN body from what it holds, so the queue is created only when that
+    // body runs, never by the flip. #4358 slice E4d: this stands where the store reader stood before (it built the
+    // queue in its body from its query's rows), and for the same reason. Handed to `ActiveState` as the queue value
+    // itself instead, a flip compared that value with its own copy, and SwiftUI cannot find a view equal that holds an
+    // existential (`renderDataProvider`; a probe view holding only `any QueueRenderDataProvider` was re-run by a flip
+    // while ones holding the engine or a closure were not, 2026-10-08), so the queue's body ran for a reason the app
+    // never has: nothing re-creates the app's queue when the window's key state moves.
+    private struct QueueFromTheEngine: View {
+        let engine: QueueEngineHost.Engine
+        @Binding var deepLinkedKey: LeadDeepLink?
+        @Binding var deepLinkedKeys: LeadsDeepLink?
+        var body: some View {
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: {})
+        }
+    }
+
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         let feedback: ActionFeedback
         let dayOffOffer: DayOffOfferRequest
         let undoStack: QueueUndoStack
@@ -85,10 +103,8 @@ struct OpeningACardMenuStaysInTheCardTests {
         @State private var deepLinkedKeys: LeadsDeepLink?
 
         var body: some View {
-            ActiveState(activity: activity, content: RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, onConnectGmail: {})
-            })
+            ActiveState(activity: activity, content: QueueFromTheEngine(engine: engine, deepLinkedKey: $deepLinkedKey,
+                                                                       deepLinkedKeys: $deepLinkedKeys))
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
@@ -126,7 +142,8 @@ struct OpeningACardMenuStaysInTheCardTests {
         window.isReleasedWhenClosed = false
         // #4534: unmounted before the close, by the window, since the hosting view is built below.
         defer { HostedPassCounting.unmountAndClose(window) }
-        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, feedback: ActionFeedback(),
+        let engine = try await HostedQueueEngine.started(context: c.mainContext)
+        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, engine: engine, feedback: ActionFeedback(),
                                                               dayOffOffer: DayOffOfferRequest(),
                                                               undoStack: QueueUndoStack(),
                                                               activity: activity)))
@@ -161,7 +178,9 @@ struct OpeningACardMenuStaysInTheCardTests {
                 "the window changing key state re-evaluated cards that read nothing from it")
         // Named separately so a red run says WHICH cards and how many times, which the literal above cannot.
         if !cardsEvaluated.isEmpty || queueEvaluations != 0 {
-            Issue.record("queue body +\(queueEvaluations); cards re-evaluated: \(cardsEvaluated)")
+            // #4358 slice E4d: and what each extra evaluation of the queue saw move, from the counter's own trace.
+            let why = QueueRenderCounter.reasons(for: QueueRenderCounter.queueBodySurface).suffix(max(0, queueEvaluations))
+            Issue.record("queue body +\(queueEvaluations) (\(why.joined(separator: "; "))); cards re-evaluated: \(cardsEvaluated)")
         }
     }
 }

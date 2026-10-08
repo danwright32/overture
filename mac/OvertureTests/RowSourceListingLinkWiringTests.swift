@@ -96,16 +96,20 @@ struct RowSourceListingLinkWiringTests {
     // that never used it.
     private static let surfaces = [
         // #4311: the Reached out list's table is built by the render pass now, for Follow-ups' reason.
-        (view: "Overture/UI/QueueView.swift", buildsTheTableIn: "Overture/UI/QueueRenderPass.swift"),
-        (view: "Overture/UI/FollowUpsView.swift", buildsTheTableIn: "Overture/UI/FollowUpsRenderPass.swift"),
+        (view: "Overture/App/QueueEngineQueue.swift", watchlist: "facts.watchedSources.values",
+         buildsTheTableIn: "Overture/UI/QueueRenderPass.swift"),
+        (view: "Overture/UI/FollowUpsView.swift", watchlist: "let watchedSources: [WatchedSource]",
+         buildsTheTableIn: "Overture/UI/FollowUpsRenderPass.swift"),
     ]
 
     @Test func bothSurfacesResolveTheirLinksAgainstTheLiveWatchlist() {
         for surface in Self.surfaces {
             let view = SourceGuardHelper.source(surface.view)
             #expect(!view.isEmpty, "\(surface.view) could not be read, so nothing below was measured")
-            #expect(view.contains("@Query private var watchedSources: [WatchedSource]"),
-                    "\(surface.view) has no live watchlist to resolve a link's label against")
+            // #4358 slice E4d: the queue's watchlist is the engine's (its pass is handed `facts.watchedSources`), and
+            // Follow-ups is handed the engine's rows; neither holds a query of its own.
+            #expect(view.contains(surface.watchlist),
+                    "\(surface.view) has no watchlist to resolve a link's label against")
 
             let builder = SourceGuardHelper.source(surface.buildsTheTableIn)
             #expect(!builder.isEmpty,

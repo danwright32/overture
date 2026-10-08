@@ -72,8 +72,13 @@ struct TheAppHandsNoSurfaceAClockTests {
     }
 
     @Test func eachSurfaceDefaultsToTheWallClock() {
-        for (surface, path) in [("QueueView", "Overture/UI/QueueView.swift"),
-                                ("SourcesView", "Overture/UI/SourcesView.swift"),
+        // #4358 slice E4d: the queue has no clock of its own any more. It derives nothing, so there is no memo window to
+        // judge; the instant every pass is judged at is the queue engine's clock, which the app's engine takes from
+        // the system (`QueueEngineClock.system`).
+        let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        #expect(!queue.isEmpty && !SourceGuardHelper.containsCode("var clock:", in: queue),
+                "QueueView holds a clock again, beside the engine's")
+        for (surface, path) in [("SourcesView", "Overture/UI/SourcesView.swift"),
                                 ("ArchiveView", "Overture/UI/ArchiveView.swift")] {
             let source = SourceGuardHelper.source(path)
             #expect(!source.isEmpty, "\(path) could not be read, so nothing below was measured")

@@ -258,6 +258,18 @@ struct FocusRevisedEnvironmentGuardTests {
         #expect(Self.violates(view: extended, derivations: ["DueWork.counts"]) != nil)
     }
 
+    // Pairs this scan finds that no redraw runs, each with the reason, keyed "File.swift derivation". The region walk
+    // follows every declaration a body reaches, closures handed to controls and lifecycle handlers included, so a
+    // derivation run only by an action or by launch work reads as a redraw subject (L362, `WatchlistEditing`'s limit).
+    //
+    // #4358 slice E4d found the one here. RootView held a `ScopeMemo` (the due badge's) until the cutover, and a view
+    // holding one is skipped WHOLESALE by `violates`, so this pair was never judged at all; deleting the memo let the
+    // scan reach RootView for the first time.
+    static let reachedOnlyOutsideARedraw: [String: String] = [
+        "RootView.swift OmniFocusSync.desired": "computed by syncOmniFocus, which only presses call (the masthead "
+            + "notice's retry, the Sync now button, the two Debug clear helpers), never a body evaluation",
+    ]
+
     @Test func noViewReadsAFocusRevisedValueWhileDerivingTheWholeStore() {
         let derivations = Self.wholeStoreDerivations().union(Self.declaredRenderDerivations)
         #expect(derivations.count > 40, Comment(rawValue: """
@@ -268,12 +280,18 @@ struct FocusRevisedEnvironmentGuardTests {
         let files = AppSourceWalk.files(underAll: [Self.appRoot], floor: Self.fileFloor)
         var readers: [String] = []
         var offenders: [String] = []
+        var exempted: Set<String> = []
         for file in files {
             let code = SwiftSource.scannableLines(in: file.text).map(\.code).joined(separator: "\n")
             guard Self.focusRevised.contains(where: { code.contains("@Environment(\\.\($0))") }) else { continue }
             readers.append(file.name)
             for text in Self.typeTexts(in: file.text) {
                 if let found = Self.violates(view: text, derivations: derivations) {
+                    let key = "\(file.name) \(found.derivation)"
+                    if Self.reachedOnlyOutsideARedraw[key] != nil {
+                        exempted.insert(key)
+                        continue
+                    }
                     offenders.append("\(file.name) reads \\.\(found.environment) and reaches \(found.derivation)")
                 }
             }
@@ -285,6 +303,8 @@ struct FocusRevisedEnvironmentGuardTests {
             no view under mac/Overture reads a focus-revised environment value, so this guard checked \
             nothing at all
             """)
+        let stale = Set(Self.reachedOnlyOutsideARedraw.keys).subtracting(exempted)
+        #expect(stale.isEmpty, Comment(rawValue: "exempted pairs this scan no longer finds: \(stale.sorted()). Delete them."))
         #expect(offenders.isEmpty, Comment(rawValue: """
             \(offenders.joined(separator: "; ")). The window system revises these values when focus \
             moves, so every key transition evaluates that body and runs that derivation: measured at \

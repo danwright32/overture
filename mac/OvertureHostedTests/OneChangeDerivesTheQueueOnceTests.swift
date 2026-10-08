@@ -82,23 +82,20 @@ struct OneChangeDerivesTheQueueOnceTests {
         let dayOffOffer: DayOffOfferRequest
         let undoStack: QueueUndoStack
         let tick: RedrawTick
-        // #4516: frozen, so the memo's two second window cannot be what a count here measures.
-        let clock: () -> Date
+        // #4358 slice E4d: the queue engine RootView builds, over the same store, started before the queue is hosted.
+        let engine: QueueEngineHost.Engine
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
 
         var body: some View {
-            // RootView's part, played here: the rows come from one whole-table query and are handed down,
-            // which is the path whose second notification this suite is about (#3846).
+            // RootView's part, played here: the queue draws the engine's published pass (#4358 slice E4d).
             // `tick` is read HERE, above the queue, and handed down inside a closure, which is what
             // `RootView` does with every closure it passes: a fresh closure is a changed input, so each
             // redraw above re-evaluates the queue's body with no data behind it (#1930's "nothing this
             // view reads", reproduced on purpose).
             let n = tick.value
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, clock: clock, onConnectGmail: { _ = n })
-            }
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+                      onConnectGmail: { _ = n })
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
@@ -120,7 +117,8 @@ struct OneChangeDerivesTheQueueOnceTests {
         let tick: RedrawTick
     }
 
-    private func host(_ c: ModelContainer) -> Hosted {
+    private func host(_ c: ModelContainer) async throws -> Hosted {
+        let engine = try await HostedQueueEngine.started(context: c.mainContext)
         let feedback = ActionFeedback()
         let offer = DayOffOfferRequest()
         let undo = QueueUndoStack()
@@ -132,8 +130,7 @@ struct OneChangeDerivesTheQueueOnceTests {
         window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: AnyView(Harness(container: c, feedback: feedback,
                                                               dayOffOffer: offer, undoStack: undo,
-                                                              tick: tick,
-                                                              clock: HostedPassCounting.frozenClock())))
+                                                              tick: tick, engine: engine)))
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(hosting)
@@ -191,7 +188,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // ONE show dismissed, through the same mutation the card's Dismiss menu calls.
     @Test func dismissingOneShowDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
@@ -217,7 +214,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // the card rather than removing it, so it is the in-place edit case rather than the removal case.
     @Test func correctingOneShowsGenreDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
@@ -248,7 +245,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // asked and skipped, and the touched card is one of them, so its redraw can be seen at all.
     @Test func oneCardActionReRunsOneCardBody() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         let beforeMount = QueueRenderCounter.cardBodyCounts()
         seed(h.context)
@@ -283,7 +280,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // rows change in one write, and that must still be one derivation rather than one per row.
     @Test func dismissingAWholeNightDerivesTheQueueNoMoreThanTheSaveAnnounces() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
@@ -323,7 +320,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // (`HostedPassCounting.waitPastTheRenderMemoWindow`).
     @Test func aRedrawWithNoDataChangeDerivesNothing() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
@@ -367,7 +364,7 @@ struct OneChangeDerivesTheQueueOnceTests {
         let c = try container()
         seed(c.mainContext)
         let derivationsBefore = QueueRenderCounter.derivations
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         var why = await settle(h.hosting)
         let evaluationsBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.queueBodySurface)
@@ -422,7 +419,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     }
 
     private func showsArriving(in c: ModelContainer) async throws {
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         _ = await settle(h.hosting)
         seed(h.context)
@@ -452,7 +449,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // night below the fold, which reveals nothing here and so could not see this.
     @Test func dismissingAVisibleNightDerivesTheQueueOnce() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
@@ -476,13 +473,11 @@ struct OneChangeDerivesTheQueueOnceTests {
             + "with another whole-store pass instead of adopted (#4591)"))
     }
 
-    // A TOWN renamed in place, unsaved. The queue resolves Dan's town refusals OUTSIDE the memo's build,
-    // so the build's own tracking never read `town` and cannot be marked stale by it; the body still
-    // re-evaluates (it read the name), and only the town names in the key stop that evaluation being
-    // served the answer from before the rename (#4112 closed the same gap on Sources).
+    // A TOWN renamed in place. The memo path resolved Dan's town refusals OUTSIDE its build, so only the town names
+    // in its key carried a rename (#4112 closed the same gap on Sources); the engine takes the saved row in by value.
     @Test func aRefusedTownRenamedInPlaceStillReachesTheQueue() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         let town = ExcludedTown(town: "Poughkeepsie")
         h.context.insert(town)
@@ -490,6 +485,11 @@ struct OneChangeDerivesTheQueueOnceTests {
         await brought(up: h)
 
         town.town = "Hoboken"
+        // #4358 slice E4d: SAVED, as `ExcludedTownEditing` saves every refusal it writes. The queue engine keeps a
+        // tracker on the rows of a show, a contact and an inquiry; a small table like this one reaches it by the save,
+        // which names the row, and the engine reads it again (E1a's design: "a save sees a write no tracker was armed
+        // for"). The question is unchanged: the renamed town must reach the queue.
+        try h.context.save()
         let why = await settle(h.hosting)
 
         #expect(why.count >= 1, Comment(rawValue:
@@ -501,7 +501,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // row field, so if nothing else keeps the body subscribed to them, the edit reaches nobody.
     @Test func anEditInPlaceAfterAServedRedrawStillReachesTheQueue() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
@@ -526,7 +526,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // what re-armed it; if it did not, this edit reaches nobody.
     @Test func anEditInPlaceAfterASavedChangeSettledStillReachesTheQueue() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)
@@ -555,7 +555,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     // the model's own observation, and it must still derive.
     @Test func anEditInPlaceStillReachesTheQueueWithoutASave() async throws {
         let c = try container()
-        let h = host(c)
+        let h = try await host(c)
         defer { tearDown(h) }
         seed(h.context)
         await brought(up: h)

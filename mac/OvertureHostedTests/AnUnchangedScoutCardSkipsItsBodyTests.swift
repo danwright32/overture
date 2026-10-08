@@ -77,7 +77,7 @@ final class AnUnchangedScoutCardSkipsItsBodyTests {
         defer { release(window) }
         let beforeFirst = QueueRenderCounter.cardBodyCounts()
         _ = Phase0cView.settle(bodyMustRun: true) {
-            let w = Phase0cViewRig.host(c, rows: shows, feed: feed, size: NSSize(width: 1000, height: 2400))
+            let w = Phase0cViewRig.host(c, feed: feed, size: NSSize(width: 1000, height: 2400))
             window = w
             return w
         }

@@ -12,9 +12,6 @@
 # Seeded 2026-08-27 by the guard's own predicate rather than by a query written beside it (L107).
 CanonicalDomainProcedure.swift:judgement  # #3345 shipped the READING and not the refusal, on Dan's call of 2026-09-06 to measure before enforcing: the mechanism could not be reproduced on any run whose streams are on disk. Its only caller is CanonicalDomainProcedureArchiveTests, which prints the per-run reading every suite run. #3609 is the issue that wires it into the ingest.
 CardDivergence.swift:byCommit  # #4583 shipped plan v7 section 15's merge gate filter (count only the divergence records stamped with the branch's commit) ahead of the gate that reads it. Its reader is the merge gate, which is a TEST SUITE the merge path runs on Dan's Mac by design (plan v7 section 15, the E4 plan's section 4): `EngineDivergenceGate` (#4358 slice E4c) reads it and nothing in the app ever will, so this line stays rather than being removed at the cutover.
-CardDivergenceReport.swift:faultSentence  # #4358 slice E4b (plan item 10): the launch notice's sentence about rows the queue engine faulted, shipped as a value ahead of the notice that says it. Its reader is the cutover's launch notice (#4358, slice E4d); remove this line in that change.
-CardDivergenceReport.swift:verifierLogLine  # #4358 slice E4b (plan item 10, the E4 plan's section 1 point 1): the queue engine's four full-read nets, fault summary and match state as one log line for #4343's real-use day, shipped as a value ahead of the notice that writes it. Its reader is the cutover's launch notice (#4358, slice E4d); remove this line in that change.
-CardDivergenceReport.swift:verifierSentence  # #4358 slice E4b (plan item 10): the launch notice's sentence about the queue engine's verifier match count, zero said as never checked, shipped as a value ahead of the notice that says it. Its reader is the cutover's launch notice (#4358, slice E4d); remove this line in that change.
 ContactIdentity.swift:isSamePerson
 ContradictedCancellation.swift:liveTwin  # The row-by-row definition of the rule, kept OFF the app's path on purpose: contradictedKeys is the indexed version the pass calls, and theSetAgreesWithAskingRowByRow asserts the two agree. Deriving both from one implementation would prove only that it is self-consistent (L58, L70), so this one exists to be the other side of that comparison. #3278
 DownbeatExport.swift:hasLeftReview
@@ -22,8 +19,7 @@ DownbeatExport.swift:hostingSite
 DownbeatExport.swift:isTaxExempt
 DownbeatExport.swift:phoneNumber
 DownbeatExport.swift:venueId
-FactStore.swift:batchesOverBudget  # #4358 slice E3: the launch fill's reading against plan v7's 16 ms per batch, read today by QueueEngineLaunchFillTests and the opt-in launch probe. Its app reader is the cutover's launch notice (#4358, slice E4); remove this line in that change.
-FactStore.swift:slowestBatch  # #4358 slice E3: the launch fill's slowest batch, read today by QueueEngineLaunchFillTests. Its app reader is the cutover's launch notice (#4358, slice E4); remove this line in that change.
+DueWork.swift:countAndNextChange  # Dead in the app since the cutover (#4358 slice E4d): the follow ups badge reads the queue engine's pass, and this was its memo's build. Held, with RootView's old memo shape tests, until slice E4e deletes the memo path once #4343's real-use day has passed, so a revert of the cutover stays one PR (the E4 plan, section 6).
 GeoRefusals.swift:resolvedPlaceCount
 InquiryReporting.swift:lostAfter
 InquiryReporting.swift:openPredicate
@@ -31,6 +27,7 @@ NightDecision.swift:unjudgedNights  # #3324 shipped the enumerable unjudged set 
 OmniFocusSync.swift:completionIsCarriedBack
 OutcomeStats.swift:autoBookingRate
 OutcomeStats.swift:manualBookingRate
+PrepQueue.swift:needsPrepPredicate  # Dead in the app since the cutover (#4358 slice E4d): the Prep gate reads `toPrep` off the queue engine's pass, and this was the query's predicate. Held, with its parity arm, until slice E4e deletes it once #4343's real-use day has passed, so a revert of the cutover stays one PR (the E4 plan, section 6).
 PrepQueueButton.swift:canStart
 PrepResults.swift:allowance
 PrepResults.swift:capPerItem
@@ -60,8 +57,8 @@ ShowOutcome.swift:asDismissReason
 SourceGrade.swift:isStopped
 SourceSchedule.swift:maySpendTokens
 StageOverlap.swift:violations
-TableReader.swift:answeringOnly  # #4356: proves the TableReader recording complete (TableReaderRecordsEveryReadTests) and has no app reader until the engine retains cards, Phase 4 (#4358); remove this line in that change.
-TableReader.swift:dependsOn  # #4356 shipped plan v7 Phase 2's declared dependency graph ahead of its reader, held to the plan by QueueEngineGraphTests. Its first app reader is the queue engine, Phase 4 (#4358); remove this line in that change.
+TableReader.swift:answeringOnly  # #4356: proves the TableReader recording complete (TableReaderRecordsEveryReadTests). Its app reader is the queue engine RETAINING cards, which the cutover (#4358, slice E4d) does not do: the engine recomputes the whole pass, and the per row entries that keep each card with the reads it made are Phase 4b(d), #4363. Remove this line in that change.
+TableReader.swift:dependsOn  # #4356 shipped plan v7 Phase 2's declared dependency graph ahead of its reader, held to the plan by QueueEngineGraphTests. Its first app reader is the first patch that walks it, Phase 4b(a), #4360: the cutover (#4358, slice E4d) runs the full value pass and patches nothing. Remove this line in that change.
 TimeProbe.swift:changedReads  # #4356 shipped plan v7 Phase 2's TimeProbe and ContextReader ahead of their reader, held by QueueContextTests. Their first app reader is the per-row entries in Phase 4b(d) (#4363); remove this line in that change.
 TimeProbe.swift:consulted  # #4356 shipped plan v7 Phase 2's TimeProbe and ContextReader ahead of their reader, held by QueueContextTests. Their first app reader is the per-row entries in Phase 4b(d) (#4363); remove this line in that change.
 TimeProbe.swift:readContinuously  # #4356 shipped plan v7 Phase 2's TimeProbe and ContextReader ahead of their reader, held by QueueContextTests. Their first app reader is the per-row entries in Phase 4b(d) (#4363); remove this line in that change.

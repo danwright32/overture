@@ -13,9 +13,10 @@ import SwiftData
 // the production path. Both are asserted here as COUNTS, because a count is a statement about this code
 // and a duration is a statement about the machine (L63, L290).
 //
-// THE TWO ARMS. Served: the body is evaluated and the queue derives nothing. Default: the same harness
-// with no provider named derives, which is the positive control (L159) and also the proof that the
-// default every other hosted test relies on is still the memo path.
+// THE TWO ARMS. Served: the body is evaluated and nothing derives. Default: the same harness with no provider
+// named draws the queue engine's pass, and the engine derives it, which is the positive control (L159).
+// #4358 slice E4d: the queue derives nothing itself any more; the engine's turn does. So the served arm hands the
+// queue an engine that was never started, and the derivations counted are the engine's.
 @MainActor
 @Suite("A served RenderData is what the queue draws (#4106 Step V)")
 struct AServedRenderDataIsWhatTheQueueDrawsTests {
@@ -52,24 +53,15 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
 
     private struct Harness: View {
         let container: ModelContainer
+        let engine: QueueEngineHost.Engine
         let provider: (any QueueRenderDataProvider)?
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
-        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
-        // memo's two second window cannot be read as the queue deriving while a pass was served.
-        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
-            RowsFromStore { (rows: [Prospect]) in
-                if let provider {
-                    QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                              allProspects: rows, renderDataProvider: provider, clock: clock)
-                } else {
-                    // No provider named, exactly as every other hosted harness builds the queue.
-                    QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                              allProspects: rows, clock: clock)
-                }
-            }
+            // No provider named is exactly how the app builds the queue.
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+                      renderDataProvider: provider)
             .modelContainer(container)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
@@ -81,7 +73,7 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
     // returns how many derivations and body evaluations that took. Waits on the condition rather than a
     // fixed time (L290); the window is never ordered front, so layout and display are driven by hand
     // (#3480).
-    private func drawn(_ c: ModelContainer, provider: (any QueueRenderDataProvider)?)
+    private func drawn(_ c: ModelContainer, engine: QueueEngineHost.Engine, provider: (any QueueRenderDataProvider)?)
         async -> (derivations: Int, evaluations: Int)
     {
         let derivationsBefore = QueueRenderCounter.derivations
@@ -89,7 +81,7 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 800),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, provider: provider)))
+        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, engine: engine, provider: provider)))
         defer { HostedPassCounting.unmountAndClose(hosting, replacingWith: AnyView(EmptyView()), in: window) }
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
@@ -124,7 +116,8 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
         // The fixture has to be one worth drawing, or a body that drew nothing is what was timed.
         #expect(!served.rows.isEmpty, "the served pass holds no rows, so this fixture draws nothing")
 
-        let result = await drawn(c, provider: Served(data: served))
+        let result = await drawn(c, engine: HostedQueueEngine.make(context: c.mainContext),
+                                 provider: Served(data: served))
 
         #expect(result.evaluations >= 1, Comment(rawValue:
             "the queue's body never ran, so the zero below means nothing was drawn rather than that the "
@@ -140,12 +133,15 @@ struct AServedRenderDataIsWhatTheQueueDrawsTests {
     @Test func withNoProviderNamedTheQueueDerivesAsItAlwaysDid() async throws {
         let c = try TestModelContainer.inMemory(AppSchema.models)
         _ = try seed(c.mainContext)
+        let derivationsBefore = QueueRenderCounter.derivations
+        let engine = try await HostedQueueEngine.started(context: c.mainContext)
+        let launch = QueueRenderCounter.derivations - derivationsBefore
 
-        let result = await drawn(c, provider: nil)
+        let result = await drawn(c, engine: engine, provider: nil)
 
         #expect(result.evaluations >= 1, "the queue's body never ran, so this arm measured nothing")
-        #expect(result.derivations >= 1, Comment(rawValue:
-            "the queue drew with no provider named and derived nothing, so the default is no longer the "
-            + "memo path every other hosted test assumes it is"))
+        #expect(launch + result.derivations >= 1, Comment(rawValue:
+            "the queue drew with no provider named and its engine derived nothing, so the default no longer draws "
+            + "the engine's pass"))
     }
 }

@@ -211,23 +211,24 @@ struct DueCountHoldsUntilItCouldChangeTests {
 
     // MARK: - The wiring, because built is not wired (L3)
 
-    // Every test above drives the SHAPE `RootView.followUpsDue` has, not `RootView` itself, so all of
-    // them would stay green over a badge still asking for a two second window. This is the half that
-    // says the shipping surface takes the new one.
-    @Test("the shipped badge takes its staleness from the count's own next change")
-    func theShippedBadgeUsesItsOwnExpiry() {
-        let source = SourceGuardHelper.source("Overture/App/RootView.swift")
-        #expect(!source.isEmpty, "RootView could not be read, so this guard checked nothing")
-        #expect(source.contains("followUpsMemo.held.flatMap(\\.couldChangeAt).map { .at($0) } ?? .never"),
-                Comment(rawValue:
-                    "the due badge no longer takes its expiry from the count's own next change, so it is "
-                    + "back on a fixed window and a quiet store pays a whole-store sweep again (#4110)"))
-        #expect(source.contains("DueWork.countAndNextChange("), Comment(rawValue:
-            "the badge builds its count without the moment beside it, so whatever decides the memo's "
-            + "expiry is a second derivation the cheap path has to pay for (L431)"))
-        // The shape that must not come back: the count alone, which carries no expiry and therefore
-        // forces a window.
-        #expect(!source.contains("DueWork.counts(prospects: allProspects"))
+    // #4358 slice E4d: THE SHIPPED BADGE no longer has a memo of its own. It reads the queue engine's published pass
+    // (`agentInputs.followUpsDue`, which is `DueWork.counts` over the same rows), and when that number can next change
+    // by the clock alone is the engine's own deadline, which the pass's `nextChange` sets from `DueWork.nextChange`. So
+    // the property this suite was written for, a quiet store paying no sweep until the count could change, now holds by
+    // the engine's construction; the memo shape above is held, with `DueWork.countAndNextChange`, until slice E4e
+    // deletes both (the E4 plan, section 6).
+    @Test("the shipped badge reads the engine's pass, whose deadline is the count's own next change")
+    func theShippedBadgeReadsTheEnginesPass() {
+        let root = SourceGuardHelper.source("Overture/App/RootView.swift")
+        let queue = SourceGuardHelper.source("Overture/App/QueueEngineQueue.swift")
+        #expect(!root.isEmpty && !queue.isEmpty, "a source could not be read, so this guard checked nothing")
+        #expect(root.contains("engine.output?.value.data.agentInputs.followUpsDue"), Comment(rawValue:
+            "the due badge does not read the engine's pass, so it is counting the store a second way (L16)"))
+        #expect(!root.contains("followUpsMemo") && !root.contains("DueWork.counts(prospects:"), Comment(rawValue:
+            "the badge sweeps the store itself again, beside the engine's pass (#4110, L431)"))
+        #expect(queue.contains("DueWork.nextChange(from: shows"), Comment(rawValue:
+            "the engine's pass no longer takes its next change from the due count's own rule, so a badge reading "
+            + "it would go stale until the 60 second floor (#4110)"))
     }
 
     // MARK: - The pieces underneath

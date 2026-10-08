@@ -323,15 +323,22 @@ extension Array: ShowResolver where Element == Prospect {
 // answers, and one press asks several: a keep on a collapsed card resolves its own row and then one per
 // member, so a five night run would run the whole store filter seven times on a click (L383, L471). The
 // read is a METHOD instead, named for when it happens, so its cost shows at the call site and each press
-// pays it once. The queue engine (#4358) answers by identifier from its own members and replaces this.
+// pays it once.
+//
+// #4358 slice E4d: the queue hands the queue engine itself, which answers by identifier from its own members, so its
+// presses cost no read at all; the Archive still hands its rows. Either way the press asks for the resolver once.
 struct ShowsInHand {
-    private let read: () -> [Prospect]
+    private let read: () -> any ShowResolver
 
     init(_ read: @escaping () -> [Prospect]) {
-        self.read = read
+        self.read = { read() }
+    }
+
+    init(resolver: any ShowResolver) {
+        self.read = { resolver }
     }
 
     /// The rows as they are at this press. Call once per press and hand the result to the action.
     @MainActor
-    func onPress() -> [Prospect] { read() }
+    func onPress() -> any ShowResolver { read() }
 }

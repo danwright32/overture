@@ -290,21 +290,19 @@ enum Phase0cViewRig {
     }
 
     struct Harness: View {
-        let rows: [Prospect]
+        // #4358 slice E4d: an engine that is never started, because the rig serves its pass; the queue takes the
+        // engine its actions resolve through, and a served pass replaces only what it draws.
+        let engine: QueueEngineHost.Engine
         let feed: Phase0cServedFeed
         @Bindable var link: DeepLinkChannel
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOff = DayOffOfferRequest()
         @State private var undo = QueueUndoStack()
-        // #4534: frozen, pinned once when the harness is built. Every pass here is SERVED, so the queue's
-        // memo is never asked and the window cannot decide anything today; the clock is frozen anyway so a
-        // feed that one day serves nil cannot bring the runner's speed into a count over this rig.
-        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
-            QueueView(deepLinkedKey: $link.key, deepLinkedKeys: $deepLinkedKeys,
-                      allProspects: rows, renderDataProvider: feed, clock: clock)
+            QueueView(engine: engine, deepLinkedKey: $link.key, deepLinkedKeys: $deepLinkedKeys,
+                      renderDataProvider: feed)
                 .environment(feedback)
                 .environment(dayOff)
                 .environment(undo)
@@ -312,12 +310,12 @@ enum Phase0cViewRig {
     }
 
     // Hosts the harness in a borderless window of `size`, never ordered front (#3480).
-    static func host(_ container: ModelContainer, rows: [Prospect], feed: Phase0cServedFeed,
+    static func host(_ container: ModelContainer, feed: Phase0cServedFeed,
                      size: NSSize, link: DeepLinkChannel = DeepLinkChannel()) -> NSWindow {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: AnyView(Harness(rows: rows, feed: feed, link: link)
+        let hosting = NSHostingView(rootView: AnyView(Harness(engine: HostedQueueEngine.make(context: container.mainContext), feed: feed, link: link)
             .modelContainer(container)))
         hosting.frame = window.contentLayoutRect
         hosting.autoresizingMask = [.width, .height]
@@ -452,7 +450,7 @@ struct QueueViewBodyCostProbeTests {
         // this counter also counts, and those builds are outside the clock by design.
         var derivedWhileDrawing = 0
         var derivations0 = QueueRenderCounter.derivations
-        let window = Phase0cViewRig.host(c, rows: rows, feed: feed, size: NSSize(width: 1000, height: 800))
+        let window = Phase0cViewRig.host(c, feed: feed, size: NSSize(width: 1000, height: 800))
         defer { HostedPassCounting.unmountAndClose(window) }
         let first = Phase0cView.settle(window, bodyMustRun: true) {}
         let drawnFirst = registry.takeKeys()
@@ -583,7 +581,7 @@ struct QueueViewBodyCostProbeTests {
             let firstQuiet = Phase0.waitForLoad(below: Phase0cView.loadCeiling, deadline: Phase0cView.loadWaitSeconds,
                                                 poll: 10)
             var realized: [Int] = []
-            let floorWindow = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
+            let floorWindow = Phase0cViewRig.host(container, feed: Phase0cServedFeed(a), size: size)
             _ = Phase0cView.settle(floorWindow, bodyMustRun: true) {}   // warm the host once, untimed
             HostedPassCounting.unmountAndClose(floorWindow)
             _ = registry.takeKeys()
@@ -591,7 +589,7 @@ struct QueueViewBodyCostProbeTests {
             for _ in 0..<5 {
                 var w: NSWindow?
                 let s = Phase0cView.settle(bodyMustRun: true) {
-                    let made = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
+                    let made = Phase0cViewRig.host(container, feed: Phase0cServedFeed(a), size: size)
                     w = made
                     return made
                 }
@@ -619,7 +617,7 @@ struct QueueViewBodyCostProbeTests {
             for _ in 0..<5 {
                 let cold = Phase0cViewRig.servedPass(t, now: now, stage: .scout, cards: [], registry: registry)
                 _ = registry.takeKeys()
-                let w = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(cold), size: size)
+                let w = Phase0cViewRig.host(container, feed: Phase0cServedFeed(cold), size: size)
                 let s = Phase0cView.settle(w, bodyMustRun: true) {}
                 firstCold.take(s, cpu: &cpus, wall: &walls)
                 _ = registry.takeKeys()
@@ -631,7 +629,7 @@ struct QueueViewBodyCostProbeTests {
 
             // One window for every per-change kind, drawn once and settled before anything is timed.
             let feed = Phase0cServedFeed(a)
-            let window = Phase0cViewRig.host(container, rows: t.rows, feed: feed, size: size)
+            let window = Phase0cViewRig.host(container, feed: feed, size: size)
             defer { HostedPassCounting.unmountAndClose(window) }
             _ = Phase0cView.settle(window, bodyMustRun: true) {}
             let drawnOnA = registry.takeKeys()

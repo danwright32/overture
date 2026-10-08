@@ -84,7 +84,18 @@ enum QueueEngineQueue {
                 freezeWatch?.recordPassCost(
                     seconds: Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000)
             }
-            return derive(input)
+            let pass = derive(input)
+            // #4358 slice E4d (#4357 step 8): the queue's Debug derivation record, once per pass the engine's turn
+            // runs, which is where the queue derives now; the verifier's rebuilds are not passes and record nothing.
+            #if DEBUG
+            QueueRenderCounter.recordDerivation(inputs: [
+                "shows": "\(input.facts.shows.count)", "inquiries": "\(input.facts.inquiries.count)",
+                "stage": String(describing: input.viewInputs.focusedStage),
+                "focusedKeys": "\(input.viewInputs.focusedKeys?.count ?? -1)",
+                "gmail": "\(input.context.gmailConnected)", "runInFlight": String(describing: input.context.runInFlight),
+            ], rows: pass.data.rows)
+            #endif
+            return pass
         }
         derivation.checkAtPublish = { try checkAtPublish($0, $1) }
         derivation.compareCards = { try compareCards($0, $1) }

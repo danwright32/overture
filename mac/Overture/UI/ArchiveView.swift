@@ -38,29 +38,16 @@ struct ArchiveView: View {
     // environment object here, so a missed injection is a pass nobody counted rather than a crash.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
 
-    // #3846: the whole store, HANDED DOWN by RootView rather than queried again here.
+    // #3846: the whole store, HANDED DOWN rather than queried again here, which added 165.0 ms to every store change
+    // while the sheet was open (#3764, 2026-09-12). #4358 slice E4d (#4370): handed down as the queue engine's rows,
+    // the shows and the watchlist as the engine held them at its last publish (`QueueEngineHost.rows(of:)`), so a scout
+    // landing redraws this sheet once, at its end. The scope below is still judged against the WHOLE store on purpose
+    // (#1598), so a show Dan dismisses cannot silently change which organisations the producer gate admits.
     //
-    // It was `@Query private var prospects: [Prospect]`, a bare descriptor identical to the one RootView
-    // already holds. Measured 2026-09-12 by #3764 on the live store, an open Archive added 165.0 ms to
-    // EVERY store change and 158.8 ms of that was this second read of the prospect table, against the
-    // first read's 159.5 ms over 1,238 rows: SwiftData shares nothing between two identical descriptors
-    // held by two live views.
-    //
-    // The sheet is presented over the queue, which already holds the whole table, so handing the rows
-    // down costs nothing and makes this list a DERIVATION rather than a second fetch. What it gives up,
-    // stated rather than assumed: this view no longer updates independently of RootView. That costs
-    // nothing here, because the sheet cannot be on screen without RootView being on screen, and RootView
-    // re-renders on every prospect change.
-    //
-    // Narrowing the query instead was the other option and is closed in both directions: by FIELD,
-    // because #3750 measured `propertiesToFetch` over the 23 fields a row is built from at 20% SLOWER
-    // than reading the whole row; and by ROW, because `QueueModel.scope` below is judged against the
-    // WHOLE store on purpose (#1598), so a show Dan dismisses cannot silently change which organisations
-    // the producer gate admits.
-    //
-    // NO DEFAULT, for the reason QueueView's carries: an empty default renders an empty Archive that
-    // looks exactly like an empty store (L168, L67).
-    let prospects: [Prospect]
+    // NO DEFAULT, for the reason QueueView's carries: an empty default renders an empty Archive that looks exactly like
+    // an empty store (L168, L67).
+    let rows: QueueEngineRows
+    private var prospects: [Prospect] { rows.everyShow }
     // #1598 Phase 5: the organisation answer ledger, so an archived row reads the same as it does in the
     // queue. Unlike QueueView this query is already the WHOLE store, so it doubles as the gate's corpus.
     @Query private var orgAnswers: [OrgReachabilityAnswer]
@@ -70,8 +57,7 @@ struct ArchiveView: View {
     @Query private var promotedProducers: [PromotedProducer]
     @Query private var demotedHouses: [DemotedHouse]
     // #1825: the same watchlist the queue reads, for the same reason: one surface cannot label a link
-    // differently from the other.
-    @Query private var watchedSources: [WatchedSource]
+    // differently from the other. `rows.everySource`, the engine's (#4370), never a query of its own.
 
     // #3655 Phase 5: what the LAST frame drew, and where this frame's requests are recorded, on exactly
     // the contract #3654 established for the queue. `@State` so it survives the body evaluations, and a
@@ -140,11 +126,12 @@ struct ArchiveView: View {
         // Every input this derivation reads, named one per line. A seventh arriving here and not below
         // is what `ScopeMemoInputsAreCompleteGuardTests` refuses (L40, L96).
         var fingerprint = ScopeFingerprint()
-        fingerprint.add(prospects)
+        // #4358 slice E4d: the engine's rows, by identity: a new array only when the engine published.
+        fingerprint.add(rows.everyShow)
         fingerprint.add(orgAnswers)
         fingerprint.add(promotedProducers)
         fingerprint.add(demotedHouses)
-        fingerprint.add(watchedSources)
+        fingerprint.add(rows.everySource)
         fingerprint.add(refusedAddresses)
         // #4570, #4591: the memo decides the card half of its own key, from one implementation shared
         // with the queue: what the held answer already covers is served, and cards built on demand (the
@@ -158,10 +145,10 @@ struct ArchiveView: View {
                                // #4252: the whole-store scope (277 ms on the live store, 2026-09-25) against
                                // 134 ms to re-arm observation, so the refetch after a save is served.
                                onRefetch: .serveWhenNothingChanged) { keys in
-            QueueModel.scope(from: prospects, answers: orgAnswers,
+            QueueModel.scope(from: rows.everyShow, answers: orgAnswers,
                              overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                           demotedRows: demotedHouses),
-                             sources: watchedSources,
+                             sources: rows.everySource,
                              refusals: ContactRefusal.ledger(from: refusedAddresses),
                              // #3654's ordering contract: what the last frame drew is what this one
                              // prebuilds. A row that was not predicted still draws, from a card built on

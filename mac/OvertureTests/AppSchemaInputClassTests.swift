@@ -22,21 +22,6 @@ struct AppSchemaInputClassTests {
         return SwiftSource.scannableLines(in: file.text).map(\.code)
     }
 
-    /// The models `QueueView` holds as arrays: its queries, and the corpus `RootView` hands it.
-    static func modelsTheQueueViewHolds() throws -> Set<String> {
-        var held: Set<String> = []
-        for line in try code(of: "QueueView.swift") {
-            // A member of the view itself, four spaces in, stored rather than computed.
-            guard line.hasPrefix("    "), !line.hasPrefix("     "), !line.contains("{") else { continue }
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard let open = trimmed.range(of: ": ["), trimmed.hasSuffix("]"),
-                  trimmed.contains("var ") || trimmed.contains("let ") else { continue }
-            let element = String(trimmed[open.upperBound..<trimmed.index(before: trimmed.endIndex)])
-            if modelNames.contains(element) { held.insert(element) }
-        }
-        return held
-    }
-
     static func inputs() -> QueueRenderPass.Inputs {
         QueueRenderPass.Inputs(allProspects: QueueRenderPass.Corpus([]), inquiries: [], orgAnswers: [],
                                context: StageContext.at("2026-10-01", now: Date(timeIntervalSince1970: 0)))
@@ -79,8 +64,11 @@ struct AppSchemaInputClassTests {
             + unreal.joined(separator: ", ")))
     }
 
+    // #4358 slice E4d: the queue's rows are the ENGINE's now (QueueView holds no query), so what the queue holds is
+    // what the engine keeps a table of (`FactStore.Table`). The question is unchanged: every model the queue reads
+    // directly is classified so, and nothing classified so goes unread.
     @Test func theModelsTheQueueHoldsAreExactlyTheOnesClassifiedAsReadDirectly() throws {
-        let held = try Self.modelsTheQueueViewHolds()
+        let held = Set(FactStore.Table.allCases.map(\.rawValue))
         var direct: Set<String> = []
         for (model, inputClass) in AppSchemaInputClass.byModel {
             switch inputClass {
@@ -90,13 +78,13 @@ struct AppSchemaInputClassTests {
         }
         // The positive control: the scan must at least find the corpus and the ledger it is known to hold.
         #expect(held.isSuperset(of: ["Prospect", "OrgReachabilityAnswer"]),
-                "the scan of QueueView found too little to have read its stored properties")
+                "the engine's tables do not include the shows and the ledger, so nothing below was measured")
         let readButNotClassified = held.subtracting(direct).sorted()
         let classifiedButNotRead = direct.subtracting(held).sorted()
-        #expect(readButNotClassified.isEmpty, Comment(rawValue: "QueueView holds these, and they are not "
+        #expect(readButNotClassified.isEmpty, Comment(rawValue: "the engine holds these, and they are not "
             + "classified as read by the queue: " + readButNotClassified.joined(separator: ", ")))
         #expect(classifiedButNotRead.isEmpty, Comment(rawValue: "classified as read by the queue, and "
-            + "QueueView holds none of them: " + classifiedButNotRead.joined(separator: ", ")))
+            + "the engine holds no table of them: " + classifiedButNotRead.joined(separator: ", ")))
     }
 
     @Test func aTableClassifiedAsNotAnInputIsNamedNowhereInThePass() throws {

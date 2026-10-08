@@ -20,7 +20,12 @@ struct AddLeadSheet: View {
     // #768: the watchlist as it stands, so the sheet can tell Dan that this org is already watched, or
     // that they asked him to stop. Only the view can supply these, so the model takes them as an input
     // rather than reaching for a context of its own.
-    @Query private var watched: [WatchedSource]
+    // #4358 slice E4d (#4370): the watchlist as the queue engine held it at its last publish, handed in, so a landing
+    // redraws this sheet once, at its end, rather than through a query of its own. No default (L168).
+    let watched: [WatchedSource]
+    // #4369: the window's queue engine, whose landing generation the paste holds the queue under. Optional, so a
+    // missed injection costs the hold rather than crashing the sheet.
+    @Environment(QueueEngineHost.self) private var engineHost: QueueEngineHost?
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
@@ -45,7 +50,10 @@ struct AddLeadSheet: View {
         }
         .padding(OVSpacing.lg)
         .frame(width: 520)
-        .onAppear { urlFocused = true }
+        .onAppear {
+            urlFocused = true
+            model.landingHold = engineHost?.landingHold
+        }
     }
 
     private var header: some View {

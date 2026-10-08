@@ -219,3 +219,80 @@ struct LandingEntryPointsAreDerivedTests {
         #expect(Self.derive(files).entries == [Entry(top: "Orphan.land", viewCallers: [])])
     }
 }
+
+// #4369 (#4358 slice E4d, plan item 4): EVERY view caller of a landing entry point opens the queue engine's landing
+// generation before the landing writes and closes it in a `defer` (L514, L515), so the queue and every surface reading
+// the engine redraw once, when it closes, and a landing that returns early, throws or is refused still closes.
+//
+// Derived, never listed (L96): the view callers are the ones `LandingEntryPointsAreDerivedTests` derives from the
+// source, which the rig carries (`LandingAcceptanceRig.carried`), so a new way into a landing is held to this the day
+// it is added. Each caller's own body is read, by name, through the store write scan's function index.
+//
+// WHAT IT CANNOT SEE (L400): that the open comes before the first write; it asks that both calls are in the body and
+// that the close is deferred, which is what makes it reached on every exit.
+@MainActor
+@Suite("Every landing entry point holds the queue until it is done (#4369)")
+struct LandingEntryPointsHoldTheQueueTests {
+
+    struct Finding: Equatable {
+        let caller: String
+        let opens: Bool
+        let closesInADefer: Bool
+    }
+
+    static func findings(_ files: [(name: String, text: String)], callers: Set<String>) -> [Finding] {
+        let index = StoreWriteScan.Index(files: files)
+        return callers.sorted().map { caller in
+            let parts = caller.split(separator: ".").map(String.init)
+            let functions = index.functions(named: parts.last ?? caller, owner: parts.count > 1 ? parts[0] : nil)
+            let body = functions.flatMap { index.lines(of: $0) }.map(\.code)
+            let opens = body.contains { $0.contains(".openLanding()") }
+            let closesInADefer = body.indices.contains { start in
+                body[start].contains("defer") && body[start...].prefix(3).contains { $0.contains(".closeLanding(") }
+            }
+            return Finding(caller: caller, opens: opens, closesInADefer: closesInADefer)
+        }
+    }
+
+    @Test func everyViewCallerOfALandingOpensAndClosesTheGeneration() {
+        let callers = Set(LandingAcceptanceRig.carried.flatMap(\.viewCallers))
+        // POSITIVE CONTROL (L98): the derivation's five entry points have their view callers.
+        #expect(callers.contains("RootView.runScout") && callers.contains("LeadIntakeModel.importAll"),
+                Comment(rawValue: "the view callers were derived as \(callers.sorted()), so nothing below was measured"))
+        let found = Self.findings(LandingEntryPointsAreDerivedTests.appFiles(), callers: callers)
+        let open = found.filter { !$0.opens }.map(\.caller)
+        let unclosed = found.filter { !$0.closesInADefer }.map(\.caller)
+        #expect(open.isEmpty, Comment(rawValue:
+            "landing entry points that never open the queue engine's landing generation: \(open). Each redraws "
+            + "every surface once per landed batch rather than once at the end (#4369, decision 8)."))
+        #expect(unclosed.isEmpty, Comment(rawValue:
+            "landing entry points that do not close the generation in a defer: \(unclosed). A landing that throws "
+            + "or returns early would hold the queue for good (L514, L515)."))
+    }
+
+    @Test func theRuleRefusesAMissingOpenAndAnUndeferredClose() {
+        let files: [(name: String, text: String)] = [
+            (name: "UI/Screen.swift", text: """
+                struct Screen {
+                    func held() async {
+                        let landing = engine.openLanding()
+                        defer { engine.closeLanding(landing) }
+                        await Ingest.land()
+                    }
+                    func open() async {
+                        await Ingest.land()
+                    }
+                    func undeferred() async {
+                        let landing = engine.openLanding()
+                        await Ingest.land()
+                        engine.closeLanding(landing)
+                    }
+                }
+                """),
+        ]
+        let found = Self.findings(files, callers: ["Screen.held", "Screen.open", "Screen.undeferred"])
+        #expect(found == [Finding(caller: "Screen.held", opens: true, closesInADefer: true),
+                          Finding(caller: "Screen.open", opens: false, closesInADefer: false),
+                          Finding(caller: "Screen.undeferred", opens: true, closesInADefer: false)])
+    }
+}

@@ -19,19 +19,20 @@ import Foundation
 // (b) THE CONSUMERS OF THOSE TYPES: every `@Query` over one (`QueryPairAudit`'s reader) and every memo input
 // over one (`ScopeMemoInputsAreCompleteGuardTests.memoInputs`, the same enumeration that guard asks its own
 // question of). Decision 8 says every one of them is held under the landing generation, with no "stays live"
-// exceptions. The landing generation is the engine's (#4369, slice E4b) and nothing in the app holds a
-// consumer under it until the cutover (#4358, slice E4d), so TODAY'S consumers are listed in
-// `waitingOnTheCutover`, each by file and reason, as a ratchet the cutover empties. A consumer not in that list
-// is a NEW one, and fails: it is one more surface the cutover would have to find by hand.
+// exceptions. #4358 slice E4d moved every one onto the queue engine: the queue draws its published pass, and every
+// other surface reads `QueueEngineRows`, the rows as the engine held them at its last publish, which a landing
+// moves once, when it closes. So there are NONE, and a consumer found here is a new query or memo over a table a
+// landing writes, which fails: read it through the engine instead.
 //
 // WHAT IT CANNOT SEE, stated so a green run is read for what it is (L400):
 //   - A call through a VALUE (a stored closure, an injected function, a protocol witness) is not followed, so a
 //     write behind one is not found (`StoreWriteScan`'s own list of blind spots).
 //   - A consumer that is neither a `@Query` nor a memo input: a view handed the rows and reading them in its
-//     body, or a computed property over them. #4370 lists RootView's own readers of `allProspects` among those;
-//     they move with the query itself in the cutover, and plan item 3 re-derives them by grep in that PR.
-//   - The other direction. A landing that saves a type this list lacks is the A1 real-arm didSave sets'
-//     question (#4370), which needs a real landing run and is not asked here.
+//     body, or a computed property over them. Since the cutover those are handed `QueueEngineRows`, but a body
+//     that reads a field of one of its rows is still observed for that field, so an open sheet can redraw for a
+//     field a landing writes in place. Only the queue's own cards are values (#4371).
+//   - The other direction, a landing that saves a type this list lacks, which needs a real landing and is
+//     asked in `QueueEngineFullReadNetsTests` over the three entry points that land shows (#4370).
 @MainActor
 @Suite("Every consumer of what a scout landing writes is named, and the cutover holds each one (#4370)")
 struct LandingWrittenTypesScanTests {
@@ -186,46 +187,10 @@ struct LandingWrittenTypesScanTests {
             ]),
     ]
 
-    // TODAY'S CONSUMERS, each held by nothing until the cutover (#4358 slice E4d) moves it onto the engine's
-    // landing generation (#4369, slice E4b). The key is the consumer's identity in this scan's own report.
-    //
-    // Seeded 2026-10-07 from this scan's own report on origin/main 55f71e26: 22 consumers. #4370's hand list named
-    // RootView's queries and memo, QueueView's memo, and the WatchedSource queries of FollowUpsView, SourcesView,
-    // ScoutSummaryView and AddLeadSheet; the derivation also finds the Archive's and the Sources sheet's memos, the
-    // inquiry queries and the inquiry intake sheet, none of which the hand list had (L96).
-    private static let queue = "the queue's own read, which the cutover (#4358 slice E4d) replaces with the "
-        + "engine's output, published once when the landing generation closes"
-    private static let root = "RootView's read, handed to the queue and the sheets; the cutover (#4358 slice "
-        + "E4d) deletes it and moves every reader onto the engine's members or a pass output (plan item 3)"
-    private static let sheet = "a sheet's own read; the cutover (#4358 slice E4d) moves it onto what the engine "
-        + "holds, so it redraws with the landing's one publish rather than once per landed batch"
-    static let waitingOnTheCutover: [String: String] = [
-        "AddLeadSheet.swift.watched": sheet,
-        "ArchiveView.swift.makeScope memo reads prospects": sheet,
-        "ArchiveView.swift.makeScope memo reads watchedSources": sheet,
-        "ArchiveView.swift.watchedSources": sheet,
-        "FollowUpsView.swift.watchedSources": sheet,
-        "InquiryIntakeSheet.swift.existing": sheet,
-        "QueueView.swift.inquiries": queue,
-        "QueueView.swift.makeRenderData memo reads allProspects": queue,
-        "QueueView.swift.makeRenderData memo reads inquiries": queue,
-        "QueueView.swift.makeRenderData memo reads watchedSources": queue,
-        "QueueView.swift.producerTables memo reads allProspects": queue,
-        "QueueView.swift.watchedSources": queue,
-        "RootView.swift.allInquiries": root,
-        "RootView.swift.allProspects": root,
-        "RootView.swift.followUpsDue memo reads allInquiries": "the follow ups badge's memo; the cutover (#4358 "
-            + "slice E4d) reads the engine's DueWork count and next change instead (D5) and E4e deletes the memo",
-        "RootView.swift.followUpsDue memo reads allProspects": "the follow ups badge's memo; the cutover (#4358 "
-            + "slice E4d) reads the engine's DueWork count and next change instead (D5) and E4e deletes the memo",
-        "RootView.swift.toPrepByStatus": "the prep queue's filtered read; the cutover (#4358 slice E4d) makes "
-            + "`toPrep` an output of the engine's pass and deletes the query",
-        "RootView.swift.watchedSources": root,
-        "ScoutSummaryView.swift.sources": sheet,
-        "SourcesView.swift.makeRenderData memo reads prospects": sheet,
-        "SourcesView.swift.makeRenderData memo reads sources": sheet,
-        "SourcesView.swift.sources": sheet,
-    ]
+    // THE CONSUMERS HELD BY NOTHING, which the cutover (#4358 slice E4d) emptied: it was 22 on 2026-10-07 (origin/main
+    // 55f71e26), every one of them RootView's, the queue's and the sheets' own queries and memos, and each now reads
+    // the engine. Empty, and kept as the place a reason would have to be written if one were ever allowed.
+    static let waitingOnTheCutover: [String: String] = [:]
 
     // MARK: - (a)
 
@@ -369,13 +334,17 @@ struct LandingWrittenTypesScanTests {
         let derived = Self.deriveSites()
         let written = Self.judge(derived.sites, vocabulary: derived.vocabulary, table: Self.classified).writtenTypes
         let consumers = Self.consumers(of: written)
-        // POSITIVE CONTROLS (L98): the queue's own whole table read and at least one memo input were seen.
-        #expect(consumers.contains { $0.key == "RootView.swift.allProspects" }, Comment(rawValue:
-            "RootView's prospect query is not among the consumers \(consumers.map(\.key)), so the reader is broken"))
-        #expect(consumers.contains { $0.reads.hasPrefix("a memo input") }, Comment(rawValue:
-            "no memo input over a landing written type was found, so the memo half measured nothing"))
+        // POSITIVE CONTROLS (L98): the readers really read the app, so an empty finding is about something. Each
+        // reader finds queries and memo inputs over the app's OTHER tables, and finds a planted one over a landing
+        // written type (`theReadersFindAPlantedConsumer`).
+        #expect(written.contains("Prospect"), "the derived written types \(written.sorted()) lack Prospect")
+        let everyQuery = AppSourceWalk.files(under: RepoRoot.app).flatMap(QueryPairAudit.declarations(in:))
+        #expect(everyQuery.count > 10, "the query reader found \(everyQuery.count) queries, so it is broken")
+        let everyMemoInput = ScopeMemoInputsAreCompleteGuardTests.memoInputs(
+            models: ScopeMemoInputsAreCompleteGuardTests.modelTypes()).inputs
+        #expect(!everyMemoInput.isEmpty, "the memo reader found no memo input at all, so it is broken")
         print("consumers of what a landing writes: "
-              + consumers.map { "\($0.key) (\($0.reads))" }.joined(separator: "; "))
+              + (consumers.isEmpty ? "none" : consumers.map { "\($0.key) (\($0.reads))" }.joined(separator: "; ")))
 
         let unheld = consumers.filter { Self.waitingOnTheCutover[$0.key] == nil }
         #expect(unheld.isEmpty, Comment(rawValue:
@@ -460,48 +429,146 @@ struct LandingWrittenTypesScanTests {
     }
 }
 
-// Plan v7 Phase 5 (#4358 item 3): once the queue engine holds the shows and their contacts, no view queries
-// either table. Every `@Query` over `Prospect` or `Recipient` in the app is found by the same reader
-// `OneQueryPerEntityGuardTests` uses, and the ones the app holds today are listed by file and reason as a ratchet
-// the cutover (#4358, slice E4d) empties: a new one fails now, and E4d deletes the list with the queries.
-//
-// What it does not ask, stated so its silence is not read as more: the plan's second half, a whole-array read of
-// the engine's members outside `QueueEngine` and `ShowIdentity`, has nothing to read until the engine publishes
-// its members (E4b), so it arrives with them rather than as a guard over a name nothing declares (L1004).
-@Suite("No view queries the show or contact tables, apart from today's, which the cutover deletes (#4358)")
+// Plan v7 Phase 5 (#4358 item 3): the queue engine holds the shows and their contacts, so no view queries either
+// table. Every `@Query` over `Prospect` or `Recipient` in the app is found by the same reader
+// `OneQueryPerEntityGuardTests` uses, and there are none: the cutover (#4358 slice E4d) deleted RootView's two, the
+// last ones, and any query found here fails, no exemptions.
+@Suite("No view queries the show or contact tables (#4358)")
 struct NoQueryOverShowsOrContactsTests {
 
     static let tables: Set<String> = ["Prospect", "Recipient"]
-
-    static let waitingOnTheCutover: [String: String] = [
-        "RootView.swift.allProspects":
-            "the app's one whole table read of the shows, handed to the queue and every sheet. The cutover "
-            + "(#4358 slice E4d) deletes it and moves each reader onto the engine's members (plan item 3)",
-        "RootView.swift.toPrepByStatus":
-            "the prep queue's filtered read (`PrepQueueBuilder.needsPrepPredicate`, #367). The cutover (#4358 "
-            + "slice E4d) makes `toPrep` an output of the engine's pass and deletes the query, and E4e the predicate",
-    ]
 
     static func queries(in files: [AppSourceWalk.File]) -> [QueryPairAudit.Declaration] {
         files.flatMap(QueryPairAudit.declarations(in:)).filter { tables.contains($0.entity) }
     }
 
-    @Test func noViewQueriesTheShowOrContactTablesBeyondTodaysOnes() {
+    @Test func noViewQueriesTheShowOrContactTables() {
         let files = AppSourceWalk.files(under: RepoRoot.app)
         let all = files.flatMap(QueryPairAudit.declarations(in:))
         // POSITIVE CONTROL (L98): the reader sees the app's queries, so an empty finding is about something.
-        #expect(all.count > 20, "the reader found only \(all.count) @Query declarations, so it is broken")
+        #expect(all.count > 10, "the reader found only \(all.count) @Query declarations, so it is broken")
         let found = Self.queries(in: files).map { "\($0.file).\($0.property)" }
-        #expect(found.contains("RootView.swift.allProspects"), Comment(rawValue:
-            "RootView's prospect query was not seen among \(found), so this measured nothing"))
-        let unlisted = found.filter { Self.waitingOnTheCutover[$0] == nil }
+        #expect(found.isEmpty, Comment(rawValue:
+            "@Query over a show or contact table: \(found.sorted().joined(separator: ", ")). The queue engine "
+            + "holds these rows (#4358); read them through it (`QueueEngineRows`, or the engine as a ShowResolver) "
+            + "rather than a query of your own, which re-reads the table on every store change and redraws "
+            + "mid-landing."))
+    }
+
+    // The reader finds a query over the show table when there is one, so the empty answer above is a finding.
+    @Test func theReaderFindsAPlantedShowQuery() {
+        let planted = AppSourceWalk.File(url: URL(fileURLWithPath: "/planted/Planted.swift"), name: "Planted.swift",
+                                         text: """
+            struct Planted: View {
+                @Query private var shows: [Prospect]
+                var body: some View { Text("\\(shows.count)") }
+            }
+            """)
+        #expect(Self.queries(in: [planted]).map(\.property) == ["shows"])
+    }
+}
+
+// Plan v7 Phase 5 (#4358 item 3, the cutover, slice E4d): the surfaces that still read a WHOLE ARRAY of the queue
+// engine's members (`everyShow`, `everyInquiry`, `everySource`, on the engine as a `ShowResolver` or on the
+// `QueueEngineRows` it hands out) are listed here by file and declaration, each until #4359 gives it an output of its
+// own, and a NEW one fails. A whole array read is the shape that turns one change into a walk of every show, and the
+// engine exists so a surface reads what changed; every one added later is a surface #4359 would have to find by hand.
+//
+// Keyed on the type member that holds the read (the nearest declaration at member indentation), so line drift moves
+// nothing. The engine itself, `ShowIdentity` (the protocol's own default answers) and `QueueEngineHost` (which builds
+// the rows) are the members' owners, not readers, and are not scanned.
+//
+// WHAT IT CANNOT SEE (L400): a read through a value (a closure or a protocol witness handed the array), and a read in
+// a nested type's member, which keys on the outer member's name.
+@Suite("No new surface reads the queue engine's members whole (#4358, #4359)")
+struct EngineMembersReadWholeTests {
+
+    static let owners: Set<String> = ["QueueEngine.swift", "ShowIdentity.swift", "QueueEngineHost.swift"]
+
+    private static let phase6 = "reads the engine's members whole until #4359 gives this surface an output of its own"
+    static let waitingOnPhase6: [String: String] = [
+        "ArchiveView.swift.makeScope": "the Archive's scope over every show; " + phase6,
+        "ArchiveView.swift.prospects": "the Archive's actions over every show; " + phase6,
+        "ProspectMutations.swift.bulkReprep": "the bulk re-prep over every show; " + phase6,
+        "ProspectMutations.swift.bulkReprepEligible": "the bulk re-prep's gate over every show; " + phase6,
+        "ProspectMutations.swift.manualPrepPrefill": "a show's other rows' past addresses; " + phase6,
+        "ProspectMutations.swift.setOrgDoNotContact": "an organisation's other shows; " + phase6,
+        "QueueView.swift.actionItems": "a press's whole queue card question (clashes, jumps); " + phase6,
+        "QueueView.swift.body": "the inquiry edit sheet's duplicate check; " + phase6,
+        "QueueView.swift.inquiryRowView": "an inquiry press finding its inquiry; " + phase6,
+        "QueueView.swift.navigateToLead": "a deep link's Reached out entries; " + phase6,
+        "QueueView.swift.prospects": "the queue's actions over its scope; " + phase6,
+        "RootView.swift.allItems": "the Prep selection sheet's cards; " + phase6,
+        "RootView.swift.allRows": "the search bar's Archive half; " + phase6,
+        "RootView.swift.debugStageFirstAsSent": "a Debug helper picking a show; " + phase6,
+        "RootView.swift.eligibleForBulkReprep": "the bulk re-prep menu's gate; " + phase6,
+        "RootView.swift.nonDismissedProspects": "the search bar's scope and deep link routing; " + phase6,
+        "RootView.swift.queueSurface": "the Add lead sheet's watchlist; " + phase6,
+        "RootView.swift.refreshUnreadableFiles": "the bounced pitch notice; " + phase6,
+        "RootView.swift.sourcesNeedingALook": "the Sources button's count; " + phase6,
+        "RootView.swift.withSheets": "the sheets' rows; " + phase6,
+        "SourcesView.swift.makeRenderData": "the Sources sheet's pass; " + phase6,
+        // The Sources sheet's two reads (its shows and its watchlist) were two properties of its own until slice E4d
+        // handed it the engine's rows (`held`); the same two reads now sit in the members that use them.
+        "SourcesView.swift.body": "the Sources sheet's watchlist, empty or not; " + phase6,
+        "SourcesView.swift.recomputeCalendarClients": "the Sources sheet's client coverage over the watchlist; " + phase6,
+        "SourcesView.swift.renderTrace": "the Sources sheet's Debug trace of its two counts; " + phase6,
+        "SourcesView.swift.roomContext": "the Sources sheet's client window over the watchlist; " + phase6,
+    ]
+
+    private static let read = try! NSRegularExpression(pattern: #"\.(everyShow|everyInquiry|everySource)\b"#)
+    private static let member = try! NSRegularExpression(
+        pattern: #"^ {4}(?:@\w+\s+)*(?:(?:private|fileprivate|internal|static|nonisolated|override|mutating)\s+)*(?:func|var)\s+(\w+)"#)
+
+    /// Every whole array read of the members, keyed "File.swift.member".
+    static func readers(in files: [AppSourceWalk.File]) -> Set<String> {
+        var out: Set<String> = []
+        for file in files where !owners.contains(file.name) {
+            let lines = file.text.components(separatedBy: "\n").map { $0.components(separatedBy: "//")[0] }
+            for (index, line) in lines.enumerated()
+            where read.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
+                var name = "?"
+                for upward in stride(from: index, through: 0, by: -1) {
+                    let candidate = lines[upward]
+                    if let m = member.firstMatch(in: candidate, range: NSRange(candidate.startIndex..., in: candidate)),
+                       let r = Range(m.range(at: 1), in: candidate) {
+                        name = String(candidate[r])
+                        break
+                    }
+                }
+                out.insert("\(file.name).\(name)")
+            }
+        }
+        return out
+    }
+
+    @Test func noNewSurfaceReadsTheMembersWhole() {
+        let found = Self.readers(in: AppSourceWalk.files(under: RepoRoot.app))
+        // POSITIVE CONTROL (L98): RootView's sheets read the rows whole today, so the reader is reaching the app.
+        #expect(found.contains("RootView.swift.withSheets"), Comment(rawValue:
+            "the reader did not see RootView's sheets among \(found.sorted()), so it measured nothing"))
+        let unlisted = found.subtracting(Self.waitingOnPhase6.keys)
         #expect(unlisted.isEmpty, Comment(rawValue:
-            "@Query over a show or contact table: \(unlisted.sorted().joined(separator: ", ")). The queue engine "
-            + "holds these rows (#4358); read them through it rather than through a query of your own, which "
-            + "re-reads the table on every store change and redraws mid-landing."))
-        let stale = Set(Self.waitingOnTheCutover.keys).subtracting(found)
+            "new whole array reads of the queue engine's members: \(unlisted.sorted().joined(separator: ", ")). "
+            + "Read what the engine publishes for this surface, or resolve the one show through the engine "
+            + "(`ShowIdentity`), rather than walking every member (#4358, #4359)."))
+        let stale = Set(Self.waitingOnPhase6.keys).subtracting(found)
         #expect(stale.isEmpty, Comment(rawValue:
-            "NoQueryOverShowsOrContactsTests.waitingOnTheCutover names queries that are gone: "
-            + stale.sorted().joined(separator: ", ") + ". Delete them."))
+            "EngineMembersReadWholeTests.waitingOnPhase6 names readers that are gone: "
+            + stale.sorted().joined(separator: ", ") + ". Delete them, so the list only shrinks."))
+    }
+
+    @Test func theReaderNamesTheMemberAPlantedReadSitsIn() {
+        let planted = AppSourceWalk.File(url: URL(fileURLWithPath: "/planted/Planted.swift"), name: "Planted.swift",
+                                         text: """
+            struct Planted {
+                private func countEverything() -> Int {
+                    let all = engine.everyShow
+                    return all.count
+                }
+                // a comment naming .everyShow is not a read
+            }
+            """)
+        #expect(Self.readers(in: [planted]) == ["Planted.swift.countEverything"])
     }
 }

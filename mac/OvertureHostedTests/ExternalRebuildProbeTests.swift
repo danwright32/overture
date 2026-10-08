@@ -124,7 +124,7 @@ struct ExternalRebuildProbeTests {
         let ctx = ModelContext(c)
         seed(ctx)
 
-        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: [])) }
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
@@ -254,7 +254,7 @@ struct ExternalRebuildProbeTests {
         // (`aRedrawPastTheMemoWindowDerivesOnlyOnTheWallClock` below shows it would), and unmounted before
         // its window closes so no later test can wake it.
         let clock = HostedPassCounting.frozenClock()
-        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows, clock: clock) }
+        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: []), clock: clock) }
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
@@ -390,7 +390,7 @@ struct ExternalRebuildProbeTests {
         var body: some View {
             let n = tick.value
             RowsFromStore { (rows: [Prospect]) in
-                ArchiveView(prospects: rows, onConnectGmail: { _ = n }, clock: clock)
+                ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: []), onConnectGmail: { _ = n }, clock: clock)
             }
             .modelContainer(container)
             .environment(feedback)
@@ -583,7 +583,7 @@ struct ExternalRebuildProbeTests {
         // instead of the false all clear a bare zero would have been (L98). Measuring it needs a counter
         // on that pass, which is app instrumentation and belongs with the sibling fix, not here. The arm
         // is kept deliberately: an absent arm and an unmeasurable one read alike, and this one says which.
-        let followUps = focusReading { rows in FollowUpsView(prospects: rows, inquiries: []) }
+        let followUps = focusReading { rows in FollowUpsView(prospects: rows, inquiries: [], watchedSources: []) }
         // THE SECOND SUSPECT, after the banner came back quiet. Comparing the two screens' property
         // wrappers, `ArchiveView` reads `@Environment(\\.dismiss)` and `QueueView` does not, which is
         // the kind of value a presentation context can revise when focus moves.
@@ -597,7 +597,7 @@ struct ExternalRebuildProbeTests {
             ScopeProbe(prospects: rows) { EmptyView() }.actionFeedbackBanner()
         }
         // The real screen, as the reference the other two are read against.
-        let theArchive = focusReading { rows in ArchiveView(prospects: rows) }
+        let theArchive = focusReading { rows in ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: [])) }
 
         func line(_ name: String, _ r: (key: Int, write: Int, settled: Bool)) -> String {
             let verdict: String
@@ -649,10 +649,13 @@ struct ExternalRebuildProbeTests {
         }
 
         let c = try container()
-        let ctx = ModelContext(c)
+        let ctx = c.mainContext
         seed(ctx)
         let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-        let (window, hosting) = host(HostedPassCounting.Mounted(content: QueueHarness(container: c)))
+        // Started here and run by the pumping below, as the app's run loop runs its turns.
+        let engine = HostedQueueEngine.make(context: ctx)
+        engine.start()
+        let (window, hosting) = host(HostedPassCounting.Mounted(content: QueueHarness(container: c, engine: engine)))
         defer { HostedPassCounting.unmountAndClose(hosting, in: window) }
 
         // WARM: a throwaway write on a row this test never asserts about, pumped until the list has
@@ -738,7 +741,7 @@ struct ExternalRebuildProbeTests {
 
         // No `RowsFromStore`, so no PROSPECT query. The view's own five queries remain, which is why the
         // header above is careful about what this can conclude.
-        let view = ArchiveView(prospects: rows)
+        let view = ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: []))
             .modelContainer(c)
             .environment(ActionFeedback())
             .environment(DayOffOfferRequest())
@@ -803,15 +806,15 @@ private struct ScopeProbe<Extra: View>: View {
 // through the same store-to-screen path the app uses rather than a shape invented here.
 private struct QueueHarness: View {
     let container: ModelContainer
+    // #4358 slice E4d: the queue engine RootView builds, over the same store.
+    let engine: QueueEngineHost.Engine
     @State private var deepLinkedKey: LeadDeepLink?
     @State private var deepLinkedKeys: LeadsDeepLink?
     @State private var feedback = ActionFeedback()
     @State private var dayOffOffer = DayOffOfferRequest()
 
     var body: some View {
-        RowsFromStore { (rows: [Prospect]) in
-            QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, allProspects: rows)
-        }
+        QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
         .modelContainer(container)
         .environment(feedback)
         .environment(dayOffOffer)

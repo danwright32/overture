@@ -23,10 +23,11 @@ struct QueueRenderDataGuardTests {
     private var agentRoster: String { SourceGuardHelper.source("Overture/Domain/AgentRoster.swift") }
 
     // The snapshot exists and the body builds it exactly once, at the top, before threading it down.
+    // #4358 slice E4d: the snapshot is the queue engine's published pass, read once at the top of the body.
     @Test func bodyBuildsOneRenderDataSnapshot() {
         #expect(queueView.contains("struct RenderData {"))
-        #expect(queueView.contains("private func makeRenderData() -> RenderData {"))
-        #expect(queueView.contains("let data = makeRenderData()"))
+        #expect(queueView.contains("private func drawnPass() -> QueueEnginePass? {"))
+        #expect(queueView.contains("guard let pass = drawnPass() else {") && queueView.contains("let data = pass.data"))
     }
 
     // The multiplier is gone: the collections that each used to re-run QueueModel.items(from:) per render

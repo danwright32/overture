@@ -101,26 +101,17 @@ final class LandingStallMonitor: @unchecked Sendable {
     }
 }
 
-// RootView's six `@Query` declarations, verbatim, presenting the real QueueView the way RootView does. A
-// STAND IN: RootView's own body derives more than this (the Due counts, the masthead), so the queue hosted
-// arm is a floor on what the app's views cost, never a ceiling.
-private struct RootQueriesStandIn: View {
-    @Query(filter: PrepQueueBuilder.needsPrepPredicate) private var toPrepByStatus: [Prospect]
-    @Query private var allProspects: [Prospect]
-    @Query private var allInquiries: [Inquiry]
-    @Query private var watchedSources: [WatchedSource]
-    @Query private var excludedTownRows: [ExcludedTown]
-    @Query private var allowedSeedTownRows: [AllowedSeedTown]
+// #4358 slice E4d: RootView's part since the cutover, presenting the real QueueView over the queue engine the way
+// RootView does (its queries went with the cutover). A STAND IN: RootView's own body draws more than this (the
+// toolbar, the masthead's notices), so the queue hosted arm is a floor on what the app's views cost, never a ceiling.
+private struct RootEngineStandIn: View {
+    let engine: QueueEngineHost.Engine
     @State private var deepLinkedKey: LeadDeepLink?
     @State private var deepLinkedKeys: LeadsDeepLink?
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("\(toPrepByStatus.count) \(allInquiries.count) \(watchedSources.count) "
-                 + "\(excludedTownRows.count) \(allowedSeedTownRows.count)")
-            QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                      allProspects: allProspects, onConnectGmail: { })
-        }
+        QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+                  onConnectGmail: { })
     }
 }
 
@@ -141,8 +132,16 @@ struct ScoutLandingAttributionProbeTests {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 900),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        // The app's engine over this store: the queue's own derivation, the app's schedule and launch, the verifier
+        // only when asked, so a probe round is not charged a verification it did not cause.
+        let engine = QueueEngineHost.Engine(
+            context: c.mainContext, derivation: QueueEngineQueue.derivation(freezeWatch: { nil }), saves: StoreSaveCount(),
+            events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
+            verifier: QueueEngineVerifierSetup(triggers: .byHand), launch: QueueEngineLaunchSetup(),
+            contextInputs: { QueueEngineContextInputs(clients: .none) })
+        engine.start()
         let hosting = NSHostingView(rootView: AnyView(
-            RootQueriesStandIn()
+            RootEngineStandIn(engine: engine)
                 .modelContainer(c)
                 .environment(ActionFeedback())
                 .environment(DayOffOfferRequest())

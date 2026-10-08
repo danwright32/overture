@@ -79,7 +79,7 @@ final class TheMastheadFoldsNothingPerBodyTests {
         var first: Phase0cView.Settled?
         let drawing = QueueRenderPass.WorkTally.measure {
             first = Phase0cView.settle(bodyMustRun: true) {
-                let w = Phase0cViewRig.host(c, rows: shows, feed: feed, size: NSSize(width: 1000, height: 800))
+                let w = Phase0cViewRig.host(c, feed: feed, size: NSSize(width: 1000, height: 800))
                 window = w
                 return w
             }

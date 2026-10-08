@@ -11,6 +11,9 @@ import SwiftData
 // they leave a quiet line instead.
 struct ScoutSummaryView: View {
     let warnings: ScoutWarnings
+    // #4358 slice E4d (#4370): the watchlist as the queue engine held it at its last publish, in name order, handed in
+    // rather than queried, so the run's landing redraws this sheet once, at its end. No default (L168).
+    let sources: [WatchedSource]
     // Reads exactly the sources Dan corrected, in one run. Wired by RootView to runScout(only:).
     var onReadFixed: (Set<String>) -> Void = { _ in }
     // #1190: re-runs the ordinary scout so the next batch of over-budget sources gets checked. Wired by
@@ -18,7 +21,6 @@ struct ScoutSummaryView: View {
     var onRunAgain: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
 
     @State private var fixedIds: Set<String> = []
 

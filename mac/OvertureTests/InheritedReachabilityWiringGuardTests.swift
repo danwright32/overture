@@ -15,10 +15,15 @@ struct InheritedReachabilityWiringGuardTests {
     // The queue reads the ledger, and passes the WHOLE store as the gate's corpus rather than its own
     // dismissed-filtered query. Passing `prospects` here would silently let a dismiss change which
     // organisations qualify, and every unit test would still pass.
+    // #4358 slice E4d: the queue's pass is the engine's, handed the answers it holds and EVERY show it holds as the
+    // corpus (`QueueEngineQueue.passInputs`), and a press's whole queue card question hands the same two
+    // (`QueueView.actionItems`). Read from the code, never from a comment naming it (L103).
     @Test func theQueueFeedsTheLedgerAndTheWholeStore() {
-        #expect(queueView.contains("@Query private var orgAnswers: [OrgReachabilityAnswer]"))
-        #expect(queueView.contains("@Query private var allProspects: [Prospect]"))
-        #expect(queueView.contains("QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,"))
+        let engine = SwiftSource.scannableLines(in: SourceGuardHelper.source("Overture/App/QueueEngineQueue.swift"))
+            .map(\.code).joined(separator: "\n")
+        let queue = SwiftSource.scannableLines(in: queueView).map(\.code).joined(separator: "\n")
+        #expect(engine.contains("allProspects: QueueRenderPass.RowCorpus(shows), inquiries: inquiries, orgAnswers: answers,"))
+        #expect(queue.contains("QueueModel.items(from: prospects, answers: table(OrgReachabilityAnswer.self), corpus: engine.everyShow,"))
     }
 
     @Test func archiveReadsTheLedgerToo() {
@@ -26,7 +31,7 @@ struct InheritedReachabilityWiringGuardTests {
         // #3655 Phase 5: through `scope(from:)` rather than `items(from:)`, which is the same
         // derivation asked for rows plus a narrowed card set instead of a card per show. The ledger
         // argument this suite is about is unchanged and still first after the rows.
-        #expect(archiveView.contains("QueueModel.scope(from: prospects, answers: orgAnswers,"))
+        #expect(archiveView.contains("QueueModel.scope(from: rows.everyShow, answers: orgAnswers,"))
     }
 
     // The address line reads the shared rule rather than `item.contacts` directly, or an inherited row

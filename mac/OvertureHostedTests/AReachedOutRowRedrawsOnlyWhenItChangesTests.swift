@@ -104,7 +104,7 @@ final class AReachedOutRowRedrawsOnlyWhenItChangesTests {
         var window: NSWindow?
         defer { release(window) }
         _ = Phase0cView.settle(bodyMustRun: true) {
-            let w = Phase0cViewRig.host(c, rows: t.shows, feed: feed, size: NSSize(width: 1000, height: 1400),
+            let w = Phase0cViewRig.host(c, feed: feed, size: NSSize(width: 1000, height: 1400),
                                         link: link)
             window = w
             return w

@@ -41,7 +41,7 @@ struct ReachedOutRowAnsweredReplyTests {
     }
 
     private func drawn(_ p: Prospect, _ r: Recipient) -> some View {
-        QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
+        QueueView(engine: HostedQueueEngine.idle(), deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
             .reachedOutRow((prospect: p, recipient: r, next: now), now: now, since: nil,
                            sourceCalendars: [:])
     }

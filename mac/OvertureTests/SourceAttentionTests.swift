@@ -178,9 +178,10 @@ struct SourceAttentionWiringTests {
     }
 
     // Read from the live store, not a snapshot taken when the window opened: a source that degrades
-    // during a scout must light the badge on that scout, not on the next launch.
+    // during a scout must light the badge on that scout, not on the next launch. #4358 slice E4d: through the
+    // queue engine's rows, which every publish refreshes, and the scout's landing publishes when it closes.
     @Test func theToolbarReadsTheLiveStore() {
-        #expect(rootView.contains("@Query private var watchedSources: [WatchedSource]"))
+        #expect(rootView.contains("SourceAttention.count(rows.everySource)"))
     }
 
     // THE thing Dan actually sees. ToolbarHoverLabel hides its title until the pointer is on it, so a count

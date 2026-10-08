@@ -36,37 +36,36 @@ struct RenderPathGetsCardsFromTheStoreTests {
                 "the store is gone, so there is nothing for a drawn row to ask")
     }
 
+    // #4358 slice E4d: the row request is `card(for:in:)`, which notes the key for the next pass and asks the drawn
+    // pass's store, then draws the engine's corrected card where its check at publish replaced one (C1).
     @Test func theRowRequestGoesThroughTheStore() {
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "prospectRow", in: queueView) else {
-            Issue.record("expected to find QueueView.prospectRow, the one row-request site")
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "prospectRow", in: queueView),
+              let request = SourceGuardHelper.bodyOfFunction(named: "card", in: queueView) else {
+            Issue.record("expected to find QueueView.prospectRow and its row request")
             return
         }
-        #expect(body.contains("data.cards.card(for: row, resolving: liveProspects)"), Comment(rawValue:
-            "the one place a drawn row becomes a card no longer asks the store. Whatever it asks instead "
-            + "does not record the key, so the next pass prebuilds nothing and every row misses."))
         // A DEPARTING row takes the snapshot instead, and must: the send has already changed what the
         // show is, and the leaving delight draws the card as it was when Dan pressed.
-        #expect(body.contains("departingCard ?? data.cards.card(for: row, resolving: liveProspects)"))
-        // #4371: through the LIVE shows, never the pass's: a card the pass did not prebuild resolves its show by
-        // identity there, and the pass holds none.
+        #expect(body.contains("departingCard ?? card(for: row, in: data)"), Comment(rawValue:
+            "the one place a drawn row becomes a card no longer goes through the row request"))
+        #expect(request.contains("cardKeys.note(row.id)") && request.contains("data.cards.card(for: row, resolving: engine)"),
+                Comment(rawValue: "the row request no longer records the key or asks the store, so the next pass "
+                    + "prebuilds nothing and every row misses"))
+        #expect(request.contains("published.corrected[row.id] ?? built"), Comment(rawValue:
+            "the row request no longer draws the card the engine's check at publish corrected (C1)"))
     }
 
-    // The pass hands its own registry down and reads it back, which is what carries frame N's keys to
-    // frame N+1. Asserted as a PAIR, because either half alone is inert: a registry nothing writes to
-    // makes every frame prebuild nothing, and one nothing reads makes every frame prebuild everything.
+    // What the last frame drew reaches the next pass: the body takes the registry once and hands it to the engine as
+    // its view (`QueueEngine.setViewInputs`), which the next pass prebuilds. Asserted as a PAIR with the note above,
+    // because either half alone is inert.
     @Test func thePassReadsTheRegistryItAlsoWritesTo() {
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "makeRenderData", in: queueView) else {
-            Issue.record("expected to find QueueView.makeRenderData")
+        guard let hand = SourceGuardHelper.bodyOfFunction(named: "handTheEngineThisView", in: queueView),
+              let body = SourceGuardHelper.propertyBody("var body: some View {", in: queueView) else {
+            Issue.record("expected to find QueueView.handTheEngineThisView and the body that calls it")
             return
         }
-        // #4106: drained into a local first, because the render memo decides by it before the pass
-        // runs, and then handed to the pass. Both halves asserted: a drain that no longer reaches the
-        // pass is the same inert registry as no drain at all.
-        #expect(body.contains("let requested = cardKeys.takeKeys()")
-                && body.contains("requestedCardKeys: cardKeysForMemo"), Comment(rawValue:
-            "the pass no longer reads what the last frame drew, so it prebuilds nothing and every row on "
-            + "screen is an on-the-spot build"))
-        #expect(body.contains("cardKeyRegistry: cardKeys"), Comment(rawValue:
-            "the render path has nowhere to record what it drew, so the next pass prebuilds nothing"))
+        #expect(hand.contains("let drawn = cardKeys.takeKeys()") && hand.contains("engine.setViewInputs("),
+                Comment(rawValue: "the engine is no longer told what the last frame drew, so it prebuilds nothing"))
+        #expect(body.contains("handTheEngineThisView()"), "the body never hands the engine its view")
     }
 }

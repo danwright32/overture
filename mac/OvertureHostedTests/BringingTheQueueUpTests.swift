@@ -72,22 +72,17 @@ struct BringingTheQueueUpTests {
 
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOffOffer = DayOffOfferRequest()
-        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
-        // memo's two second window cannot be counted as the queue deriving again (#4516's mechanism).
-        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
-            // #3846: QueueView takes its rows rather than querying the table itself, because RootView
-            // already holds an identical bare query and two of them share nothing. This harness plays
-            // RootView's part, so what is measured below is still the store-to-screen path.
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, clock: clock)
-            }
+            // #4358 slice E4d: QueueView draws the engine RootView builds. This harness plays RootView's part,
+            // so what is measured below is still the store-to-screen path.
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
@@ -202,7 +197,9 @@ struct BringingTheQueueUpTests {
         seed(ctx, rows: 60)
 
         let before = QueueRenderCounter.derivations
-        let (window, hosting) = host(Harness(container: c))
+        // The engine's launch is the queue appearing: its first pass is counted from here, as the memo's was.
+        let engine = try await HostedQueueEngine.started(context: c.mainContext)
+        let (window, hosting) = host(Harness(container: c, engine: engine))
         defer { HostedPassCounting.unmountAndClose(hosting, replacingWith: AnyView(EmptyView()), in: window) }
 
         // Settle for a fixed number of the run loop's own turns rather than a wall-clock wait: what is

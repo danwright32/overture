@@ -50,14 +50,14 @@ struct ControlRefusalOnScreenTests {
     // The row Dan actually meets: a contact whose address was never found. Before this the button was
     // dead and the tooltip read "Review and send", which is the wrong sentence rather than no sentence.
     @Test func aNudgeToAContactWithNoAddressSaysSoOnTheRow() throws {
-        let view = FollowUpsView(prospects: [], inquiries: [], gmailConnectedOverride: true)
+        let view = FollowUpsView(prospects: [], inquiries: [], watchedSources: [], gmailConnectedOverride: true)
         let shown = try visibleRefusals(view.row(followUpRow(email: nil), since: nil, sourceCalendars: [:]))
         #expect(shown == [SendGate.noAddressReason], "shown: \(shown)")
     }
 
     // The other cause, on the same button, saying something different.
     @Test func aNudgeWithGmailDisconnectedNamesGmailInstead() throws {
-        let view = FollowUpsView(prospects: [], inquiries: [], gmailConnectedOverride: false)
+        let view = FollowUpsView(prospects: [], inquiries: [], watchedSources: [], gmailConnectedOverride: false)
         let shown = try visibleRefusals(view.row(followUpRow(email: "emma@aurora.example"), since: nil, sourceCalendars: [:]))
         #expect(shown == [GmailCopy.notConnected], "shown: \(shown)")
     }
@@ -65,7 +65,7 @@ struct ControlRefusalOnScreenTests {
     // And a row that can send carries no line at all, so the sentence cannot become furniture that is
     // always on screen and therefore never read (#843).
     @Test func aSendableNudgeRowShowsNoRefusalAtAll() throws {
-        let view = FollowUpsView(prospects: [], inquiries: [], gmailConnectedOverride: true)
+        let view = FollowUpsView(prospects: [], inquiries: [], watchedSources: [], gmailConnectedOverride: true)
         #expect(try visibleRefusals(view.row(followUpRow(email: "emma@aurora.example"),
                                              since: nil, sourceCalendars: [:])).isEmpty)
     }
@@ -107,7 +107,7 @@ struct ControlRefusalOnScreenTests {
     // domain's own answer rather than a second copy of the sentence typed in here, so the screen cannot
     // drift from the gate.
     @Test func aFreshlyOpenedInquirySheetSaysWhySaveIsRefusing() throws {
-        let sheet = InquiryIntakeSheet()
+        let sheet = InquiryIntakeSheet(existing: [])
             .modelContainer(try container())
             .environment(ActionFeedback())
         let expected = InquiryIntake.reasonSaveIsDisabled(name: "")
@@ -117,7 +117,7 @@ struct ControlRefusalOnScreenTests {
 
     // The clause that reports on a press nobody has made must not ride along onto a sheet at rest.
     @Test func theInquirySheetDoesNotReportOnASaveThatHasNotHappened() throws {
-        let sheet = InquiryIntakeSheet()
+        let sheet = InquiryIntakeSheet(existing: [])
             .modelContainer(try container())
             .environment(ActionFeedback())
         let shown = try visibleRefusals(sheet)

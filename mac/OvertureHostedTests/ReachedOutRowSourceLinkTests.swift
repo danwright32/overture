@@ -36,7 +36,7 @@ struct ReachedOutRowSourceLinkTests {
     private func row(listing: String?,
                      calendars: [String: String] = ["hall": "https://example-hall.example/whats-on"]) -> some View {
         let (p, r) = show(listing: listing)
-        return QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
+        return QueueView(engine: HostedQueueEngine.idle(), deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
             .reachedOutRow((prospect: p, recipient: r, next: Date()), now: Date(), since: nil,
                            sourceCalendars: calendars)
     }

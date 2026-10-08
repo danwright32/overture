@@ -1,5 +1,6 @@
 import Testing
 import SwiftUI
+import SwiftData
 
 // #379: layout regression coverage for QueueView's masthead, the second consumer the issue named.
 // Same technique and reasoning as ProspectRowViewLayoutTests: relative rendered height, not a
@@ -8,6 +9,18 @@ import SwiftUI
 @Suite("QueueView masthead layout (#379)")
 struct QueueViewMastheadLayoutTests {
     private static let mastheadWidth: CGFloat = 760
+
+    // #4358 slice E4d: the queue takes the engine it draws from. These render only the masthead builder, so the engine
+    // is never started and draws nothing; its store is an empty one in memory, kept for the run.
+    private static let idleStore = try! TestModelContainer.inMemory(AppSchema.models)
+    private static var idleEngine: QueueEngineHost.Engine {
+        QueueEngineHost.Engine(context: ModelContext(idleStore), derivation: QueueEngineQueue.derivation(freezeWatch: { nil }),
+                               saves: StoreSaveCount(),
+                               events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
+                               verifier: QueueEngineVerifierSetup(triggers: .byHand),
+                               launch: QueueEngineLaunchSetup(reads: .inTurn),
+                               contextInputs: { QueueEngineContextInputs(clients: .none) })
+    }
 
     // #1771: the pill strip's counts are built once per render by QueueView and threaded into the
     // masthead, so these render it with a calm, quiet set rather than the masthead sourcing its own.
@@ -40,7 +53,7 @@ struct QueueViewMastheadLayoutTests {
     }
 
     @Test func aMastheadRendersWithHeight() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
+        let view = QueueView(engine: Self.idleEngine, deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
         #expect(renderedHeight(view.masthead(summary: QueueModel.summary(items), missedByACheckKeys: [], fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
@@ -52,7 +65,7 @@ struct QueueViewMastheadLayoutTests {
     // be somewhere he actually looks. Asserted by height, because a masthead that swallowed the line would
     // otherwise pass every test that only checked the sentence itself.
     @Test func aFanOutWarningMakesTheMastheadTaller() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
+        let view = QueueView(engine: Self.idleEngine, deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
         let quiet = renderedHeight(view.masthead(summary: QueueModel.summary(items), missedByACheckKeys: [], fanOutLine: nil, notices: [], pendingBookings: QueueModel.pendingBookingCount(items),
@@ -71,7 +84,7 @@ struct QueueViewMastheadLayoutTests {
     // must no longer make the masthead taller: with the breakdown line gone, the height is the same whether
     // or not a high-fit item is present. If someone re-introduced the breakdown line, this would fail.
     @Test func aHighFitItemNoLongerAddsABreakdownLine() {
-        let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil), allProspects: [])
+        let view = QueueView(engine: Self.idleEngine, deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let withoutHighFit = [longshotItem(id: "a"), longshotItem(id: "b")]
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 

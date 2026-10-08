@@ -59,7 +59,7 @@ struct CardCheckShipsInReleaseTests {
         #expect(Self.isInsideADebugBlock(commented, needle: "theNeedle()") == false)
     }
 
-    // The other half, one file over: the pass hands the result out and the VIEW writes it. The pass may
+    // The other half: the pass hands the result out and something outside it writes it (the engine, since #4358 E4d). The pass may
     // not reach the filesystem, which `QueueRenderPassIsPureTests` holds it to, so a check that wrote its
     // own record would break that rule rather than this one.
     @Test func thePassReportsTheCheckAndTheViewWritesIt() {
@@ -70,7 +70,14 @@ struct CardCheckShipsInReleaseTests {
         #expect(!pass.contains("CardDivergenceLog"), Comment(rawValue:
             "the render pass reaches the divergence log directly. It may not touch the filesystem, which "
             + "is what makes its cost measurable at all (#1913)."))
-        #expect(view.contains("CardDivergenceLog.append(record"),
+        // #4358 slice E4d: the check runs at the queue engine's publish and the ENGINE writes what it finds, into the
+        // log the app's engine is handed (`QueueEngineHost`), which is the file the launch notice reads.
+        let engine = SourceGuardHelper.source("Overture/App/QueueEngine.swift")
+        let host = SourceGuardHelper.source("Overture/App/QueueEngineHost.swift")
+        #expect(engine.contains("CardDivergenceLog.append(record"),
                 "nothing writes a divergence, so the file the reader opens can only ever be empty")
+        #expect(host.contains("QueueEngineVerifierLog(url: CardDivergenceLog.url(in: StoreLocation.handoffDirectory)"),
+                "the app's engine is not handed the divergence log the launch notice reads")
+        #expect(!view.contains("CardDivergenceLog.append("), "the view writes divergences beside the engine again")
     }
 }

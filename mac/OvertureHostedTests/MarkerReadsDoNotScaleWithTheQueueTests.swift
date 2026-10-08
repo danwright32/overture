@@ -60,19 +60,16 @@ struct MarkerReadsDoNotScaleWithTheQueueTests {
 
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOffOffer = DayOffOfferRequest()
 
         var body: some View {
-            // #3846: QueueView takes its rows rather than querying the table itself, because RootView
-            // already holds an identical bare query and two of them share nothing. This harness plays
-            // RootView's part, so what is measured below is still the store-to-screen path.
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows)
-            }
+            // #4358 slice E4d: QueueView draws the engine RootView builds; this harness plays RootView's part.
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
@@ -86,27 +83,36 @@ struct MarkerReadsDoNotScaleWithTheQueueTests {
         let rendered: Bool
     }
 
-    private func draw(dates: Int, perDate: Int) throws -> Drawn {
+    // #4358 slice E4d: the pass and its marker reads are the queue engine's, made in its own turn by the app's live
+    // reader (`QueueEngineHost.liveContextInputs`), so both tallies span the engine's launch as well as the draw. The
+    // engine's turns are tasks started inside this scope, which carry the tallies with them.
+    private func draw(dates: Int, perDate: Int) async throws -> Drawn {
         let c = try container()
         seed(ModelContext(c), dates: dates, perDate: perDate)
 
         var image: NSImage?
-        var work: QueueRenderPass.WorkTally?
-        let markers = DetachedRunner.MarkerReadTally.measure {
-            work = QueueRenderPass.WorkTally.measure {
+        let work = QueueRenderPass.WorkTally()
+        let markers = DetachedRunner.MarkerReadTally()
+        let host = QueueEngineHost()
+        let context = c.mainContext
+        try await DetachedRunner.MarkerReadTally.$current.withValue(markers) {
+            try await QueueRenderPass.WorkTally.$current.withValue(work) {
+                let engine = try await HostedQueueEngine.started(context: context, contextInputs: {
+                    host.liveContextInputs(context: context, roster: nil)
+                })
                 let renderer = ImageRenderer(
-                    content: Harness(container: c).frame(width: 900, height: 4000))
+                    content: Harness(container: c, engine: engine).frame(width: 900, height: 4000))
                 renderer.scale = 1
                 image = renderer.nsImage
             }
         }
-        return Drawn(markerReads: markers.reads, rowsDerived: work?.queueRows ?? 0,
-                     cardsBuilt: work?.queueItems ?? 0, rendered: image != nil)
+        return Drawn(markerReads: markers.reads, rowsDerived: work.queueRows,
+                     cardsBuilt: work.queueItems, rendered: image != nil)
     }
 
-    @Test func fourTimesTheQueueCostsTheSameMarkerReads() throws {
-        let small = try draw(dates: 3, perDate: 2)
-        let large = try draw(dates: 12, perDate: 8)
+    @Test func fourTimesTheQueueCostsTheSameMarkerReads() async throws {
+        let small = try await draw(dates: 3, perDate: 2)
+        let large = try await draw(dates: 12, perDate: 8)
 
         // The positive controls FIRST, all three of them, because a render that drew nothing and a render
         // that read no marker per row are the same silence otherwise (L98, L159).

@@ -224,12 +224,16 @@ struct QueueInvalidationGuardTests {
 
     // The derivation no longer folds the just-sent rows in. That fold is what made a send re-derive the
     // whole store twice, once to start the leaving delight and once to end it.
+    // #4358 slice E4d: the derivation is the queue engine's pass (`QueueEngineQueue.derive`), and neither it nor the
+    // view's body folds them in.
     @Test func theDerivationNoLongerFoldsInTheJustSentRows() {
-        guard let body = SourceGuardHelper.bodyOfFunction(named: "makeRenderData", in: queueView) else {
-            Issue.record("expected to find makeRenderData's body")
+        let engineQueue = SourceGuardHelper.source("Overture/App/QueueEngineQueue.swift")
+        guard let derive = SourceGuardHelper.bodyOfFunction(named: "derive", in: engineQueue),
+              let body = SourceGuardHelper.propertyBody("var body: some View {", in: queueView) else {
+            Issue.record("expected to find the engine's derive and the queue's body")
             return
         }
-        #expect(!body.contains("QueueModel.withDeparting("))
+        #expect(!derive.contains("QueueModel.withDeparting(") && !body.contains("QueueModel.withDeparting("))
     }
 
     // #1923: nor does a reply-classify run starting or ending. The line that shows it is its own view, so

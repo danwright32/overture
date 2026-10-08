@@ -347,10 +347,13 @@ final class LandingAcceptanceRigTests {
         let journals: LandingJournals
         let window: NSWindow
         let hosting: NSHostingView<AnyView>?
+        // #4358 slice E4d: the mounted RootView's queue engine host, whose landing generation every round holds.
+        let engineHost: QueueEngineHost
         var round = 0
         init(factor: Int, container: ModelContainer, dir: URL, exportURL: URL, historyURL: URL,
              scaled: ScoutExtractResults, relandData: Data, pending: PendingScoutIngests, journals: LandingJournals,
-             window: NSWindow, hosting: NSHostingView<AnyView>?) {
+             window: NSWindow, hosting: NSHostingView<AnyView>?, engineHost: QueueEngineHost) {
+            self.engineHost = engineHost
             self.factor = factor
             self.container = container
             self.ctx = container.mainContext
@@ -399,6 +402,18 @@ final class LandingAcceptanceRigTests {
 
     // MARK: - One sample
 
+    // #4358 slice E4d: every entry point's view caller opens the queue engine's landing generation before it lands and
+    // closes it when the landing returns (`RootView.ingestScoutExtract` and its siblings, `LeadIntakeModel.importAll`),
+    // so the queue redraws once, at the end, rather than at every batch's save. The rig drives the landing below the
+    // view, so it holds the same generation on the mounted RootView's own engine, or it would time a redraw per batch
+    // the app no longer makes (L472). A locked screen mounts no RootView, so there is no engine and nothing to hold.
+    private func held(_ world: World, _ work: () async throws -> String) async throws -> String {
+        guard let hold = world.engineHost.landingHold else { return try await work() }
+        let landing = hold.openLanding()
+        defer { hold.closeLanding(landing) }
+        return try await work()
+    }
+
     private func measure(_ world: World, _ work: () async throws -> String) async throws -> Rig.Sample {
         _ = Phase0.waitForLoad(below: Rig.loadCeiling, deadline: Rig.loadWait, poll: 5)
         let loadStart = Phase0.oneMinuteLoad()
@@ -412,7 +427,7 @@ final class LandingAcceptanceRigTests {
         let stamp = FirstYield()
         let start = Phase0.now()
         DispatchQueue.main.async { stamp.set() }
-        let said = try await work()
+        let said = try await held(world, work)
         let returned = Phase0.now()
         let drawn = await settle(world, timeline: timeline, deadline: .seconds(60 * world.factor + 60))
         // A ping that waited behind the last hold runs only once the main thread is free, after this resumes, so
@@ -469,11 +484,12 @@ final class LandingAcceptanceRigTests {
         // #3480: AppKit's default releases a window this scope still holds.
         window.isReleasedWhenClosed = false
         var hosting: NSHostingView<AnyView>?
+        let engineHost = QueueEngineHost()
         if ScreenSession.isLocked {
             ScreenSession.reportUnmeasured("LandingAcceptanceRigTests redraw term at \(factor)x")
         } else {
             // Behind `AnyView` only so `close` can unmount it (below); the view drawn is RootView's real body.
-            let view = NSHostingView(rootView: AnyView(RootHarness(container: container)))
+            let view = NSHostingView(rootView: AnyView(RootHarness(container: container, engineHost: engineHost)))
             view.frame = window.contentLayoutRect
             view.autoresizingMask = [.width, .height]
             window.contentView?.addSubview(view)
@@ -483,7 +499,8 @@ final class LandingAcceptanceRigTests {
         let relandData = try JSONEncoder().encode(scaled)
         let world = World(factor: factor, container: container, dir: inputs.dir, exportURL: inputs.exportURL,
                           historyURL: inputs.historyURL, scaled: scaled, relandData: relandData,
-                          pending: pending, journals: journals, window: window, hosting: hosting)
+                          pending: pending, journals: journals, window: window, hosting: hosting,
+                          engineHost: engineHost)
         let appeared = await settle(world, timeline: nil, deadline: .seconds(120 * factor))
         #if DEBUG
         let rendered = QueueRenderCounter.renderCount(for: QueueRenderCounter.rootSurface)
@@ -843,7 +860,7 @@ final class LandingAcceptanceRigTests {
                     }
                     if round == 0 {
                         // The warm up, unmeasured, so every measured round starts from the same state.
-                        let said = try await work()
+                        let said = try await held(world, work)
                         _ = await settle(world, timeline: nil, deadline: .seconds(60 * factor + 60))
                         let flushed = try flush(world)
                         let removed = try await removeInserted(world)

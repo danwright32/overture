@@ -65,19 +65,16 @@ struct ADrawnRowReallyAsksTheStoreTests {
 
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOffOffer = DayOffOfferRequest()
 
         var body: some View {
-            // #3846: QueueView takes its rows rather than querying the table itself, because RootView
-            // already holds an identical bare query and two of them share nothing. This harness plays
-            // RootView's part, so what is measured below is still the store-to-screen path.
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows)
-            }
+            // #4358 slice E4d: QueueView draws the engine RootView builds; this harness plays RootView's part.
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
@@ -93,10 +90,14 @@ struct ADrawnRowReallyAsksTheStoreTests {
         let cardsRealized: Int
     }
 
-    private func draw(_ c: ModelContainer, height: CGFloat) -> Drawn {
+    // #4358 slice E4d: the pass is the queue engine's, run in its own turn, so the tally spans the engine's launch as
+    // well as the draw. The engine's turns are tasks started inside this scope, which carry the tally with them.
+    private func draw(_ c: ModelContainer, height: CGFloat) async throws -> Drawn {
         var image: NSImage?
-        let work = QueueRenderPass.WorkTally.measure {
-            let renderer = ImageRenderer(content: Harness(container: c).frame(width: 900, height: height))
+        let work = QueueRenderPass.WorkTally()
+        try await QueueRenderPass.WorkTally.$current.withValue(work) {
+            let engine = try await HostedQueueEngine.started(context: c.mainContext)
+            let renderer = ImageRenderer(content: Harness(container: c, engine: engine).frame(width: 900, height: height))
             renderer.scale = 1
             image = renderer.nsImage
         }
@@ -109,10 +110,10 @@ struct ADrawnRowReallyAsksTheStoreTests {
     // THAT is what makes the yes-or-no question below answerable about the whole of it. If a change ever
     // makes this rig draw a fraction of six, this says so instead of the test above quietly answering
     // about part of the corpus and reading as complete (L354, L101).
-    @Test func theRigRealizesEveryRowOfThisCorpus() throws {
+    @Test func theRigRealizesEveryRowOfThisCorpus() async throws {
         let c = try container()
         seed(ModelContext(c))
-        let drawn = draw(c, height: 2400)
+        let drawn = try await draw(c, height: 2400)
 
         #expect(drawn.rendered, "nothing rendered at all, so everything below would be vacuous (L98)")
         #expect(drawn.rowsDerived >= Self.rows, Comment(rawValue:
@@ -132,11 +133,11 @@ struct ADrawnRowReallyAsksTheStoreTests {
 
     // THE test. Drawing the queue builds cards, and it builds them from the render path rather than from
     // the pass: the pass is asked for nothing on the first frame, because nothing has been drawn yet.
-    @Test func drawingTheQueueBuildsCardsFromTheRenderPath() throws {
+    @Test func drawingTheQueueBuildsCardsFromTheRenderPath() async throws {
         let c = try container()
         seed(ModelContext(c))
 
-        let drawn = draw(c, height: 2400)
+        let drawn = try await draw(c, height: 2400)
 
         #expect(drawn.rendered, "nothing rendered at all, so everything below would be vacuous (L98)")
         // The positive control FIRST, because every claim under it is about a render that happened. A

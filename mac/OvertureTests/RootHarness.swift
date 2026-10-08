@@ -21,19 +21,23 @@ import SwiftData
 // its own launch work (the reattach passes, the roster load, the notices) runs here as it does there.
 struct RootHarness: View {
     let container: ModelContainer
+    // #4358 slice E4d: the queue engine's host, handed to RootView, so the landing acceptance rig can hold the same
+    // engine's landing generation around the landings it drives. Every other caller takes a fresh one, as the app does.
+    let engineHost: QueueEngineHost
     @State private var addLead: AddLeadPresenter
     @State private var undoStack = QueueUndoStack()
     @State private var undoRequest = QueueUndoRequest()
 
-    init(container: ModelContainer) {
+    init(container: ModelContainer, engineHost: QueueEngineHost = QueueEngineHost()) {
         self.container = container
+        self.engineHost = engineHost
         // Built the way `OvertureApp` builds it, from the container, rather than from a default that
         // would put this harness in the degraded no-store state the real app is never in here.
         _addLead = State(initialValue: AddLeadPresenter(store: container))
     }
 
     var body: some View {
-        RootView()
+        RootView(engineHost: engineHost)
             .modelContainer(container)
             .environment(addLead)
             .environment(undoStack)

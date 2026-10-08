@@ -21,7 +21,7 @@ struct ReplyToAnswerRowOnScreenTests {
     }
 
     private func drawn(_ conversation: ReplyToAnswer.DueConversation) -> some View {
-        FollowUpsView(prospects: [], inquiries: [])
+        FollowUpsView(prospects: [], inquiries: [], watchedSources: [])
             .replyToAnswerRow(conversation, sourceCalendars: [:], now: now)
     }
 

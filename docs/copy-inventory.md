@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1831 sentences**.
+Every sentence Overture can say to Dan: **1838 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 695 of the 1831 below hold a
+  sentence carrying a VALUE: 695 of the 1838 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -29,6 +29,9 @@ What is not, and why:
 - `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
 - `App/QueueEngine.swift`: developer diagnostic log and a Debug stop, never shown to Dan (#4358)
 - `App/QueueEngine.swift`: developer diagnostic log, not the app's own voice (#4358)
+- `App/QueueEngineHost.swift`: developer diagnostic log, never shown to Dan (#4358)
+- `App/QueueEngineHost.swift`: developer diagnostic log, never shown to Dan (#4358)
+- `App/RootView.swift`: developer diagnostic log, never shown to Dan (#4358)
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
 - `App/StoreLocation.swift`: a Debug launch refusal, said only in the stop it causes, never on a screen (#4338)
 - `App/StoreSchemaGuard.swift`: sqlite's own error text, for backup.log, never shown on screen
@@ -136,6 +139,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 - `UI/QueueScopeRow.swift`: a redaction marker for a run log, never a sentence Dan reads (#3655)
+- `UI/QueueView.swift`: developer diagnostic log, never shown to Dan (#4358)
 - `UI/RenderDataComparison.swift`: member names and the reasons a comparator leaves one out, never said to Dan
 
 ## The same sentence, said in more than one place (56)
@@ -269,6 +273,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/LandingProgress.swift`
   - `Domain/ProposedConversation.swift`
   - `Domain/Reachability.swift`
+  - `UI/QueueView.swift`
 - "View in Archive"
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
@@ -621,6 +626,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "An earlier check included this show and didn't settle it, so it's still unchecked. Nothing re-checks it on its own."
     `Domain/Reachability.swift`
+"An earlier read of your saved shows has not finished, so your queue is not shown yet. Nothing was changed."
+    `UI/QueueView.swift`
 "An email to \(p.replyWatchDisplayName) bounced, and it went to more than one person (\(addresses)), so Overture cannot tell which address failed. Check the bounce in Gmail and fix or remove the dead address"
     `Integration/BounceService.swift`
 "An email to \(p.replyWatchDisplayName) bounced, and they have replied on that thread, so Overture has not written the address off. Check the bounce in Gmail before you write back"
@@ -1264,6 +1271,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Links one gallery instead of the portfolio itself"
     `Domain/DraftCheck.swift`
+"Loading your queue"
+    `UI/QueueView.swift`
 "Local login listener couldn't get a port after \(LoopbackListener.bindAttempts) tries: \(m). Connecting again usually works."
     `Integration/LoopbackListener.swift`
 "Local login listener failed: \(m)"
@@ -1734,6 +1743,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowIdentity.swift`
 "Overture could not read the saved copy of \(org), so nothing was reloaded. Try again in a moment"
     `App/QueueEngineQueue.swift`
+"Overture could not read your saved shows, so your queue is not shown yet. Nothing was changed."
+    `UI/QueueView.swift`
 "Overture could not rewrite the freeze archive without its records older than a month, so nothing was deleted from the archive. It tries again every hour."
     `Domain/FreezeHousekeepingCopy.swift`
 "Overture could not save the record of what this run searched for, so it will be lost when the next run starts: \(reason)"
@@ -1870,6 +1881,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachConversation.swift`
 "Overture put your edits back but still couldn't save (\(why)), so the store itself is refusing saves. Quit and reopen Overture; if this keeps happening, something's wrong with the local store."
     `Domain/LandingProgress.swift`
+"Overture read fewer of your saved shows than are stored, so your queue is not shown rather than shown with some missing. Nothing was changed."
+    `UI/QueueView.swift`
 "Overture read the \(examined) most recent messages since this pitch went out and stopped there. If their reply is older than those, it isn't in this list."
     `Domain/ProposedConversation.swift`
 "Overture read your inbox and found nothing from around this pitch that could be their reply."
@@ -1902,6 +1915,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowIdentity.swift`
 "Overture's copy of that show is out of step with the saved show, so nothing was changed. Press Reload this show on its card, then try again"
     `Domain/ShowIdentity.swift`
+"Overture's copy of this show is out of step with the saved one. Reload it before changing anything."
+    `UI/QueueView.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may have written to \(path). Nothing has been opened or changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
@@ -2084,6 +2099,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutReadBudget.swift`
 "Reading your inbox..."
     `Domain/ProposedConversation.swift`
+"Reading your saved shows took longer than Overture waits, so your queue is not shown yet. Nothing was changed."
+    `UI/QueueView.swift`
 "Reconcile complete: "
     `Domain/ReconcileSummary.swift`
 "Reconcile complete: nothing was due."
@@ -2110,6 +2127,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Redraft only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
+"Reload this show"
+    `UI/QueueView.swift`
 "Remind me in \(config.gapDays) days"
     `Domain/FollowUp.swift`
 "Remove \(email)"
@@ -2883,6 +2902,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LandingProgress.swift`
     `Domain/ProposedConversation.swift`
     `Domain/Reachability.swift`
+    `UI/QueueView.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
 "Try saving again"

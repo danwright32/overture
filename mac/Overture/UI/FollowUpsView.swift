@@ -31,10 +31,11 @@ struct FollowUpsView: View {
     // #3890: the hire inquiries, handed down on the same rule, for the replies waiting on an answer.
     let inquiries: [Inquiry]
     // #2816: the watchlist, so a row's link back to the show can say whether it reaches the show's own
-    // page or only the source's calendar (#1680). A @Query on the same precedent QueueView follows: a
-    // source whose calendar address changes re-decides the label with no other prompting, and an empty
-    // table would label every link as an event page, which is #1825's defect pointing the other way.
-    @Query private var watchedSources: [WatchedSource]
+    // page or only the source's calendar (#1680). An empty table would label every link as an event page,
+    // which is #1825's defect pointing the other way, so it has no default (L168). #4358 slice E4d (#4370):
+    // handed down as the queue engine holds it, rather than a query of its own, so a scout landing redraws this
+    // sheet once, at its end.
+    let watchedSources: [WatchedSource]
     @State private var pending: PendingNudge?
     // #686: neither row here carries the reply text, AI reply drafter, or Mark… menu (the same
     // gap #683/#684 found and fixed on the Reached Out row); this jumps to the full card that
@@ -737,5 +738,5 @@ private func previewProspect(_ group: String, event: String?) -> Prospect {
     // #3871: the rows are fetched here and handed in, because the sheet no longer holds a query of its
     // own. A preview owns its container, so the one fetch is this preview's to make.
     let rows = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
-    return FollowUpsView(prospects: rows, inquiries: []).modelContainer(container).environment(ActionFeedback())
+    return FollowUpsView(prospects: rows, inquiries: [], watchedSources: []).modelContainer(container).environment(ActionFeedback())
 }
