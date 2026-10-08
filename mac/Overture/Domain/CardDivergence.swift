@@ -243,12 +243,17 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
     //
     // The live file's compaction keeps `compactionKey`, deliberately: its rescues take slots from the newest
     // window, and rescuing one example per BUILD would let old builds' rare records crowd out the current one's.
+    //
+    // Kept per build only for the most RECENT builds (`CardDivergenceLog.archiveBuildsKept`); every older build's
+    // records share one value (nil) and so one example per key between them, which keeps the archive bounded.
     struct ArchiveKey: Hashable, Sendable {
         let record: CompactionKey
-        let stamp: Stamp
+        let stamp: Stamp?
     }
 
-    var archiveKey: ArchiveKey { ArchiveKey(record: compactionKey, stamp: stamp) }
+    func archiveKey(keepingBuildsOf recent: Set<Stamp>) -> ArchiveKey {
+        ArchiveKey(record: compactionKey, stamp: recent.contains(stamp) ? stamp : nil)
+    }
 
     // A kind or source this build could not name, which only a later build writes.
     var isFromALaterBuild: Bool { kind == .unrecognised || source == .unrecognised || build == .unrecognised }
@@ -610,24 +615,32 @@ enum CardDivergenceLog {
     // delete exactly the rare kind the compaction rescued, a month after it was rescued, which is the
     // defect this log's compaction rule exists to prevent arriving through its own retention (L387, L191).
     //
-    // Bounded by kind rather than by time or count, so the archive can never exceed the number of distinct
-    // keys the app can produce, which is closed enums times a combination of card fields and therefore
-    // small. The
-    // OLDEST example of each kind is the one kept, because the first time a kind appeared is the fact
-    // worth having.
+    // Bounded by kind and build rather than by time, so the archive never holds more than the distinct keys
+    // the app can produce (closed enums times a combination of card fields, and therefore small) times
+    // `archiveBuildsKept` plus one. The OLDEST example of each kind is the one kept, because the first time a
+    // kind appeared is the fact worth having.
     //
-    // #4358 slice E4c: and one example of each key PER BUILD THAT WROTE IT (`archiveKey`), so a newer build's record
-    // is never pruned behind an older build's record of the same kind, source and fields, which is the record the
-    // merge gate reads by commit. What that costs is the ceiling above: the archive is now bounded by the distinct
-    // keys times the builds that wrote one and had it compacted out, so it grows by a few lines per installed
-    // build that ever records something, rather than not at all (L669). A record written before the stamp is one
-    // more value (`unstamped`), so the archive a build before this one pruned keeps exactly what it kept.
+    // #4358 slice E4c: one example of each key PER BUILD THAT WROTE IT (`archiveKey`) for the most recent
+    // `archiveBuildsKept` builds, so a newer build's record is never pruned behind an older build's record of the
+    // same kind, source and fields, which is the record the merge gate reads by commit. Keyed per build with no
+    // limit, the archive would grow by a few lines with every installed build for ever, which removes the ceiling
+    // this prune exists to hold (L669). So builds are ranked by the newest record each wrote, the most recent keep
+    // their own examples, and every older build's records share one example per key, the oldest, which is the
+    // first time that kind appeared at all and is what the rule above protects. A record written before the stamp
+    // is one more build (`unstamped`), ranked the same way.
+    static let archiveBuildsKept = 10
+
     static func prunedArchive(_ records: [CardDivergenceRecord]) -> ArchivePruned {
+        var newest: [CardDivergenceRecord.Stamp: Date] = [:]
+        for record in records { newest[record.stamp] = max(newest[record.stamp] ?? record.at, record.at) }
+        // Ties broken by the stamp's own spelling, so which build keeps its examples never depends on hash order.
+        let recent = Set(newest.sorted { ($0.value, "\($0.key)") > ($1.value, "\($1.key)") }
+            .prefix(archiveBuildsKept).map(\.key))
         var seen: Set<CardDivergenceRecord.ArchiveKey> = []
         var kept: [CardDivergenceRecord] = []
         var dropped: [CardDivergenceRecord] = []
         for record in records {
-            if seen.insert(record.archiveKey).inserted {
+            if seen.insert(record.archiveKey(keepingBuildsOf: recent)).inserted {
                 kept.append(record)
             } else {
                 dropped.append(record)

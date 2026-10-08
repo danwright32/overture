@@ -259,6 +259,35 @@ struct TheDivergenceLogStampsItsBuildTests {
         #expect(pruned.dropped == 4)
     }
 
+    // THE BOUND (L669). Keyed per build with no limit the archive would gain lines with every build for ever, so only
+    // the most recent `archiveBuildsKept` builds keep an example each, and every older build shares one per key: the
+    // oldest, the first time that kind was seen at all.
+    @Test func theArchiveKeepsPerBuildExamplesOnlyForTheMostRecentBuilds() {
+        let kept = CardDivergenceLog.archiveBuildsKept
+        let builds = kept + 5
+        // Each build writes two records of one key, an hour apart; later builds write later. A commit per build.
+        var records: [CardDivergenceRecord] = []
+        for b in 0..<builds {
+            let commit = String(format: "%040x", b + 1)
+            for r in 0..<2 {
+                let sequence = b * 2 + r
+                records.append(CardDivergenceRecord(session: "s", sequence: sequence,
+                                                    at: Date(timeIntervalSince1970: 1_800_000_000 + Double(sequence) * 3600),
+                                                    fields: ["venue"], cardsBuilt: 0, stage: nil, kind: .factMismatch,
+                                                    source: .reconcile)
+                    .stamped(CardDivergenceLog.BuildStamp(build: .installed, commit: commit)))
+            }
+        }
+        let pruned = CardDivergenceLog.prunedArchive(records)
+        // One example for the five older builds together (the very first record), and one for each recent build.
+        let firstOfEachRecent = (builds - kept..<builds).map { $0 * 2 }
+        #expect(pruned.records.map(\.sequence) == [0] + firstOfEachRecent,
+                Comment(rawValue: "kept \(pruned.records.map(\.sequence))"))
+        #expect(pruned.records.count == kept + 1)
+        // A prune of what it kept removes nothing more: the rule is stable.
+        #expect(CardDivergenceLog.prunedArchive(pruned.records).dropped == 0)
+    }
+
     // A later build's spelling of `build` reads as unrecognised rather than failing the line, and a file
     // holding one is never rewritten, on the kind and source rule (#4354).
     @Test func aLaterBuildsSpellingIsKeptAndNeverRewritten() throws {
