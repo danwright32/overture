@@ -72,39 +72,49 @@ struct ViewportSizeTests {
 
     /// Cards built while the view lays out once, which is one per realized row.
     private func rowsRealized(at size: NSSize) throws -> Int {
-        let c = try container()
-        seed(ContextHolder.make(c))
-        // #3846: the Archive takes its rows rather than querying the whole table a second time, so
-        // this harness plays RootView's part and the path measured below is still store to screen.
-        let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
-            .modelContainer(c)
-            .environment(ActionFeedback())
-            .environment(DayOffOfferRequest())
+        // #4601: this suite builds a SECOND store after taking the first Archive down, inside one test, so
+        // the store, the hosted view and what AppKit autoreleased while laying it out all end inside one
+        // pool. Without it the Archive's search field keeps the first store's main context alive past the
+        // unmount while the store itself is freed, and the next save anywhere in the process traps in
+        // `ModelContext.container` (`HostedPassCounting.releasingWhatItHosts` has the measurements).
+        weak var hostedStore: ModelContainer?
+        weak var hostedContext: ModelContext?
+        let realized = try HostedPassCounting.releasingWhatItHosts { () throws -> Int in
+            let c = try container()
+            hostedStore = c
+            hostedContext = c.mainContext
+            seed(ContextHolder.make(c))
+            // #3846: the Archive takes its rows rather than querying the whole table a second time, so
+            // this harness plays RootView's part and the path measured below is still store to screen.
+            let view = RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+                .modelContainer(c)
+                .environment(ActionFeedback())
+                .environment(DayOffOfferRequest())
 
-        var window: NSWindow?
-        let work = QueueRenderPass.WorkTally.measure {
-            window = host(view, size: size)
-            // Layout can finish on a later turn of the run loop, so the tally must stay bound while it
-            // does. Waits on the CONDITION rather than a fixed time (L290): it stops as soon as anything
-            // has been drawn and only runs out its deadline when nothing is, which is the case with
-            // nothing to wait for.
-            let deadline = Date().addingTimeInterval(3)
-            while Date() < deadline && (QueueRenderPass.WorkTally.current?.queueItems ?? 0) == 0 {
-                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+            var window: NSWindow?
+            defer { HostedPassCounting.unmountAndClose(window) }
+            let work = QueueRenderPass.WorkTally.measure {
+                window = host(view, size: size)
+                // Layout can finish on a later turn of the run loop, so the tally must stay bound while it
+                // does. Waits on the CONDITION rather than a fixed time (L290): it stops as soon as
+                // anything has been drawn and only runs out its deadline when nothing is, which is the
+                // case with nothing to wait for.
+                let deadline = Date().addingTimeInterval(3)
+                while Date() < deadline && (QueueRenderPass.WorkTally.current?.queueItems ?? 0) == 0 {
+                    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+                }
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2))
             }
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2))
+            return work.queueItems
         }
-        // #4571: LEFT MOUNTED on purpose, the one teardown in this suite the counting guard cannot have.
-        // Unmounted, this Archive host killed the test host on the next save into SwiftData (the second
-        // size's seed): `EXC_BREAKPOINT` inside a `_SwiftData_SwiftUI` notification observer, #3874's
-        // signature, four runs out of four on 2026-10-07, including this suite run alone and with the run
-        // loop turned for a second after the unmount. The view only counts through `WorkTally`, which is
-        // task local, so a leftover is charged only to a measurement it is evaluated inside.
-        if let window {
-            HostedPassCounting.closeLeavingMounted(window, because: "unmounting this Archive host kills "
-                + "the test host on the next SwiftData save (#3874's signature, measured 2026-10-07)")
-        }
-        return work.queueItems
+        // THE GUARD, before the next measurement builds its store. A main context still alive here belongs
+        // to a store that is already gone, which is exactly the state the next save traps on, so the test
+        // stops with this message rather than taking the test host and every hosted test after it down.
+        try #require(hostedContext == nil, Comment(rawValue: "the Archive host's main context outlived "
+            + "the unmount (its store is \(hostedStore == nil ? "already freed" : "still alive")), so a save "
+            + "into the next store would trap in ModelContext.container and kill the test host (#4601). The "
+            + "hosted view must end inside HostedPassCounting.releasingWhatItHosts."))
+        return realized
     }
 
     /// The height one row implies, from the two readings. Reported rather than asserted: it is evidence
