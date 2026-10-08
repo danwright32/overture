@@ -1,0 +1,2 @@
+probe reading: first-draw-4x 2.000
+probe reading: memo-derivation-1x 314.750

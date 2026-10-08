@@ -431,6 +431,36 @@ the measurement it came from lives here. Read the entry before the rule decides 
   readings, 2026-09-27: Debug median 176.1 ms (p10 174.6, p90 177.5), optimised median 10.6 ms (p10 10.5,
   p90 10.6), about 17 times faster.
 
+## Comparing a probe before and after a change
+
+- **A "no slower" claim from an opt in cost probe comes from `scripts/compare-before-after.sh`, never from
+  two hand runs (#4615).** A probe measures ONE side per run, so the comparison is two checkouts run one
+  after the other under the shared test lock, and the order decides the answer: measured by #4371 (PR
+  #4614, 2026-10-08, six rounds of median of 7), whichever side ran SECOND read about 32 ms slower at 4x
+  in all six rounds, so a single before then after pair reads a change as a regression or hides one.
+  The script runs the rounds in ABBA order (`--rounds`, even and at least 4, default 6) and keeps every
+  run's log. It pairs each round run before first with one run after first; inside a pair the order effect
+  enters once with each sign, so each pair gives one change with the order cancelled. Per metric it reports
+  each side's pooled median, the order effect, and the pairs with their mean and range.
+  **The rule:** SLOWER or FASTER only when EVERY pair moved the same way AND their mean is larger than the
+  range of the pairs; WITHIN NOISE otherwise. It is never judged against the raw range of each side's run
+  medians, which still carries the order effect: the first version did that, and on #4614's own data that
+  range was 67.4 ms, so any change under about twice the order penalty read as noise (found by the lessons
+  review of 4b36ad1e; L172, L209). Re-judged by the rule, #4614's first draw at 4x is SLOWER by 14.8 ms
+  (1.1%), all three pairs positive (+13.0, +20.4, +10.9) with a range of 9.5 ms, where its PR called it
+  noise; its memo derivation, whose pairs disagree in sign, is within noise. Measured by simulation under
+  normal noise and no change, the rule calls a change about 1 time in 7 with 2 pairs, 1 in 24 with 3 and 1
+  in 100 with 4, which the report says beside any verdict from fewer than 4 pairs.
+  A metric with fewer than 2 complete pairs is `UNMEASURED`, which one round always is, and a run that
+  failed or printed no reading is named with its log. Exit 0 no slower, 1 slower, 2 unmeasured.
+  `--analyse <readings.tsv>` re-reads a kept comparison without running anything.
+  A probe takes part by printing `Phase0.Reading.probeLine(<metric>)` beside its human readable line;
+  `fixtures/probe-reading/lines.txt` is the one line shape both `Phase0ProbeLineTests` and the script's
+  fixture read (L26). `MemoPathDerivationCostProbeTests` is the first probe that does; its header holds the
+  exact command. Every run builds and takes the lock, so six rounds are twelve runs of it: the report states
+  each one's duration, including any wait for the lock, and the total, so read the cost there rather than
+  from a figure written here.
+
 ## Seeing a guard fail
 
 - **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`
