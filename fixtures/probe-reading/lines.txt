@@ -1,2 +1,4 @@
 probe reading: first-draw-4x 2.000
 probe reading: memo-derivation-1x 314.750
+probe order: alternated today-1x,generic-value-1x
+probe order: fixed whole-live-clone,dry-run-live-clone

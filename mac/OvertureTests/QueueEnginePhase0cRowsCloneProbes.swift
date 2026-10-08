@@ -121,7 +121,7 @@ extension QueueEnginePhase0cRowsProbeTests {
 
             // Noise floor: today's whole T7 terms, five times, unchanged.
             _ = t.oracle(base)
-            let todayTerms = Phase0.median5 { _ = t.oracle(base) }
+            let todayTerms = Phase0.median5("c5-todayTerms-\(label)") { _ = t.oracle(base) }
 
             var proto = Phase0cRowEntries(rows: [], context: t.rowContext(base), upstream: t.upstream(base))
             let cold = Phase0.time {
@@ -170,7 +170,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 let pid = p.persistentModelID
                 perRow.append(Phase0.time { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx) })
             }
-            let rowStats = Phase0cRows.spread(perRow)
+            let rowStats = Phase0cRows.spread("c5-perRow-\(label)", perRow)
             // The shape of the rows over 1 ms, by count and status only.
             let slow = perRow.indices.filter { perRow[$0] > 1.0 }.map { every[$0] }
             let slowShape = slow.isEmpty ? "none" : slow.map {
@@ -180,7 +180,10 @@ extension QueueEnginePhase0cRowsProbeTests {
             // The slowest sampled keys, each replayed five times with the entry's parts timed (the tail
             // attribution). Five keys rather than one, so a key that sampled low but replays high is not missed.
             var replayLines: [String] = []
-            for i in perRow.indices.sorted(by: { perRow[$0] > perRow[$1] }).prefix(5) {
+            for (rank, i) in perRow.indices.sorted(by: { perRow[$0] > perRow[$1] }).prefix(5).enumerated() {
+                // #4617: a replay's metrics are named by its rank among the slowest keys, so a before and after
+                // comparison pairs the slowest with the slowest even where the two runs sampled other keys.
+                let tag = "c5-slowest\(rank + 1)"
                 let p = every[i]
                 let pid = p.persistentModelID
                 // Up to five minutes for the load to fall under the ceiling, through the one shared reader
@@ -193,7 +196,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                     replayLines.append("\(shape): UNMEASURED, one minute load \(String(format: "%.2f", quiet)) never fell under 8")
                     continue
                 }
-                let replay = Phase0.median5 { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx) }
+                let replay = Phase0.median5("\(tag)-\(label)") { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx) }
                 var lapRuns: [[(name: String, ms: Double)]] = []
                 for _ in 0..<5 {
                     let laps = Phase0cLaps()
@@ -201,20 +204,22 @@ extension QueueEnginePhase0cRowsProbeTests {
                     lapRuns.append(laps.laps)
                 }
                 let parts = lapRuns[0].indices.map { j -> String in
-                    let median = lapRuns.map { $0[j].ms }.sorted()[lapRuns.count / 2]
+                    let median = Phase0.reading("\(tag)-\(lapRuns[0][j].name)-\(label)", runs: lapRuns.map { $0[j].ms }).median
                     return "\(lapRuns[0][j].name) \(String(format: "%.3f", median))"
                 }
                 // Inside `placements`, the public pieces its predicates call, so the placement lap is
                 // attributed too: the held-contact count and, under it, the draft lint and the greeting hold
                 // for each contact, the send-half rule and the prep rule.
-                func ms(_ work: () -> Void) -> String { String(format: "%.3f", Phase0.median5(work).median) }
+                func ms(_ metric: String, _ work: () -> Void) -> String {
+                    String(format: "%.3f", Phase0.median5("\(tag)-\(metric)-\(label)", work).median)
+                }
                 let pending = p.recipients.filter { $0.sendState == .pending }.count
                 let placementParts = [
-                    "blockedContactCount \(ms { _ = p.blockedContactCount })",
-                    "of which draft lint over every contact \(ms { for r in p.recipients { _ = r.draftLintBlockers } })",
-                    "greeting hold over every contact \(ms { for r in p.recipients { _ = r.isBlockedByGreeting } })",
-                    "hasEnteredSendHalf \(ms { _ = p.hasEnteredSendHalf })",
-                    "needsPrepEligible \(ms { _ = PrepQueueBuilder.needsPrepEligible(p, today: rowCtx.stage.today) })",
+                    "blockedContactCount \(ms("blockedContactCount") { _ = p.blockedContactCount })",
+                    "of which draft lint over every contact \(ms("draftLint") { for r in p.recipients { _ = r.draftLintBlockers } })",
+                    "greeting hold over every contact \(ms("greetingHold") { for r in p.recipients { _ = r.isBlockedByGreeting } })",
+                    "hasEnteredSendHalf \(ms("hasEnteredSendHalf") { _ = p.hasEnteredSendHalf })",
+                    "needsPrepEligible \(ms("needsPrepEligible") { _ = PrepQueueBuilder.needsPrepEligible(p, today: rowCtx.stage.today) })",
                     "\(pending) of \(p.recipients.count) contacts pending",
                 ]
                 worstReplay = worstReplay.map { max($0, replay.median) }
@@ -229,7 +234,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                     }
                     p.draftBody = body
                     proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx)
-                    let edit = Phase0.Reading(runs: runs)
+                    let edit = Phase0.reading("\(tag)-draftEdit-\(label)", runs: runs)
                     worstEditReplay = worstEditReplay.map { max($0, edit.median) }
                     editReplaysTaken += 1
                     editText = String(format: "a draft edit, replay median %.3f (%.3f to %.3f)", edit.median, edit.low, edit.high)
@@ -241,9 +246,9 @@ extension QueueEnginePhase0cRowsProbeTests {
             }
             // Per-row noise: five fixed rows, each rebuilt five times.
             let fixed = stride(from: 0, to: every.count, by: max(every.count / 5, 1)).prefix(5).map { every[$0] }
-            let fixedSpread = fixed.map { p -> String in
+            let fixedSpread = fixed.enumerated().map { k, p -> String in
                 let pid = p.persistentModelID
-                return Phase0.median5 { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx) }.text
+                return Phase0.median5("c5-fixedRow\(k + 1)-\(label)") { _ = proto.apply(changed: [pid], rows: byPID, upstream: up, context: rowCtx) }.text
             }
 
             // Upstream hand-offs over every real key of the kind: each hidden row un-hidden, each inherited
@@ -298,7 +303,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                     proto.apply(changed: [], rows: byPID, upstream: up, context: rowCtx)
                 }
                 let after = Phase0.oneMinuteLoad()
-                let replay = Phase0.Reading(runs: runs)
+                let replay = Phase0.reading("c5-geoReplay-\(label)", runs: runs)
                 geoReplayText = Phase0cRows.geoReplayLine(replay, rebuilt: rebuilt, loadBefore: quiet.load, loadAfter: after)
             }
 
@@ -345,7 +350,7 @@ extension QueueEnginePhase0cRowsProbeTests {
             sumMismatches += Phase0cRows.mismatchesJudged(full: fullMismatch.count, expiry: expiryMismatch.count,
                                                           baseDiffers: !atBase.isEmpty)
             let rebuiltText = expiryRebuilt.isEmpty ? "none"
-                : "median \(expiryRebuilt.sorted()[expiryRebuilt.count / 2]), max \(expiryRebuilt.max() ?? 0)"
+                : "median \(Phase0.medianCount(expiryRebuilt)), max \(expiryRebuilt.max() ?? 0)"
             Phase0cRows.say("""
                 0c.5 [\(label)] \(every.count) shows, \(load), Debug build
                   today's whole T7 terms (the oracle: scope rows, placements, AgentInputs, organisationRowCounts, DueWork, ReachedOut), five runs: \(todayTerms.text)
@@ -358,15 +363,15 @@ extension QueueEnginePhase0cRowsProbeTests {
                   the five slowest keys, replayed:
                     \(replayLines.joined(separator: "\n    "))
                   per-row noise, five fixed rows x5                 \(fixedSpread.joined(separator: " | "))
-                  hidden flip, every hidden row (\(hiddenCosts.count))          \(Phase0cRows.spread(hiddenCosts).text)
-                  inherited move, every inheriting row (\(inheritedCosts.count))  \(Phase0cRows.spread(inheritedCosts).text)
+                  hidden flip, every hidden row (\(hiddenCosts.count))          \(Phase0cRows.spread("c5-hiddenFlip-\(label)", hiddenCosts).text)
+                  inherited move, every inheriting row (\(inheritedCosts.count))  \(Phase0cRows.spread("c5-inheritedMove-\(label)", inheritedCosts).text)
                   reply run flag flipped                            \(String(format: "%.2f", aliveCost)) ms, \(aliveRebuilt) rows rebuilt
                   geography refusal of the busiest town             \(String(format: "%.2f", geoCost)) ms, \(geoRebuilt) rows rebuilt (the re-ask scan alone \(String(format: "%.2f", geoScan)) ms)
                   geography refusal, replayed                       \(geoReplayText)
                   50 instants: \(instants.count) distinct, \(crossings) DueWork deadline crossings bracketed
                   (a) full per-row rebuild, sums against AgentInputs.from and the rest: \(fullMismatch.count) instants differ\(fullMismatch.isEmpty ? "" : "\n    " + fullMismatch.prefix(5).joined(separator: "\n    "))
-                  (b) carried forward on validUntil: \(expiryMismatch.count) instants differ; rows rebuilt per instant \(rebuiltText); \(continuous) rows read the clock continuously; cost \(Phase0cRows.spread(expiryCosts).text)\(expiryMismatch.isEmpty ? "" : "\n    " + expiryMismatch.prefix(5).joined(separator: "\n    "))
-                  (c) TimeProbe stand-in, rows whose output really moved per instant: \(Phase0cRows.countText(needed)) (rebuilt: \(rebuiltText)); building only those \(Phase0cRows.spread(neededCosts).text)
+                  (b) carried forward on validUntil: \(expiryMismatch.count) instants differ; rows rebuilt per instant \(rebuiltText); \(continuous) rows read the clock continuously; cost \(Phase0cRows.spread("c5-expiryCarried-\(label)", expiryCosts).text)\(expiryMismatch.isEmpty ? "" : "\n    " + expiryMismatch.prefix(5).joined(separator: "\n    "))
+                  (c) TimeProbe stand-in, rows whose output really moved per instant: \(Phase0cRows.countText(needed)) (rebuilt: \(rebuiltText)); building only those \(Phase0cRows.spread("c5-timeProbeNeeded-\(label)", neededCosts).text)
                       per instant, moved/rebuilt: \(zip(needed, expiryRebuilt).map { "\($0)/\($1)" }.joined(separator: " "))
                 """)
         }
@@ -398,52 +403,52 @@ extension QueueEnginePhase0cRowsProbeTests {
                 sources: t.sources, refusals: t.refusals, overrides: t.overrides, context: t.stage(now),
                 focusedStage: .scout, focusedKeys: nil, requestedCardKeys: [])
             _ = QueueRenderPass.make(inputs)
-            let floor = Phase0.median5 { _ = QueueRenderPass.make(inputs) }
+            let floor = Phase0.median5("c6-floor-\(label)") { _ = QueueRenderPass.make(inputs) }
 
             // The pass, line by line, in the order `make` runs it.
             let corpus = QueueRenderPass.Corpus(every)
-            let tAll = Phase0.median5 { _ = corpus.all }
-            let tNarrow = Phase0.median5 { _ = corpus.narrowed(QueueModel.queueScope) }
+            let tAll = Phase0.median5("c6-tAll-\(label)") { _ = corpus.all }
+            let tNarrow = Phase0.median5("c6-tNarrow-\(label)") { _ = corpus.narrowed(QueueModel.queueScope) }
             let inQueue = corpus.narrowed(QueueModel.queueScope).all
             let raw = t.stage(now)
-            let tGeo = Phase0.median5 { _ = raw.resolvingPlaces(of: inQueue) }
+            let tGeo = Phase0.median5("c6-tGeo-\(label)") { _ = raw.resolvingPlaces(of: inQueue) }
             let context = raw.resolvingPlaces(of: inQueue)
             func runScope() -> QueueModel.Scope {
                 QueueModel.scope(from: inQueue, answers: t.answers, corpus: every, overrides: t.overrides,
                                  sources: t.sources, refusals: t.refusals, clients: context.clients,
                                  now: context.now, cardKeys: [], today: context.today)
             }
-            let tScope = Phase0.median5 { _ = runScope() }
+            let tScope = Phase0.median5("c6-tScope-\(label)") { _ = runScope() }
             let scope = runScope()
             let rows = scope.rows
             #if DEBUG
-            let tCounter = Phase0.median5 { QueueRenderCounter.recordDerivation(inputs: [:], rows: rows) }
+            let tCounter = Phase0.median5("c6-tCounter-\(label)") { QueueRenderCounter.recordDerivation(inputs: [:], rows: rows) }
             #else
-            let tCounter = Phase0.Reading(runs: [0])
+            let tCounter = Phase0.reading("c6-tCounter-\(label)", runs: [])
             #endif
-            let tReached = Phase0.median5 { _ = ReachedOutQueue.activeWithDates(from: inQueue, now: context.now) }
+            let tReached = Phase0.median5("c6-tReached-\(label)") { _ = ReachedOutQueue.activeWithDates(from: inQueue, now: context.now) }
             let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue, now: context.now)
-            let tReachedKeys = Phase0.median5 { _ = Set(reachedOut.map(\.prospect.naturalKey)) }
+            let tReachedKeys = Phase0.median5("c6-tReachedKeys-\(label)") { _ = Set(reachedOut.map(\.prospect.naturalKey)) }
             let reachedKeys = Set(reachedOut.map(\.prospect.naturalKey))
-            let tPlace = Phase0.median5 { _ = StageNavigation.placements(in: inQueue, context: context) }
+            let tPlace = Phase0.median5("c6-tPlace-\(label)") { _ = StageNavigation.placements(in: inQueue, context: context) }
             let placement = StageNavigation.placements(in: inQueue, context: context)
-            let tQueueKeys = Phase0.median5 { _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedKeys) }
+            let tQueueKeys = Phase0.median5("c6-tQueueKeys-\(label)") { _ = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedKeys) }
             let inAStage = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedKeys)
-            let tVisible = Phase0.median5 { _ = rows.filter { inAStage.contains($0.id) } }
+            let tVisible = Phase0.median5("c6-tVisible-\(label)") { _ = rows.filter { inAStage.contains($0.id) } }
             let visibleRows = rows.filter { inAStage.contains($0.id) }
-            let tWanted = Phase0.median5 {
+            let tWanted = Phase0.median5("c6-tWanted-\(label)") {
                 _ = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement))
             }
             let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: placement))
-            let tFocused = Phase0.median5 { _ = rows.filter { wanted.contains($0.id) } }
+            let tFocused = Phase0.median5("c6-tFocused-\(label)") { _ = rows.filter { wanted.contains($0.id) } }
             let focusedRows = rows.filter { wanted.contains($0.id) }
-            let tToday = Phase0.median5 { _ = EasternDate.today(now) }
+            let tToday = Phase0.median5("c6-tToday-\(label)") { _ = EasternDate.today(now) }
             let today = EasternDate.today(now)
-            let tEvents = Phase0.median5 {
+            let tEvents = Phase0.median5("c6-tEvents-\(label)") {
                 _ = FeedBreakEvent.events(among: every, asOf: today, contradicted: scope.contradictedCancellations)
             }
             let events = FeedBreakEvent.events(among: every, asOf: today, contradicted: scope.contradictedCancellations)
-            let tFeedNotices = Phase0.median5 { _ = AppNotices.feedBreaks(events, shownInQueue: { inAStage.contains($0) }) }
+            let tFeedNotices = Phase0.median5("c6-tFeedNotices-\(label)") { _ = AppNotices.feedBreaks(events, shownInQueue: { inAStage.contains($0) }) }
             let feedBreaks = AppNotices.feedBreaks(events, shownInQueue: { inAStage.contains($0) })
             func survivors() -> [String] {
                 every.filter { p in
@@ -453,57 +458,57 @@ extension QueueEnginePhase0cRowsProbeTests {
                                                  today: today)
                 }.map(\.naturalKey)
             }
-            let tSurvivors = Phase0.median5 { _ = survivors() }
+            let tSurvivors = Phase0.median5("c6-tSurvivors-\(label)") { _ = survivors() }
             let unseen = survivors()
-            let tSurvivorNotices = Phase0.median5 {
+            let tSurvivorNotices = Phase0.median5("c6-tSurvivorNotices-\(label)") {
                 _ = AppNotices.mergeSurvivorsTheFeedDropped(unseen, shownInQueue: { inAStage.contains($0) })
             }
             let merged = AppNotices.mergeSurvivorsTheFeedDropped(unseen, shownInQueue: { inAStage.contains($0) })
-            let tSelfBooking = Phase0.median5 { _ = QueueModel.selfBookingIndex(rows) }
+            let tSelfBooking = Phase0.median5("c6-tSelfBooking-\(label)") { _ = QueueModel.selfBookingIndex(rows) }
             func agent() -> AgentInputs {
                 AgentInputs.from(prospects: inQueue, allProspects: every, inquiries: t.inquiries, context: context,
                                  gmailConnected: false, runInFlight: nil, replyRunAlive: false, placement: placement,
                                  reachedOut: reachedOut)
             }
-            let tAgent = Phase0.median5 { _ = agent() }
+            let tAgent = Phase0.median5("c6-tAgent-\(label)") { _ = agent() }
             // AgentInputs.from's own parts.
-            let aCounts = Phase0.median5 { _ = StageNavigation.counts(in: placement) }
-            let aDue = Phase0.median5 {
+            let aCounts = Phase0.median5("c6-aCounts-\(label)") { _ = StageNavigation.counts(in: placement) }
+            let aDue = Phase0.median5("c6-aDue-\(label)") {
                 _ = DueWork.counts(prospects: every, inquiries: t.inquiries, now: context.now, replyRunAlive: false)
             }
-            let aDeadEnds = Phase0.median5 { _ = DraftedDeadEnd.count(in: inQueue) }
-            let aStalled = Phase0.median5 {
+            let aDeadEnds = Phase0.median5("c6-aDeadEnds-\(label)") { _ = DraftedDeadEnd.count(in: inQueue) }
+            let aStalled = Phase0.median5("c6-aStalled-\(label)") {
                 _ = StalledReplyDraft.dueRecipients(from: inQueue, now: context.now, runAlive: false).count
             }
-            let aShowCount = Phase0.median5 { _ = ReachedOutQueue.showCount(of: reachedOut) }
-            let aReachedDue = Phase0.median5 {
+            let aShowCount = Phase0.median5("c6-aShowCount-\(label)") { _ = ReachedOutQueue.showCount(of: reachedOut) }
+            let aReachedDue = Phase0.median5("c6-aReachedDue-\(label)") {
                 _ = reachedOut.filter { ReachedOutQueue.isDueNow(for: $0.recipient, of: $0.prospect, now: context.now) }.count
             }
-            let aInquiries = Phase0.median5 {
+            let aInquiries = Phase0.median5("c6-aInquiries-\(label)") {
                 _ = t.inquiries.filter { StageNavigation.stage(for: $0) == .review }.count
                     + t.inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut }.count
                     + t.inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.hasUnhandledReply }.count
             }
-            let tPending = Phase0.median5 { _ = QueueModel.pendingBookingCount(rows) }
-            let tFanOut = Phase0.median5 { _ = QueueRenderPass.fanOutWarning(inQueue) }
-            let tGroup = Phase0.median5 { _ = QueueModel.groupByDate(focusedRows) }
+            let tPending = Phase0.median5("c6-tPending-\(label)") { _ = QueueModel.pendingBookingCount(rows) }
+            let tFanOut = Phase0.median5("c6-tFanOut-\(label)") { _ = QueueRenderPass.fanOutWarning(inQueue) }
+            let tGroup = Phase0.median5("c6-tGroup-\(label)") { _ = QueueModel.groupByDate(focusedRows) }
             let dateGroups = QueueModel.groupByDate(focusedRows)
             // #4317: each heading's reachability answers, which the pass takes now.
-            let tHeadings = Phase0.median5 {
+            let tHeadings = Phase0.median5("c6-tHeadings-\(label)") {
                 _ = QueueModel.dateProbeHeadings(dateGroups, now: context.now, today: context.today, geo: context.geo)
             }
             let headings = QueueModel.dateProbeHeadings(dateGroups, now: context.now, today: context.today,
                                                         geo: context.geo)
-            let tInquiryRows = Phase0.median5 {
+            let tInquiryRows = Phase0.median5("c6-tInquiryRows-\(label)") {
                 _ = QueueRenderPass.inquiryRows(t.inquiries, stage: .scout, now: context.now)
             }
-            let tStageCounts = Phase0.median5 { _ = StageNavigation.counts(in: placement) }
+            let tStageCounts = Phase0.median5("c6-tStageCounts-\(label)") { _ = StageNavigation.counts(in: placement) }
             // #4106 view workstream: the masthead's two folds, which the pass takes now.
-            let tMissed = Phase0.median5 {
+            let tMissed = Phase0.median5("c6-tMissed-\(label)") {
                 _ = QueueModel.keysMissedByACheck(rows, now: context.now, today: context.today, geo: context.geo)
             }
             let missed = QueueModel.keysMissedByACheck(rows, now: context.now, today: context.today, geo: context.geo)
-            let tSummary = Phase0.median5 { _ = QueueModel.summary(visibleRows) }
+            let tSummary = Phase0.median5("c6-tSummary-\(label)") { _ = QueueModel.summary(visibleRows) }
             let selfBooking = QueueModel.selfBookingIndex(rows)
             let agentInputs = agent()
             func renderData() -> QueueView.RenderData {
@@ -521,7 +526,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                     reachedOutList: .none, dateProbeHeadings: headings, stageCounts: [:], geo: context.geo,
                     placement: placement, now: context.now)
             }
-            let tRenderData = Phase0.median5 { _ = renderData() }
+            let tRenderData = Phase0.median5("c6-tRenderData-\(label)") { _ = renderData() }
             let passTerms: [(String, Phase0.Reading)] = [
                 ("allProspects.all", tAll), ("narrowed(queueScope) (the sort)", tNarrow), ("geo resolve", tGeo),
                 ("QueueModel.scope, no cards", tScope), ("QueueRenderCounter.recordDerivation (DEBUG)", tCounter),
@@ -546,38 +551,38 @@ extension QueueEnginePhase0cRowsProbeTests {
             let agentNamed = agentTerms.reduce(0) { $0 + $1.1.median }
 
             // Inside scope, line by line.
-            let sLinkMap = Phase0.median5 { _ = inQueue.map(EngagementLink.Row.init) }
+            let sLinkMap = Phase0.median5("c6-sLinkMap-\(label)") { _ = inQueue.map(EngagementLink.Row.init) }
             let linkRows = inQueue.map(EngagementLink.Row.init)
-            let sLinkGroup = Phase0.median5 { _ = EngagementLink.group(linkRows) }
+            let sLinkGroup = Phase0.median5("c6-sLinkGroup-\(label)") { _ = EngagementLink.group(linkRows) }
             let linked = EngagementLink.group(linkRows)
-            let sShows = Phase0.median5 { _ = every.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) } }
+            let sShows = Phase0.median5("c6-sShows-\(label)") { _ = every.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) } }
             let shows = every.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
-            let sTables = Phase0.median5 { _ = QueueModel.ProducerTables(shows: shows, overrides: t.overrides) }
+            let sTables = Phase0.median5("c6-sTables-\(label)") { _ = QueueModel.ProducerTables(shows: shows, overrides: t.overrides) }
             let tables = QueueModel.ProducerTables(shows: shows, overrides: t.overrides)
-            let sInherited = Phase0.median5 {
+            let sInherited = Phase0.median5("c6-sInherited-\(label)") {
                 _ = QueueModel.inheritedAnswers(t.answers, corpus: every, overrides: t.overrides, refusals: t.refusals,
                                                 heldKeys: [], now: now, producerCorpus: tables.corpus)
             }
             let inherited = QueueModel.inheritedAnswers(t.answers, corpus: every, overrides: t.overrides,
                                                         refusals: t.refusals, heldKeys: [], now: now,
                                                         producerCorpus: tables.corpus)
-            let sRowCounts = Phase0.median5 { _ = QueueModel.organisationRowCounts(every.map(\.presenter)) }
+            let sRowCounts = Phase0.median5("c6-sRowCounts-\(label)") { _ = QueueModel.organisationRowCounts(every.map(\.presenter)) }
             let rowCounts = QueueModel.organisationRowCounts(every.map(\.presenter))
-            let sCalendar = Phase0.median5 { _ = QueueModel.sourceCalendarIndex(t.sources) }
+            let sCalendar = Phase0.median5("c6-sCalendar-\(label)") { _ = QueueModel.sourceCalendarIndex(t.sources) }
             let calendar = QueueModel.sourceCalendarIndex(t.sources)
-            let sContradicted = Phase0.median5 { _ = ContradictedCancellation.contradictedKeys(among: every) }
+            let sContradicted = Phase0.median5("c6-sContradicted-\(label)") { _ = ContradictedCancellation.contradictedKeys(among: every) }
             let contradicted = ContradictedCancellation.contradictedKeys(among: every)
-            let sShowLinkMap = Phase0.median5 { _ = every.map(ShowLink.Row.init) }
+            let sShowLinkMap = Phase0.median5("c6-sShowLinkMap-\(label)") { _ = every.map(ShowLink.Row.init) }
             let showLinkRows = every.map(ShowLink.Row.init)
-            let sShowLinkGroup = Phase0.median5 { _ = ShowLink.group(showLinkRows) }
+            let sShowLinkGroup = Phase0.median5("c6-sShowLinkGroup-\(label)") { _ = ShowLink.group(showLinkRows) }
             let sameShow = ShowLink.group(showLinkRows)
-            let sTitles = Phase0.median5 {
+            let sTitles = Phase0.median5("c6-sTitles-\(label)") {
                 _ = Dictionary(every.map { ($0.naturalKey, $0.groupName) }, uniquingKeysWith: { first, _ in first })
             }
             let titles = Dictionary(every.map { ($0.naturalKey, $0.groupName) }, uniquingKeysWith: { first, _ in first })
-            let sDrawn = Phase0.median5 { _ = Set(inQueue.map(\.naturalKey)) }
+            let sDrawn = Phase0.median5("c6-sDrawn-\(label)") { _ = Set(inQueue.map(\.naturalKey)) }
             let drawn = Set(inQueue.map(\.naturalKey))
-            let sCollapse = Phase0.median5 { _ = ShowLink.collapse(showLinkRows, drawn: drawn) }
+            let sCollapse = Phase0.median5("c6-sCollapse-\(label)") { _ = ShowLink.collapse(showLinkRows, drawn: drawn) }
             let collapse = ShowLink.collapse(showLinkRows, drawn: drawn)
             func lookalikes() -> [String: [String]] {
                 var by: [String: [Prospect]] = [:]
@@ -586,14 +591,14 @@ extension QueueEnginePhase0cRowsProbeTests {
                     rows.sorted { ($0.firstSeenAt ?? .distantPast) > ($1.firstSeenAt ?? .distantPast) }.map(\.naturalKey)
                 }
             }
-            let sLookalikes = Phase0.median5 { _ = lookalikes() }
+            let sLookalikes = Phase0.median5("c6-sLookalikes-\(label)") { _ = lookalikes() }
             func nights() -> [String: String] {
                 Dictionary(every.compactMap { row -> (String, String)? in
                     guard let night = row.performanceDate, !night.isEmpty else { return nil }
                     return (row.naturalKey, night)
                 }, uniquingKeysWith: { first, _ in first })
             }
-            let sNights = Phase0.median5 { _ = nights() }
+            let sNights = Phase0.median5("c6-sNights-\(label)") { _ = nights() }
             func preamble() -> QueueModel.CardPreamble {
                 QueueModel.CardPreamble(linked: linked, inherited: inherited, venueBrands: tables.venueBrands,
                                         rowCounts: rowCounts, calendarBySourceId: calendar, overrides: t.overrides,
@@ -607,7 +612,7 @@ extension QueueEnginePhase0cRowsProbeTests {
             // since `sLookalikes` and `sNights` already time their derivation and both are summed below.
             let lookalikeTable = lookalikes()
             let nightTable = nights()
-            let sPreamble = Phase0.median5 {
+            let sPreamble = Phase0.median5("c6-sPreamble-\(label)") {
                 _ = QueueModel.CardPreamble(linked: linked, inherited: inherited, venueBrands: tables.venueBrands,
                                             rowCounts: rowCounts, calendarBySourceId: calendar, overrides: t.overrides,
                                             clients: context.clients, contradictedCancellations: contradicted,
@@ -634,19 +639,19 @@ extension QueueEnginePhase0cRowsProbeTests {
                 }
                 return (out, contactsByKey)
             }
-            let sLoop = Phase0.median5 { _ = loop() }
+            let sLoop = Phase0.median5("c6-sLoop-\(label)") { _ = loop() }
             let looped = loop()
-            let sCheck = Phase0.median5 {
+            let sCheck = Phase0.median5("c6-sCheck-\(label)") {
                 _ = QueueModel.checkOneCardAgainstAFreshBuild(cards: [:], contactsByKey: looped.contacts, draftBodies: [:],
                                                               corpus: inQueue, preamble: pre)
             }
-            let sCardStore = Phase0.median5 {
+            let sCardStore = Phase0.median5("c6-sCardStore-\(label)") {
                 _ = QueueModel.CardStore(cards: [:], shows: inQueue, contactsByKey: looped.contacts, preamble: pre,
                                          requestedKeys: noCards, registry: nil)
             }
             let store = QueueModel.CardStore(cards: [:], shows: inQueue, contactsByKey: looped.contacts, preamble: pre,
                                              requestedKeys: noCards, registry: nil)
-            let sScopeInit = Phase0.median5 {
+            let sScopeInit = Phase0.median5("c6-sScopeInit-\(label)") {
                 _ = QueueModel.Scope(rows: looped.rows, cards: store,
                                      cardCheck: QueueModel.Scope.CardCheck(ran: false, divergence: nil),
                                      contradictedCancellations: contradicted)
@@ -656,7 +661,7 @@ extension QueueEnginePhase0cRowsProbeTests {
                 ("ProducerGate.Show map", sShows), ("ProducerTables cold", sTables),
                 ("inheritedAnswers (the ledger)", sInherited), ("organisationRowCounts", sRowCounts),
                 ("sourceCalendarIndex", sCalendar), ("ContradictedCancellation", sContradicted),
-                ("ShowLink rows map (paid twice)", Phase0.Reading(runs: sShowLinkMap.runs.map { $0 * 2 })),
+                ("ShowLink rows map (paid twice)", Phase0.reading("c6-sShowLinkMapTwice-\(label)", runs: sShowLinkMap.runs.map { $0 * 2 })),
                 ("ShowLink.group", sShowLinkGroup), ("titlesByKey", sTitles), ("drawn set", sDrawn),
                 ("ShowLink.collapse", sCollapse), ("laterLookalikes", sLookalikes), ("nightsByKey", sNights),
                 ("CardPreamble init", sPreamble), ("row loop (hidden check, contacts, row)", sLoop),
@@ -666,18 +671,18 @@ extension QueueEnginePhase0cRowsProbeTests {
             let scopeNamed = scopeTerms.reduce(0) { $0 + $1.1.median }
 
             // The published arrays, copied (the first write after handing one out copies the whole buffer).
-            func copy<T>(_ xs: [T]) -> Phase0.Reading {
-                guard let first = xs.first else { return Phase0.Reading(runs: [0]) }
-                return Phase0.median5 {
+            func copy<T>(_ name: String, _ xs: [T]) -> Phase0.Reading {
+                guard let first = xs.first else { return Phase0.reading("c6-copy-\(name)-\(label)", runs: []) }
+                return Phase0.median5("c6-copy-\(name)-\(label)") {
                     var c = xs
                     c.append(first)
                     _ = c.count
                 }
             }
             let copies: [(String, Phase0.Reading)] = [
-                ("rows (\(rows.count))", copy(rows)), ("visibleRows (\(visibleRows.count))", copy(visibleRows)),
-                ("focusedRows (\(focusedRows.count))", copy(focusedRows)), ("queueScope (\(inQueue.count))", copy(inQueue)),
-                ("reachedOut (\(reachedOut.count))", copy(reachedOut)), ("dateGroups (\(dateGroups.count))", copy(dateGroups)),
+                ("rows (\(rows.count))", copy("rows", rows)), ("visibleRows (\(visibleRows.count))", copy("visibleRows", visibleRows)),
+                ("focusedRows (\(focusedRows.count))", copy("focusedRows", focusedRows)), ("queueScope (\(inQueue.count))", copy("queueScope", inQueue)),
+                ("reachedOut (\(reachedOut.count))", copy("reachedOut", reachedOut)), ("dateGroups (\(dateGroups.count))", copy("dateGroups", dateGroups)),
             ]
             let copyTotal = copies.reduce(0) { $0 + $1.1.median }
 
@@ -686,18 +691,18 @@ extension QueueEnginePhase0cRowsProbeTests {
             // measured on the prototype's own storage, since the engine's does not exist yet).
             let proto = Phase0cRowEntries(rows: every, context: t.rowContext(now), upstream: t.upstream(now))
             let firstPID = every[0].persistentModelID
-            let handOff = Phase0.median5 {
+            let handOff = Phase0.median5("c6-handOff-\(label)") {
                 let entries = proto.entries
                 _ = entries.count
             }
-            let firstWrite = Phase0.median5 {
+            let firstWrite = Phase0.median5("c6-firstWrite-\(label)") {
                 var entries = proto.entries
                 let snapshot = entries
                 entries[firstPID] = nil
                 _ = snapshot.count + entries.count
             }
             let rowsByKey = proto.rowsByKey
-            let rowsWrite = Phase0.median5 {
+            let rowsWrite = Phase0.median5("c6-rowsWrite-\(label)") {
                 var byKey = rowsByKey
                 let snapshot = byKey
                 byKey[every[0].naturalKey] = nil
@@ -791,7 +796,7 @@ extension QueueEnginePhase0cRowsProbeTests {
 
     // The refusal replay is scored only under the load rule (#4368), on every push.
     @Test func aRefusalReplayTakenAtLoadEightOrOverDecidesNothing() {
-        let r = Phase0.Reading(runs: [3, 1, 2, 5, 4])
+        let r = Phase0.reading("unit", runs: [3, 1, 2, 5, 4], emit: { _ in }) // probe-reading-exempt: a unit test of the replay line, not a probe reading
         #expect(!Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 2, loadAfter: 7.9).contains("UNMEASURED"))
         #expect(Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 8, loadAfter: 2).hasPrefix("UNMEASURED"))
         #expect(Phase0cRows.geoReplayLine(r, rebuilt: [9], loadBefore: 2, loadAfter: .infinity).hasPrefix("UNMEASURED"))
@@ -883,10 +888,10 @@ extension QueueEnginePhase0cRowsProbeTests {
             // what decides it: a wait per key could outlast the runner's twenty minute stall limit on a busy Mac,
             // so a later key can be UNMEASURED on load the wait did not cover.
             _ = Phase0.waitForLoad(below: Phase0cRows.loadCeiling, deadline: 300, poll: 5)
-            for i in samples.indices.sorted(by: { samples[$0] > samples[$1] }).prefix(5) {
+            for (rank, i) in samples.indices.sorted(by: { samples[$0] > samples[$1] }).prefix(5).enumerated() {
                 let p = shows[i]
                 let before = Phase0.oneMinuteLoad()
-                let reading = Phase0.Reading(runs: (0..<5).map { _ in edit(p) })
+                let reading = Phase0.reading("c5-fixtureSlowest\(rank + 1)-draftEdit-\(size)", runs: (0..<5).map { _ in edit(p) })
                 let after = Phase0.oneMinuteLoad()
                 let shape = "key \(Phase0b.hash8(p.naturalKey)) \(p.recipients.count) contacts, "
                     + "\(p.recipients.filter { $0.sendState == .pending }.count) pending"
@@ -905,7 +910,7 @@ extension QueueEnginePhase0cRowsProbeTests {
             let verdict = Phase0cRows.stopVerdict(mismatches: mismatches.count, replayedMaxMs: worst)
             Phase0cRows.say("""
                 0c.5 pending contact draft edit [synthetic \(size) rows, seed 4368] \(shows.count) contacted shows given a waiting contact, \(Phase0.load()), Debug build
-                  every such show edited once                         \(Phase0cRows.spread(samples).text)
+                  every such show edited once                         \(Phase0cRows.spread("c5-fixtureEdit-\(size)", samples).text)
                   oracle at build, before any edit                    \(atBuild.isEmpty ? "0 mismatches" : "prototype against oracle " + buildDiffering.joined(separator: "; "))
                   oracle after the edits                              \(mismatches.count) mismatches; disagreement the edits added: \(firstBreak)
                   the five slowest keys, replayed:

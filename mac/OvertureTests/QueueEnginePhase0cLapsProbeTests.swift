@@ -55,11 +55,18 @@ enum Phase0cTickLaps {
     }
 
     /// max, p99 and median of a set of per-key costs, in ms.
+    /// #4617: made under a metric, and prints its median's `probe reading:` line as it is made, so the before and
+    /// after comparison reads it (an empty spread measured nothing and prints none).
     struct Spread {
         let samples: [Double]
+        let reading: Phase0.Reading
+        init(_ metric: String, samples: [Double]) {
+            self.samples = samples
+            reading = Phase0.reading(metric, runs: samples)
+        }
         var sorted: [Double] { samples.sorted() }
         var max: Double { samples.max() ?? 0 }
-        var median: Double { samples.isEmpty ? 0 : sorted[samples.count / 2] }
+        var median: Double { samples.isEmpty ? 0 : reading.median }
         var p99: Double {
             guard !samples.isEmpty else { return 0 }
             return sorted[Swift.min(samples.count - 1, Int((Double(samples.count) * 0.99).rounded(.up)) - 1)]
@@ -69,7 +76,7 @@ enum Phase0cTickLaps {
         }
     }
 
-    static func median3(_ work: () -> Void) -> Double {
+    static func median3(_ work: () -> Void) -> Double { // probe-reading-exempt: one key's median of three, which the Spread over every key reports
         let runs = (0..<3).map { _ in Phase0.time(work) }.sorted()
         return runs[1]
     }
@@ -917,26 +924,26 @@ final class QueueEnginePhase0cLapsProbeTests {
         for p in rows.prospects { _ = p.recipients.count }
         let loaded = DownbeatBridge.loadWithHealth(from: exportURL, now: now)
 
-        let whole = Phase0.median5 { _ = scheduler.reconcileBookings(now: now, from: exportURL, rows: rows) }
+        let whole = Phase0.median5("c7-bookings-whole-\(label)") { _ = scheduler.reconcileBookings(now: now, from: exportURL, rows: rows) }
         let noExport = try missingExport()
-        let wholeMissing = Phase0.median5 { _ = scheduler.reconcileBookings(now: now, from: noExport, rows: rows) }
+        let wholeMissing = Phase0.median5("c7-bookings-wholeMissing-\(label)") { _ = scheduler.reconcileBookings(now: now, from: noExport, rows: rows) }
         // 0b.5 read the rows through a fetch it had not walked; this is the lap on a context that has read
         // nothing, so relationship faults are paid inside it. Five fresh contexts, one sample each.
-        let freshContext = Phase0b.reading((0..<5).map { _ in
+        let freshContext = Phase0.reading("c7-bookings-freshContext-\(label)", runs: (0..<5).map { _ in
             let fresh = ModelContext(ctx.container)
             let freshScheduler = ReconcileScheduler(context: fresh, replyRunAlive: { _ in false })
             let freshRows = StoreRows.fetch(from: fresh)
             return Phase0.time { _ = freshScheduler.reconcileBookings(now: now, from: exportURL, rows: freshRows) }
         })
-        let load = Phase0.median5 { _ = DownbeatBridge.loadWithHealth(from: exportURL, now: now) }
+        let load = Phase0.median5("c7-bookings-load-\(label)") { _ = DownbeatBridge.loadWithHealth(from: exportURL, now: now) }
         var live: [Prospect] = []
-        let liveFilter = Phase0.median5 { live = rows.liveProspects }
+        let liveFilter = Phase0.median5("c7-bookings-liveFilter-\(label)") { live = rows.liveProspects }
         var entities: [any BookingMatchable] = []
-        let boxing = Phase0.median5 { entities = DownbeatBooking.bookingEntities(prospects: live, in: ctx) }
+        let boxing = Phase0.median5("c7-bookings-boxing-\(label)") { entities = DownbeatBooking.bookingEntities(prospects: live, in: ctx) }
         var contacted: [any BookingMatchable] = []
-        let filter = Phase0.median5 { contacted = entities.filter { $0.wasProvablyContacted } }
+        let filter = Phase0.median5("c7-bookings-filter-\(label)") { contacted = entities.filter { $0.wasProvablyContacted } }
         var sorted: [any BookingMatchable] = []
-        let sort = Phase0.median5 {
+        let sort = Phase0.median5("c7-bookings-sort-\(label)") {
             sorted = contacted.sorted {
                 let d0 = $0.performanceDate ?? "", d1 = $1.performanceDate ?? ""
                 if d0 != d1 { return d0 < d1 }
@@ -944,7 +951,7 @@ final class QueueEnginePhase0cLapsProbeTests {
                 return $0.groupName < $1.groupName
             }
         }
-        let classify = Phase0.median5 { for e in sorted { _ = BookingMatch.classify(entity: e, bookings: loaded.bookings) } }
+        let classify = Phase0.median5("c7-bookings-classify-\(label)") { for e in sorted { _ = BookingMatch.classify(entity: e, bookings: loaded.bookings) } }
         // The two other things the loop does per contacted row: read its guards, and (on no match) ask every
         // client whether it confidently names the row's group.
         func orgMatch(_ e: any BookingMatchable) -> Bool {
@@ -955,8 +962,8 @@ final class QueueEnginePhase0cLapsProbeTests {
         }
         let results = sorted.map { BookingMatch.classify(entity: $0, bookings: loaded.bookings) }
         let unmatched = zip(sorted, results).filter { $0.1 == .none && !$0.0.bookingPriorRelationshipBooked }.map(\.0)
-        let clientMatch = Phase0.median5 { for e in unmatched { _ = orgMatch(e) } }
-        let guards = Phase0.median5 {
+        let clientMatch = Phase0.median5("c7-bookings-clientMatch-\(label)") { for e in unmatched { _ = orgMatch(e) } }
+        let guards = Phase0.median5("c7-bookings-guards-\(label)") {
             for e in sorted {
                 _ = e.bookingManualOutcome || e.bookingIsBooked || e.autoBookingRejectedWithoutId
                     || e.rejectedBookingIds.isEmpty || e.bookingSuggestionDismissed || e.bookingPriorRelationshipBooked
@@ -970,23 +977,23 @@ final class QueueEnginePhase0cLapsProbeTests {
                 if BookingMatch.classify(entity: e, bookings: loaded.bookings) == .none { _ = orgMatch(e) }
             })
         }
-        let contactedSpread = Phase0cTickLaps.Spread(samples: perContacted)
-        let reconcile = Phase0.median5 {
+        let contactedSpread = Phase0cTickLaps.Spread("c7-bookings-perContacted-\(label)", samples: perContacted)
+        let reconcile = Phase0.median5("c7-bookings-reconcile-\(label)") {
             _ = DownbeatBooking.reconcileBooked(entities: entities, clients: loaded.clients, bookings: loaded.bookings,
                                                 health: loaded.health, now: now)
         }
         ctx.rollback()
-        let settleReal = Phase0.median5 {
+        let settleReal = Phase0.median5("c7-bookings-settleReal-\(label)") {
             _ = ContactScoreAdjustment.settleAll(live, now: now)
             ctx.rollback()
         }
-        let settleDry = Phase0.median5 { _ = Phase0cLapOracle.settleDryRun(live, now: now) }
+        let settleDry = Phase0.median5("c7-bookings-settleDry-\(label)") { _ = Phase0cLapOracle.settleDryRun(live, now: now) }
         let named = load.median + liveFilter.median + boxing.median + reconcile.median + settleReal.median
 
         // The prototype: cold build, equality at 50 or more instants (every sampled expiry crossing on both
         // sides), and its costs over every real key.
         var index = Phase0cSettleIndex(rows: [], now: now)
-        let cold = Phase0.median5 {
+        let cold = Phase0.median5("c7-bookings-cold-\(label)") {
             index = Phase0cSettleIndex(rows: live.map { ($0.persistentModelID, Phase0cSettleFacts.extract($0)) }, now: now)
         }
         let horizon = now.addingTimeInterval(400 * 86_400)
@@ -1022,7 +1029,8 @@ final class QueueEnginePhase0cLapsProbeTests {
             perCrossing.append(Phase0.time { moving.advance(to: c.addingTimeInterval(0.001)) })
             rowsPerCrossing.append(moving.judged)
         }
-        let rowSpread = Phase0cTickLaps.Spread(samples: perRow), clockSpread = Phase0cTickLaps.Spread(samples: perCrossing)
+        let rowSpread = Phase0cTickLaps.Spread("c7-settle-perRow-\(label)", samples: perRow)
+        let clockSpread = Phase0cTickLaps.Spread("c7-settle-perCrossing-\(label)", samples: perCrossing)
         let equal = indexMismatch == 0 && mirrorMismatch == 0
         Phase0cTickLaps.say("""
             bookings [\(label)] \(live.count) shows, \(entities.count) booking entities, \(contacted.count) contacted, \
@@ -1047,7 +1055,7 @@ final class QueueEnginePhase0cLapsProbeTests {
                 due set against dry run at \(instants.count) instants (\(sampled.count) of \(crossings.count) crossings in 400 days, each at -1 ms, 0, +1 ms): \
             \(indexMismatch) mismatches; dry run against real settle: \(mirrorMismatch); most rows due at one instant \(dueMost)
                 per row change (extract + update)                   \(rowSpread.text)
-                per clock crossing (advance)                        \(clockSpread.text); rows judged per crossing max \(rowsPerCrossing.max() ?? 0), median \(rowsPerCrossing.sorted().dropFirst(rowsPerCrossing.count / 2).first ?? 0)
+                per clock crossing (advance)                        \(clockSpread.text); rows judged per crossing max \(rowsPerCrossing.max() ?? 0), median \(Phase0.medianCount(rowsPerCrossing))
             """)
         return ["settle due set [\(label)]: \(equal ? "PASS" : "FAIL") equality (\(indexMismatch) index, \(mirrorMismatch) mirror mismatches); "
                 + "row change max \(String(format: "%.3f", rowSpread.max)) ms, crossing max \(String(format: "%.3f", clockSpread.max)) ms "
@@ -1063,22 +1071,22 @@ final class QueueEnginePhase0cLapsProbeTests {
         let today = QueueModel.easternToday(now)
         // #4324: a restore that failed to save ends the block rather than being timed as if it had not.
         var restoreFailure: Error?
-        let whole = Phase0.median5 {
+        let whole = Phase0.median5("c7-retire-whole-\(label)") {
             // Once a restore has failed its writes are still pending, and the next call would stop on
             // `retireReal`'s precondition before this block could report the failure, so it stops here.
             guard restoreFailure == nil else { return }
             do { _ = try Phase0cLapOracle.retireReal(context: ctx, today: today) } catch { restoreFailure = error }
         }
         if let restoreFailure { throw restoreFailure }
-        let wentFetch = Phase0.median5 {
+        let wentFetch = Phase0.median5("c7-retire-wentFetch-\(label)") {
             _ = try? ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.statusRaw == "new" }))
         }
-        let keptFetch = Phase0.median5 {
+        let keptFetch = Phase0.median5("c7-retire-keptFetch-\(label)") {
             _ = try? ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.statusRaw == "queued"
                 || $0.statusRaw == "drafted" || $0.statusRaw == "approved" }))
         }
         var index = Phase0cRetireIndex(rows: [])
-        let cold = Phase0.median5 {
+        let cold = Phase0.median5("c7-retire-cold-\(label)") {
             index = Phase0cRetireIndex(rows: rows.map { ($0.persistentModelID, Phase0cRetireFacts.extract($0)) })
         }
         var indexMismatch = 0, mirrorMismatch = 0, mirrorChecked = 0, most = 0
@@ -1101,7 +1109,8 @@ final class QueueEnginePhase0cLapsProbeTests {
             let pid = p.persistentModelID
             perRow.append(Phase0cTickLaps.median3 { index.update(pid, Phase0cRetireFacts.extract(p)) })
         }
-        let rowSpread = Phase0cTickLaps.Spread(samples: perRow), querySpread = Phase0cTickLaps.Spread(samples: queries)
+        let rowSpread = Phase0cTickLaps.Spread("c7-retire-perRow-\(label)", samples: perRow)
+        let querySpread = Phase0cTickLaps.Spread("c7-retire-perDay-\(label)", samples: queries)
         Phase0cTickLaps.say("""
             retirement [\(label)] \(rows.count) shows, \(index.filed) filed (untriaged \(index.untriaged.rowCount) \
             under \(index.untriaged.keys.count) opening nights, kept unpitched \(index.kept.rowCount) under \
@@ -1133,14 +1142,19 @@ final class QueueEnginePhase0cLapsProbeTests {
         let realFirst = Phase0cLapOracle.written(before: prior, after: rows)
         rows = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let whole = Phase0.median5 { _ = ConflictSweep.reapplyAll(export: export, in: ctx, prospects: rows) }
-        let dryWhole = Phase0.median5 { _ = Phase0cLapOracle.conflictDryRun(rows, export: export, context: ctx) }
+        // #4617: today's sweep and its dry run are rivals, so they are timed in alternating order: timed one after
+        // the other, whichever ran second carried the order effect into the comparison.
+        let sweeps = Phase0.alternating([
+            ("c7-conflicts-whole-\(label)", { _ = ConflictSweep.reapplyAll(export: export, in: ctx, prospects: rows) }),
+            ("c7-conflicts-dryWhole-\(label)", { _ = Phase0cLapOracle.conflictDryRun(rows, export: export, context: ctx) }),
+        ])
+        let (whole, dryWhole) = (sweeps[0], sweeps[1])
         var inputs = Phase0cCalendarInputs.read(export: export, context: ctx)
-        let readInputs = Phase0.median5 { inputs = Phase0cCalendarInputs.read(export: export, context: ctx) }
-        let build = Phase0.median5 { _ = inputs.build() }
+        let readInputs = Phase0.median5("c7-conflicts-readInputs-\(label)") { inputs = Phase0cCalendarInputs.read(export: export, context: ctx) }
+        let build = Phase0.median5("c7-conflicts-build-\(label)") { _ = inputs.build() }
         let facts = rows.map { ($0.persistentModelID, Phase0cConflictFacts.extract($0)) }
         var index = Phase0cConflictIndex(rows: [], inputs: inputs)
-        let cold = Phase0.median5 { index = Phase0cConflictIndex(rows: facts, inputs: inputs) }
+        let cold = Phase0.median5("c7-conflicts-cold-\(label)") { index = Phase0cConflictIndex(rows: facts, inputs: inputs) }
         let firstJudge = index.judge(inputs)
         let withKey = rows.filter { $0.conflictKey != nil }.count
         let nights = Set(facts.flatMap { $0.1.nights }).sorted()
@@ -1200,7 +1214,7 @@ final class QueueEnginePhase0cLapsProbeTests {
                 there.append(Phase0.time { _ = index.judge(changed) })
                 back.append(Phase0.time { _ = index.judge(inputs) })
             }
-            return (there.sorted()[1], back.sorted()[1])
+            return (there.sorted()[1], back.sorted()[1]) // probe-reading-exempt: one key's medians of three, which the Spreads over every key report
         }
         var dayOffAdd: [Double] = [], dayOffRemove: [Double] = [], exportGain: [Double] = [], exportLose: [Double] = []
         var weeklyAdd: [Double] = [], weeklyRemove: [Double] = [], cancel: [Double] = [], restore: [Double] = []
@@ -1255,17 +1269,17 @@ final class QueueEnginePhase0cLapsProbeTests {
             } / 2)
         }
         let kinds: [(String, Phase0cTickLaps.Spread)] = [
-            ("day off added (DayOff.swift:153)", .init(samples: dayOffAdd)),
-            ("day off removed (DayOff.swift:161)", .init(samples: dayOffRemove)),
-            ("weekly rule added (WeeklyDayOff.swift:140)", .init(samples: weeklyAdd)),
-            ("weekly rule removed (WeeklyDayOff.swift:148)", .init(samples: weeklyRemove)),
-            ("shoot cancelled (CancelledShootEditing.swift:86)", .init(samples: cancel)),
-            ("shoot restored (CancelledShootEditing.swift:104)", .init(samples: restore)),
-            ("export night gained (tick, ReconcileScheduler.swift:378)", .init(samples: exportGain)),
-            ("export night lost (tick)", .init(samples: exportLose)),
-            ("export booking lost (tick)", .init(samples: bookingLost)),
-            ("export booking back (tick)", .init(samples: bookingBack)),
-            ("date move, one row (per judge)", .init(samples: dateMove)),
+            ("day off added (DayOff.swift:153)", .init("c7-conflicts-dayOffAdd-\(label)", samples: dayOffAdd)),
+            ("day off removed (DayOff.swift:161)", .init("c7-conflicts-dayOffRemove-\(label)", samples: dayOffRemove)),
+            ("weekly rule added (WeeklyDayOff.swift:140)", .init("c7-conflicts-weeklyAdd-\(label)", samples: weeklyAdd)),
+            ("weekly rule removed (WeeklyDayOff.swift:148)", .init("c7-conflicts-weeklyRemove-\(label)", samples: weeklyRemove)),
+            ("shoot cancelled (CancelledShootEditing.swift:86)", .init("c7-conflicts-cancel-\(label)", samples: cancel)),
+            ("shoot restored (CancelledShootEditing.swift:104)", .init("c7-conflicts-restore-\(label)", samples: restore)),
+            ("export night gained (tick, ReconcileScheduler.swift:378)", .init("c7-conflicts-exportGain-\(label)", samples: exportGain)),
+            ("export night lost (tick)", .init("c7-conflicts-exportLose-\(label)", samples: exportLose)),
+            ("export booking lost (tick)", .init("c7-conflicts-bookingLost-\(label)", samples: bookingLost)),
+            ("export booking back (tick)", .init("c7-conflicts-bookingBack-\(label)", samples: bookingBack)),
+            ("date move, one row (per judge)", .init("c7-conflicts-dateMove-\(label)", samples: dateMove)),
         ]
         let calendarKinds = kinds.prefix(10)
         let worst = calendarKinds.map(\.1.max).max() ?? 0
@@ -1302,22 +1316,22 @@ final class QueueEnginePhase0cLapsProbeTests {
     private func closingReadBlock(label: String, ctx: ModelContext, now: Date) {
         let rows = StoreRows.fetch(from: ctx)
         for p in rows.prospects { _ = p.recipients.count }
-        let whole = Phase0.median5 {
+        let whole = Phase0.median5("c7-closing-whole-\(label)") {
             _ = DueReading.derive(prospects: rows.prospects, inquiries: rows.inquiries, now: now, replyRunAlive: false)
         }
-        let replied = Phase0.median5 { _ = rows.prospects.filter(ReconcileScheduler.hasNewReply) }
-        let booked = Phase0.median5 { _ = rows.prospects.filter { $0.outcome == .booked } }
-        let counts = Phase0.median5 {
+        let replied = Phase0.median5("c7-closing-replied-\(label)") { _ = rows.prospects.filter(ReconcileScheduler.hasNewReply) }
+        let booked = Phase0.median5("c7-closing-booked-\(label)") { _ = rows.prospects.filter { $0.outcome == .booked } }
+        let counts = Phase0.median5("c7-closing-counts-\(label)") {
             _ = DueWork.counts(prospects: rows.prospects, inquiries: rows.inquiries, now: now, replyRunAlive: false)
         }
-        let next = Phase0.median5 { _ = DueWork.nextChange(prospects: rows.prospects, now: now, replyRunAlive: false) }
+        let next = Phase0.median5("c7-closing-next-\(label)") { _ = DueWork.nextChange(prospects: rows.prospects, now: now, replyRunAlive: false) }
         var totals = Phase0cClosingTotals(now: now)
         let byPID = Dictionary(rows.prospects.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { a, _ in a })
-        let cold = Phase0.median5 {
+        let cold = Phase0.median5("c7-closing-cold-\(label)") {
             totals = Phase0cClosingTotals(now: now)
             for p in rows.prospects { totals.update(p.persistentModelID, p) }
         }
-        let read = Phase0.median5 { _ = totals.read(inquiries: rows.inquiries, replyRunAlive: false) }
+        let read = Phase0.median5("c7-closing-read-\(label)") { _ = totals.read(inquiries: rows.inquiries, replyRunAlive: false) }
         var perRow: [Double] = []
         for p in rows.prospects {
             let pid = p.persistentModelID
@@ -1340,7 +1354,7 @@ final class QueueEnginePhase0cLapsProbeTests {
                 }
             }
         }
-        let rowSpread = Phase0cTickLaps.Spread(samples: perRow)
+        let rowSpread = Phase0cTickLaps.Spread("c7-closing-perRow-\(label)", samples: perRow)
         Phase0cTickLaps.say("""
             closing read [\(label)] \(rows.prospects.count) shows, \(rows.inquiries.count) inquiries, \(Phase0.load())
               today's DueReading.derive on main                     \(whole.text)
@@ -1352,7 +1366,7 @@ final class QueueEnginePhase0cLapsProbeTests {
                               the read (lists, counts, inquiries)   \(read.text)
                               per row change                        \(rowSpread.text)
               patched read against derive at 50 instants (13 h apart, 10 with a reply run alive): \(mismatches) of \(comparisons) differ; \
-            rows re-derived per instant median \(refreshed.sorted()[refreshed.count / 2]), max \(refreshed.max() ?? 0)
+            rows re-derived per instant median \(Phase0.medianCount(refreshed)), max \(refreshed.max() ?? 0)
               \(detail.joined(separator: "\n  "))
             """)
     }

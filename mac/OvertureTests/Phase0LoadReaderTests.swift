@@ -132,8 +132,83 @@ struct Phase0ProbeLineTests {
         let fixture = try String(contentsOf: RepoRoot.url.appendingPathComponent("fixtures/probe-reading/lines.txt"),
                                  encoding: .utf8)
         let lines = fixture.split(separator: "\n").map(String.init)
-        #expect(lines.count == 2, "the shared fixture holds \(lines.count) line(s), expected 2")
-        #expect(Phase0.Reading(runs: [3, 1, 2]).probeLine("first-draw-4x") == lines.first)
-        #expect(Phase0.Reading(runs: [314.75]).probeLine("memo-derivation-1x") == lines.last)
+        #expect(lines.count == 4, "the shared fixture holds \(lines.count) line(s), expected 4")
+        guard lines.count == 4 else { return }
+        #expect(Phase0.Reading(runs: [3, 1, 2]).probeLine("first-draw-4x") == lines[0]) // probe-reading-exempt: the line builder's own test
+        #expect(Phase0.Reading(runs: [314.75]).probeLine("memo-derivation-1x") == lines[1]) // probe-reading-exempt: the line builder's own test
+        // #4617: the order lines, which the script reads into the same report.
+        #expect(Phase0.orderLine(alternated: true, ["today-1x", "generic-value-1x"]) == lines[2])
+        #expect(Phase0.orderLine(alternated: false, ["whole-live clone", "dry-run-live clone"]) == lines[3])
+    }
+
+    // #4617: most probes name a reading after a corpus label such as "live clone", and the script drops a line
+    // whose metric holds a space, so the metric is made one word rather than trusted to be one.
+    @Test func aMetricIsAlwaysOneWordTheScriptCanRead() {
+        #expect(Phase0.metricWord("0b1-oracleCold-live clone") == "0b1-oracleCold-live-clone")
+        #expect(Phase0.metricWord("p8-(a) fetch/4x") == "p8--a--fetch-4x")
+        #expect(Phase0.metricWord("first-draw-4x_v2.1") == "first-draw-4x_v2.1")
+        #expect(Phase0.reading("a b", runs: [1], emit: { _ in }).probeLine("a b") == "probe reading: a-b 1.000") // probe-reading-exempt: the line builder's own test
+    }
+
+    /// Every line a constructor printed, in order.
+    final class Emitted: @unchecked Sendable {
+        var lines: [String] = []
+        func emit(_ line: String) { lines.append(line) }
+    }
+
+    @Test func aTimedReadingPrintsItsLineAsItIsTaken() {
+        let out = Emitted()
+        var calls = 0
+        let r = Phase0.median5("whole-1x", emit: out.emit) { calls += 1 }
+        #expect(calls == 5)
+        #expect(r.runs.count == 5)
+        #expect(out.lines == [r.probeLine("whole-1x")])
+    }
+
+    @Test func aReadingOfRunsTheProbeTimedItselfPrintsItsLine() {
+        let out = Emitted()
+        let r = Phase0.reading("p8-a-fetch-4x", runs: [4, 2, 9], emit: out.emit)
+        #expect(r.median == 4)
+        #expect(out.lines == ["probe reading: p8-a-fetch-4x 4.000"])
+    }
+
+    // An empty sample measured nothing: no line, so the comparison names the metric as missing rather than
+    // comparing a zero (L90), while the probe's own text still reads 0 as it always did.
+    @Test func anEmptySamplePrintsNoLine() {
+        let out = Emitted()
+        let r = Phase0.reading("dismiss-1x", runs: [], emit: out.emit)
+        #expect(out.lines.isEmpty)
+        #expect(r.median == 0)
+    }
+
+    // Rival arms timed in ONE run: arm i % n goes first in sample i, so the order effect lands on each alike.
+    @Test func rivalArmsAreTimedInAlternatingOrderAndSaySo() {
+        let out = Emitted()
+        var order: [String] = []
+        let readings = Phase0.alternating([("today-1x", { order.append("A") }), ("generic-1x", { order.append("B") })],
+                                          emit: out.emit)
+        #expect(order == ["A", "B", "B", "A", "A", "B", "B", "A", "A", "B"])
+        #expect(readings.map { $0.runs.count } == [5, 5])
+        #expect(out.lines.count == 3)
+        #expect(out.lines.last == "probe order: alternated today-1x,generic-1x")
+        #expect(out.lines.first?.hasPrefix("probe reading: today-1x ") == true)
+    }
+
+    @Test func threeRivalArmsEachLeadInTurn() {
+        var order: [String] = []
+        _ = Phase0.alternating([("a", { order.append("a") }), ("b", { order.append("b") }), ("c", { order.append("c") })],
+                               samples: 3, emit: { _ in }) // probe-reading-exempt: the line builder's own test
+        #expect(order == ["a", "b", "c", "b", "c", "a", "c", "a", "b"])
+    }
+
+    @Test func aFixedOrderIsSaidRatherThanLeftSilent() {
+        let out = Emitted()
+        Phase0.fixedOrder(["whole-1x", "dry-run-1x"], emit: out.emit)
+        #expect(out.lines == ["probe order: fixed whole-1x,dry-run-1x"])
+    }
+
+    @Test func aCountsMedianIsTheMiddleValueAndZeroWhenEmpty() {
+        #expect(Phase0.medianCount([5, 1, 3]) == 3)
+        #expect(Phase0.medianCount([]) == 0)
     }
 }

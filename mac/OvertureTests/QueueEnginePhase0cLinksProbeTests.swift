@@ -99,14 +99,21 @@ struct Phase0cStats {
 
     var count: Int { samples.count }
     var max: Double { samples.max() ?? 0 }
-    var median: Double { samples.isEmpty ? 0 : samples.sorted()[samples.count / 2] }
+    var median: Double { samples.isEmpty ? 0 : samples.sorted()[samples.count / 2] } // probe-reading-exempt: the accumulator's median, whose line text(_:) prints when it is reported
     var p99: Double {
         guard !samples.isEmpty else { return 0 }
         let sorted = samples.sorted()
         return sorted[Swift.max(0, Int((Double(sorted.count) * 0.99).rounded(.up)) - 1)]
     }
 
-    var text: String {
+    /// #4617: the text a probe reports, which prints the `probe reading:` line of this kind's median under
+    /// `metric` as it is made, so the before and after comparison reads it. No sample, no line.
+    func text(_ metric: String) -> String {
+        if count > 0 { _ = Phase0.reading(metric, runs: samples) }
+        return plainText
+    }
+
+    private var plainText: String {
         count == 0 ? "n 0 (no key of this kind)"
             : String(format: "n %d  max %.3f  p99 %.3f  median %.3f ms", count, max, p99, median)
     }
@@ -941,14 +948,14 @@ struct QueueEnginePhase0cLinksProbeTests {
         let load = Phase0.load()
         let everyRow = Array(rows.values)
         let drawnIDs = Set(rows.filter { drawn[$0.key] ?? true }.map { $0.value.id })
-        let today = Phase0.median5 {
+        let today = Phase0.median5("c1-today-\(label)") {
             _ = CanonicalOracle.showLinkGroup(everyRow)
             _ = CanonicalOracle.showLinkCollapse(everyRow, drawn: drawnIDs)
         }
         var extracted: [(key: Phase0cKey, facts: Patch.Facts?)] = []
-        let extraction = Phase0.median5 { extracted = rows.keys.map { ($0, facts($0)) } }
+        let extraction = Phase0.median5("c1-extraction-\(label)") { extracted = rows.keys.map { ($0, facts($0)) } }
         var patch = Patch()
-        let cold = Phase0.median5 {
+        let cold = Phase0.median5("c1-cold-\(label)") {
             patch = Patch()
             _ = patch.apply(extracted)
         }
@@ -996,7 +1003,7 @@ struct QueueEnginePhase0cLinksProbeTests {
             _ = timed([(key, facts(key))], into: &touch, rebuilt: &touchRows)
             if i % stride(bucketList.count) == 0 { verify("bucket touch \(i)") }
         }
-        lines.append("every bucket rebuilt (\(bucketList.count) buckets)          \(touch.text), most rows re-evaluated \(touchRows)")
+        lines.append("every bucket rebuilt (\(bucketList.count) buckets)          \(touch.text("c1-touch-\(label)")), most rows re-evaluated \(touchRows)")
         all.merge(touch)
 
         // B: every poisonable token: plant a row under another title at a holder's venue, then remove it.
@@ -1018,8 +1025,8 @@ struct QueueEnginePhase0cLinksProbeTests {
             _ = timed([(key, nil)], into: &poisonOff, rebuilt: &poisonRows)
         }
         verify("after every poison flip")
-        lines.append("poison a token (\(tokens.count) tokens, \(flips) flipped)      \(poisonOn.text), most rows re-evaluated \(poisonRows)")
-        lines.append("unpoison it                                  \(poisonOff.text)")
+        lines.append("poison a token (\(tokens.count) tokens, \(flips) flipped)      \(poisonOn.text("c1-poisonOn-\(label)")), most rows re-evaluated \(poisonRows)")
+        lines.append("unpoison it                                  \(poisonOff.text("c1-poisonOff-\(label)"))")
         all.merge(poisonOn)
         all.merge(poisonOff)
 
@@ -1041,8 +1048,8 @@ struct QueueEnginePhase0cLinksProbeTests {
             }
         }
         verify("after the largest buckets moved and back")
-        lines.append("move out of the 5 largest buckets (\(moved) rows)   \(moveOut.text), most rows re-evaluated \(moveRows)")
-        lines.append("move back                                    \(moveBack.text)")
+        lines.append("move out of the 5 largest buckets (\(moved) rows)   \(moveOut.text("c1-moveOut-\(label)")), most rows re-evaluated \(moveRows)")
+        lines.append("move back                                    \(moveBack.text("c1-moveBack-\(label)"))")
         all.merge(moveOut)
         all.merge(moveBack)
 
@@ -1058,8 +1065,8 @@ struct QueueEnginePhase0cLinksProbeTests {
             _ = timed([(key, facts(key))], into: &undismiss, rebuilt: &frontRows)
         }
         verify("after every front dismissed and back")
-        lines.append("front dismissed (\(frontIDs.count) fronts)                 \(dismiss.text), most hidden flips \(hiddenFlips)")
-        lines.append("front undismissed                            \(undismiss.text)")
+        lines.append("front dismissed (\(frontIDs.count) fronts)                 \(dismiss.text("c1-dismiss-\(label)")), most hidden flips \(hiddenFlips)")
+        lines.append("front undismissed                            \(undismiss.text("c1-undismiss-\(label)"))")
         all.merge(dismiss)
         all.merge(undismiss)
 
@@ -1077,9 +1084,12 @@ struct QueueEnginePhase0cLinksProbeTests {
             _ = timed([(key, facts(key))], into: &miss, rebuilt: &missRows)
         }
         verify("after every clustered member's feed flip")
-        lines.append("feed miss flip and back (\(members.count) members)       \(miss.text)")
+        lines.append("feed miss flip and back (\(members.count) members)       \(miss.text("c1-miss-\(label)"))")
         all.merge(miss)
 
+        // #4617: today's grouping (the noise floor) and the prototype's cold build are read against each other,
+        // timed in this order in every run, so that comparison inside a run carries the order effect, said here.
+        Phase0.fixedOrder(["c1-today-\(label)", "c1-cold-\(label)"])
         Phase0cLinks.say("""
             0c.1 [\(label)] \(rows.count) rows, \(bucketList.count) buckets (largest \(sizes.prefix(5).map(String.init).joined(separator: ", "))), \
             \(multi) rows in multi-row clusters, \(tokens.count) distinct tokens (\(alreadyPoisoned) already poisoned), \(load)
@@ -1087,7 +1097,7 @@ struct QueueEnginePhase0cLinksProbeTests {
               prototype extraction of every row                          \(extraction.text)
               prototype cold build                                       \(cold.text)
               \(lines.joined(separator: "\n  "))
-              ALL operations                                              \(all.text)
+              ALL operations                                              \(all.text("c1-all-\(label)"))
               oracle comparisons \(checks), mismatches \(mismatches)
             """)
         return all
@@ -1131,11 +1141,11 @@ struct QueueEnginePhase0cLinksProbeTests {
         for p in models { byKey[.row(p.persistentModelID)] = p }
         var asOf = startAsOf
         let load = Phase0.load()
-        let todayT2 = Phase0.median5 { _ = ContradictedCancellation.contradictedKeys(among: models) }
-        let todayT3 = Phase0.median5 { _ = FeedBreakEvent.events(among: models, asOf: asOf) }
+        let todayT2 = Phase0.median5("c2-todayT2-\(label)") { _ = ContradictedCancellation.contradictedKeys(among: models) }
+        let todayT3 = Phase0.median5("c2-todayT3-\(label)") { _ = FeedBreakEvent.events(among: models, asOf: asOf) }
         var t2 = T2()
         var t3 = T3(asOf: asOf)
-        let cold = Phase0.median5 {
+        let cold = Phase0.median5("c2-cold-\(label)") {
             t2 = T2()
             t3 = T3(asOf: asOf)
             _ = t2.apply(byKey.map { ($0.key, T2.Facts($0.value)) })
@@ -1274,13 +1284,13 @@ struct QueueEnginePhase0cLinksProbeTests {
             if room.isEmpty { blank = here }
         }
         verify("after every room")
-        lines.append("T2 live row touch (tests every flagged row in its room)   \(liveTouch.text)")
-        lines.append("T2 flag a live row (tests every live row in its room)     \(flagOn.text)")
-        lines.append("T2 unflag it                                              \(flagOff.text)")
-        lines.append("T2 flagged row touch                                      \(flaggedTouch.text)")
-        lines.append("T2 live row to another room (old and new room)            \(moveOut.text)")
-        lines.append("T2 and back                                               \(moveBack.text)")
-        lines.append("T2 the \"\" (venueless) room alone                          \(blank.text)")
+        lines.append("T2 live row touch (tests every flagged row in its room)   \(liveTouch.text("c2-liveTouch-\(label)"))")
+        lines.append("T2 flag a live row (tests every live row in its room)     \(flagOn.text("c2-flagOn-\(label)"))")
+        lines.append("T2 unflag it                                              \(flagOff.text("c2-flagOff-\(label)"))")
+        lines.append("T2 flagged row touch                                      \(flaggedTouch.text("c2-flaggedTouch-\(label)"))")
+        lines.append("T2 live row to another room (old and new room)            \(moveOut.text("c2-moveOut-\(label)"))")
+        lines.append("T2 and back                                               \(moveBack.text("c2-moveBack-\(label)"))")
+        lines.append("T2 the \"\" (venueless) room alone                          \(blank.text("c2-blank-\(label)"))")
         for s in [liveTouch, flagOn, flagOff, flaggedTouch, moveOut, moveBack] { all.merge(s) }
 
         // T3: every real bucket of flagged future rows gains a member at its count, which then leaves.
@@ -1299,8 +1309,8 @@ struct QueueEnginePhase0cLinksProbeTests {
                      midway: { if i % stride(bucketList.count) == 0 { verify("bucket \(i) joined") } })
         }
         verify("after every bucket joined and left")
-        lines.append("T3 third member joining (\(bucketList.count) buckets)                 \(join.text)")
-        lines.append("T3 and leaving                                            \(leave.text)")
+        lines.append("T3 third member joining (\(bucketList.count) buckets)                 \(join.text("c2-join-\(label)"))")
+        lines.append("T3 and leaving                                            \(leave.text("c2-leave-\(label)"))")
         all.merge(join)
         all.merge(leave)
 
@@ -1318,8 +1328,8 @@ struct QueueEnginePhase0cLinksProbeTests {
                      midway: { if i % stride(flaggedFuture.count) == 0 { verify("twin \(i) appeared") } })
         }
         verify("after every twin appeared and went")
-        lines.append("T2 to T3 twin appearing (\(flaggedFuture.count) flagged future rows)      \(appear.text)")
-        lines.append("T2 to T3 and going                                        \(vanish.text)")
+        lines.append("T2 to T3 twin appearing (\(flaggedFuture.count) flagged future rows)      \(appear.text("c2-appear-\(label)"))")
+        lines.append("T2 to T3 and going                                        \(vanish.text("c2-vanish-\(label)"))")
         all.merge(appear)
         all.merge(vanish)
 
@@ -1336,8 +1346,8 @@ struct QueueEnginePhase0cLinksProbeTests {
                  midway: { upSplit = splitText(); verify("accrual") })
         backSplit = splitText()
         verify("accrual undone")
-        lines.append("T3 scout accrual, every flagged row (\(flaggedAll.count) rows) up one      \(accrual.text) \(upSplit)")
-        lines.append("T3 and back                                               \(accrualBack.text) \(backSplit)")
+        lines.append("T3 scout accrual, every flagged row (\(flaggedAll.count) rows) up one      \(accrual.text("c2-accrual-\(label)")) \(upSplit)")
+        lines.append("T3 and back                                               \(accrualBack.text("c2-accrualBack-\(label)")) \(backSplit)")
         all.merge(accrual)
         all.merge(accrualBack)
 
@@ -1353,8 +1363,8 @@ struct QueueEnginePhase0cLinksProbeTests {
             downBackSplit = splitText()
             verify("accrual down undone")
         }
-        lines.append("T3 accrual down, rows above goneThreshold (\(above.count) rows) down one  \(down.text) \(downSplit)")
-        lines.append("T3 and back                                               \(downBack.text) \(downBackSplit)")
+        lines.append("T3 accrual down, rows above goneThreshold (\(above.count) rows) down one  \(down.text("c2-down-\(label)")) \(downSplit)")
+        lines.append("T3 and back                                               \(downBack.text("c2-downBack-\(label)")) \(downBackSplit)")
         all.merge(down)
         all.merge(downBack)
 
@@ -1381,8 +1391,8 @@ struct QueueEnginePhase0cLinksProbeTests {
             asOf = startAsOf
         }
         verify("after every rollover and back", brute: true)
-        lines.append("T3 rollover past each last night (\(nights.count) nights)       \(roll.text)")
-        lines.append("T3 and back                                               \(rollBack.text)")
+        lines.append("T3 rollover past each last night (\(nights.count) nights)       \(roll.text("c2-roll-\(label)"))")
+        lines.append("T3 and back                                               \(rollBack.text("c2-rollBack-\(label)"))")
         all.merge(roll)
         all.merge(rollBack)
 
@@ -1403,7 +1413,7 @@ struct QueueEnginePhase0cLinksProbeTests {
         var replayWorst = 0.0
         for kind in kindOrder {
             guard let slow = slowest[kind] else { continue }
-            let reading = Phase0.Reading(runs: (0..<5).map { _ in slow.replay() })
+            let reading = Phase0.reading("c2-replay-\(kind)-\(label)", runs: (0..<5).map { _ in slow.replay() })
             let after = Phase0.oneMinuteLoad()
             loads.append(after)
             replayWorst = max(replayWorst, reading.median)
@@ -1415,6 +1425,9 @@ struct QueueEnginePhase0cLinksProbeTests {
         let sizesText = roomSizes.sorted { ($0.live + $0.flagged) > ($1.live + $1.flagged) }
             .map { "\($0.live)/\($0.flagged)" }.joined(separator: " ")
         let blankRoom = roomSizes.first { $0.room.isEmpty }
+        // #4617: today's two terms (the noise floor) and the prototypes' cold build are read against each other,
+        // timed in this order in every run, so that comparison inside a run carries the order effect, said here.
+        Phase0.fixedOrder(["c2-todayT2-\(label)", "c2-todayT3-\(label)", "c2-cold-\(label)"])
         Phase0cLinks.say("""
             0c.2 [\(label)] \(models.count) rows, asOf \(startAsOf), \(rooms.count) rooms, \
             \(t2.contradicted.count) contradicted, \(bucketList.count) flagged future buckets, \(load), Debug build
@@ -1422,7 +1435,7 @@ struct QueueEnginePhase0cLinksProbeTests {
               today's FeedBreakEvent.events, contradicted nil           \(todayT3.text)
               prototypes T2 plus T3 cold build                          \(cold.text)
               \(lines.joined(separator: "\n  "))
-              ALL operations                                            \(all.text)
+              ALL operations                                            \(all.text("c2-all-\(label)"))
               most pair tests in one change \(testsMax)
               the "" room: \(blankRoom.map { "\($0.live) live, \($0.flagged) flagged" } ?? "absent")
               every room's size, live/flagged, largest first: \(sizesText)

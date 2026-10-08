@@ -978,7 +978,7 @@ final class QueueEngineCostProbeTests {
             // The start with the launch's reads made in a turn: the first read and the whole fill back to back,
             // which the app spreads across turns and off the main thread (#4358 slice E3, measured batch by
             // batch in `launchFillInBatchesAtOneAndFourTimesTheStore`).
-            let fullRead = Phase0.median5 {
+            let fullRead = Phase0.median5("intake-fullRead-\(label)") {
                 engine().start()
                 turns.run()
             }
@@ -1024,14 +1024,17 @@ final class QueueEngineCostProbeTests {
             }
             let viewport = Set(pass([]).focusedRows.prefix(QueueViewportAssumption.rows).map(\.id))
             _ = pass(viewport)
-            let today = Phase0.median5 { _ = pass(viewport) }
+            let today = Phase0.median5("intake-todayPass-\(label)") { _ = pass(viewport) }
+            // #4617: the engine's start and today's pass (the yardstick) are read against each other, the engine
+            // timed first in every run, so that comparison inside a run carries the order effect, said here.
+            Phase0.fixedOrder(["intake-fullRead-\(label)", "intake-todayPass-\(label)"])
             print("""
                 engine-cost [\(label)] \(Phase0.load())
                   shape                                     \(Phase0.shape(shows))
                   start, read and whole fill in one go      \(fullRead.text)
-                  turn taking in one edited row             \(Phase0.Reading(runs: edits).text)
-                  turn taking in one equal-value write      \(Phase0.Reading(runs: equals).text)
-                  turn taking in about 40 rows in one save  \(Phase0.Reading(runs: nights).text)
+                  turn taking in one edited row             \(Phase0.reading("intake-oneEditedRow-\(label)", runs: edits).text)
+                  turn taking in one equal-value write      \(Phase0.reading("intake-oneEqualWrite-\(label)", runs: equals).text)
+                  turn taking in about 40 rows in one save  \(Phase0.reading("intake-fortyRowSave-\(label)", runs: nights).text)
                   value pass over facts                     UNMEASURED: make over facts needs #4357 (plan: 68 to 155 ms at 1,344, 275 to 624 at 5,376)
                   today's pass over models, viewport cards  \(today.text)  (the yardstick)
                   engine turns \(live.counters.turns), rows read again \(live.counters.rowsReread), equal reads dropped \(live.counters.equalValueReads)
@@ -1056,11 +1059,12 @@ final class QueueEngineCostProbeTests {
         }
         let big = try Phase0.scaledCopy(of: clone, factor: 4, in: dir)
         func ms(_ seconds: [TimeInterval]) -> [Double] { seconds.map { $0 * 1000 } }
-        func spread(_ runs: [Double]) -> String {
+        // #4617: the median's `probe reading:` line printed under `metric` as it is taken.
+        func spread(_ metric: String, _ runs: [Double]) -> String {
             let sorted = runs.sorted()
             guard !sorted.isEmpty else { return "UNMEASURED: nothing ran" }
             let p99 = sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.99).rounded(.up)) - 1)]
-            return String(format: "median %.1f ms, p99 %.1f, max %.1f over %d", sorted[sorted.count / 2], p99,
+            return String(format: "median %.1f ms, p99 %.1f, max %.1f over %d", Phase0.reading(metric, runs: runs).median, p99,
                           sorted[sorted.count - 1], sorted.count)
         }
         for (label, url) in [("live clone", clone), ("4x", big)] {
@@ -1116,12 +1120,12 @@ final class QueueEngineCostProbeTests {
             print("""
                 engine-launch [\(label)] \(Phase0.load())
                   shape                                     \(shape)
-                  first read, launch thread, wall           \(Phase0.Reading(runs: firstReads).text)  (holds no main actor turn)
-                  each batch, engine's own uptime           \(spread(batches))
+                  first read, launch thread, wall           \(Phase0.reading("launch-firstRead-\(label)", runs: firstReads).text)  (holds no main actor turn)
+                  each batch, engine's own uptime           \(spread("launch-batch-\(label)", batches))
                   batches over \(String(format: "%.0f", budget)) ms                       \(batches.filter { $0 > budget }.count) of \(batches.count)
-                  each fill turn, timed from outside        \(spread(turnTimes))
-                  inquiries in one fetch                    \(Phase0.Reading(runs: inquiries).text)
-                  fill, first output to done, wall          \(Phase0.Reading(runs: fills).text)
+                  each fill turn, timed from outside        \(spread("launch-fillTurn-\(label)", turnTimes))
+                  inquiries in one fetch                    \(Phase0.reading("launch-inquiries-\(label)", runs: inquiries).text)
+                  fill, first output to done, wall          \(Phase0.reading("launch-fill-\(label)", runs: fills).text)
                   shortfall per launch                      \(shortfalls.joined(separator: ", "))
                 """)
         }
