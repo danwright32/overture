@@ -137,6 +137,7 @@ STUB
         # "pr view" arm, which answers everything with "main" and would otherwise be read as a
         # body that answers nothing, refusing every merge these fixtures exist to assert.
         *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes. Premise re-checked: held." ;;
+        *"/files"*)       echo "docs/x.md" ;;
         *"pr view"*)   echo "main" ;;
         *"run list"*)  echo "${base_conclusion}" ;;
         *"pr merge"*)  touch "${tmp}/MERGED" ;;
@@ -220,6 +221,7 @@ STUB
         # body that answers nothing, refusing every merge these fixtures exist to assert.
         *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes. Premise re-checked: held." ;;
         *"--json files"*) echo "mac/Overture/UI/NewView.swift" ;;
+        *"/files"*)       echo "docs/x.md" ;;
         *"pr view"*)      echo "main" ;;
         *"run list"*)     echo "success" ;;
         *"pr merge"*)     touch "${tmp}/MERGED" ;;
@@ -265,6 +267,7 @@ completeness_refusal_check() (
   gh_as_danwright32() {
     case "$*" in
       *"--json body"*) echo "Fixes the thing. Tests pass." ;;
+      *"/files"*)       echo "docs/x.md" ;;
       *"pr view"*)     echo "main" ;;
       *"run list"*)    echo "success" ;;
       *"pr merge"*)    touch "${tmp}/MERGED" ;;

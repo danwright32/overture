@@ -344,6 +344,8 @@ release_verify_slot() { RELEASE_CALLED="yes"; }
 gh_as_danwright32() {
   case "${2:-}" in
     view) printf 'MERGED' ;;
+    # The engine gate's files question (paged, #4358 E4d1) answers a file outside the app: this case is the merge's.
+    --paginate) printf 'docs/x.md' ;;
     *) return 0 ;;
   esac
 }
