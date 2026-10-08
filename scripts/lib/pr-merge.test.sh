@@ -207,6 +207,46 @@ gate_passes() { echo "$1" >> "${GATE_RUNS}"; echo "noise"; echo "engine-divergen
 gate_fails() { echo "$1" >> "${GATE_RUNS}"; echo "the merge gate REFUSED: factMismatch x1"; return 1; }
 gate_skipped() { echo "$1" >> "${GATE_RUNS}"; echo "Test theBranchsVerifier... skipped: no live store"; return 0; }
 
+# engine_gate_run itself, over a throwaway repository whose runner is a stub committed at the head, so the run
+# reaches no live store: its verdict and exit code come back, and the worktree and its temporary folder are gone
+# afterwards on every exit, an interrupt included (the lessons review of E4d1, L114, L473).
+GATE_REPO="$(mktemp -d "${TMPDIR:-/tmp}/engine-gate-repo.XXXXXX")"
+GATE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/engine-gate-tmp.XXXXXX")"
+gate_repo_commit() {  # gate_repo_commit <runner body>: commits the stub runner and prints the commit
+  mkdir -p "${GATE_REPO}/mac/scripts"
+  printf '#!/bin/bash\n%s\n' "$1" > "${GATE_REPO}/mac/scripts/run-tests-locked.sh"
+  chmod +x "${GATE_REPO}/mac/scripts/run-tests-locked.sh"
+  git -C "${GATE_REPO}" add -A >/dev/null
+  git -C "${GATE_REPO}" -c user.name=fixture -c user.email=fixture@example.invalid commit -q -m stub >/dev/null
+  git -C "${GATE_REPO}" rev-parse HEAD
+}
+git -C "${GATE_REPO}" init -q
+gate_run_out() {  # gate_run_out <commit>: runs engine_gate_run against the throwaway repository
+  local rc=0
+  REPO_ROOT="${GATE_REPO}" TMPDIR="${GATE_TMP}" engine_gate_run "$1" 2>&1 || rc=$?
+  echo "RC=${rc}"
+  echo "WORKTREES=$(git -C "${GATE_REPO}" worktree list | wc -l | tr -d ' ')"
+  echo "LEFT=$(ls -A "${GATE_TMP}" | wc -l | tr -d ' ')"
+}
+PASS_HEAD="$(gate_repo_commit 'echo "commit ${TEST_RUNNER_OVERTURE_GATE_COMMIT}"; echo "engine-divergence-gate: PASSED matches 6, records 0"')"
+OUT="$(gate_run_out "${PASS_HEAD}")"
+assert_contains "the gate's run reports its verdict" "${OUT}" "engine-divergence-gate: PASSED"
+assert_contains "and is handed the commit it runs at" "${OUT}" "commit ${PASS_HEAD}"
+assert_contains "and exits 0 when the suite does" "${OUT}" "RC=0"
+assert_contains "and leaves no worktree behind" "${OUT}" "WORKTREES=1"
+assert_contains "and no temporary folder" "${OUT}" "LEFT=0"
+FAIL_HEAD="$(gate_repo_commit 'echo "the merge gate REFUSED"; exit 3')"
+OUT="$(gate_run_out "${FAIL_HEAD}")"
+assert_contains "a failed suite's exit code comes back" "${OUT}" "RC=3"
+assert_contains "and the worktree is still removed" "${OUT}" "WORKTREES=1"
+assert_contains "and the temporary folder" "${OUT}" "LEFT=0"
+KILL_HEAD="$(gate_repo_commit 'kill -TERM "${PPID}"; sleep 5')"
+OUT="$(gate_run_out "${KILL_HEAD}")"
+assert_contains "an interrupted run says so in its exit code" "${OUT}" "RC=130"
+assert_contains "and still removes its worktree" "${OUT}" "WORKTREES=1"
+assert_contains "and its temporary folder" "${OUT}" "LEFT=0"
+rm -rf "${GATE_REPO}" "${GATE_TMP}"
+
 OUT="$(gate_files_out "scripts/lib/scratch.sh" "${GATE_SHA}" gate_fails)"
 assert_contains "a PR touching no engine file is allowed" "${OUT}" "RC=0"
 assert_contains "and says why the gate was not run" "${OUT}" "touches no queue engine file"

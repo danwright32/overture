@@ -89,20 +89,31 @@ lessons_review_allows() {
 ENGINE_GATE_PATHS_RE='^mac/Overture/(App/QueueEngine|App/RootView\.swift|Domain/QueueEngine|Domain/FactStore\.swift|Domain/ShowIdentity\.swift|Domain/CardDivergence|UI/QueueRenderPass\.swift|UI/QueueView)'
 ENGINE_GATE_PASSED_LINE='engine-divergence-gate: PASSED'
 
-# engine_gate_run <head-sha>: the suite at that commit, in a worktree of its own, removed afterwards.
+# engine_gate_run <head-sha>: the suite at that commit, in a worktree of its own, removed afterwards on EVERY exit,
+# an interrupt included, by a trap in a subshell of its own (L114, L473; the lessons review of E4d1). No deadline of
+# its own: run-tests-locked.sh ends a run that stops moving and says STALLED AND ENDED (#3976), which this then
+# reports as a failed gate.
 engine_gate_run() {
-  local head="$1" parent wt rc=0
+  local head="$1" parent
   parent="$(mktemp -d "${TMPDIR:-/tmp}/overture-engine-gate.XXXXXX")" || return 1
-  wt="${parent}/tree"
-  if ! git -C "${REPO_ROOT}" worktree add --detach --quiet "${wt}" "${head}" 2>&1; then
-    rm -rf "${parent}"
-    return 1
-  fi
-  TEST_RUNNER_OVERTURE_GATE_COMMIT="${head}" \
-    "${wt}/mac/scripts/run-tests-locked.sh" -only-testing:OvertureTests/EngineDivergenceGateTests 2>&1 || rc=$?
-  git -C "${REPO_ROOT}" worktree remove --force "${wt}" >/dev/null 2>&1 || true
-  rm -rf "${parent}"
-  return "${rc}"
+  (
+    # Copied out of the function's scope (its locals, and a REPO_ROOT given for the call alone), which an EXIT trap
+    # reached from a signal trap no longer sees under macOS bash 3.2 (measured: `parent: unbound variable` under
+    # set -u, and the worktree left behind in the repository the call named).
+    gate_parent="${parent}"
+    gate_repo="${REPO_ROOT}"
+    wt="${gate_parent}/tree"
+    engine_gate_cleanup() {
+      git -C "${gate_repo}" worktree remove --force "${wt}" >/dev/null 2>&1 || true
+      rm -rf "${gate_parent}"
+      git -C "${gate_repo}" worktree prune >/dev/null 2>&1 || true
+    }
+    trap engine_gate_cleanup EXIT
+    trap 'exit 130' INT TERM
+    git -C "${gate_repo}" worktree add --detach --quiet "${wt}" "${head}" 2>&1 || exit 1
+    TEST_RUNNER_OVERTURE_GATE_COMMIT="${head}" \
+      "${wt}/mac/scripts/run-tests-locked.sh" -only-testing:OvertureTests/EngineDivergenceGateTests 2>&1
+  )
 }
 
 # engine_gate_allows <pr-number> <head-sha>

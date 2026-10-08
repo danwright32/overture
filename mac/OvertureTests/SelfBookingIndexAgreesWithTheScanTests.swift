@@ -100,6 +100,28 @@ struct SelfBookingIndexAgreesWithTheScanTests {
                 "the index depends on the order its shows arrived in")
     }
 
+    // The tie-break's key is built in an order of its own, so two equal shows whose times were collected in different
+    // orders give the same key, and shows differing only in their times give different ones (never a reflected
+    // description, which prints a dictionary in the order it happens to hold it; the lessons review of E4d1).
+    @Test func theTieBreakKeyIsTheSameForEqualShowsAndDiffersForDifferentOnes() {
+        var forward: [String: [String]] = [:]
+        var backward: [String: [String]] = [:]
+        let nights = (1...24).map { "2026-11-\(String(format: "%02d", $0))" }
+        for night in nights { forward[night] = ["19:30"] }
+        for night in nights.reversed() { backward[night] = ["19:30"] }
+        func show(_ times: [String: [String]]) -> SelfBookingConflict.Show {
+            SelfBookingConflict.Show(key: "show-1", nights: nights, commitment: .emailed,
+                                     engagementKey: "Ensemble 1", name: "Ensemble 1", timesByNight: times)
+        }
+        #expect(show(forward) == show(backward))
+        #expect(SelfBookingConflict.NightIndex.orderKey(show(forward))
+                == SelfBookingConflict.NightIndex.orderKey(show(backward)), "two equal shows give different keys")
+        var later = forward
+        later[nights[0]] = ["20:00"]
+        #expect(SelfBookingConflict.NightIndex.orderKey(show(forward))
+                != SelfBookingConflict.NightIndex.orderKey(show(later)), "a different time gives the same key")
+    }
+
     // The other half of the same split. A show the clock proves is workable alongside another is NOT a
     // clash, and the two readings must agree about that too, or a reassuring line and an actionable one
     // swap places.
