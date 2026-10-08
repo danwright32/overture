@@ -357,11 +357,28 @@ struct OneChangeDerivesTheQueueOnceTests {
     // (#4252), so the cards are now adopted under the same re-arm that serves it.
     //
     // This is the shape every other test here sets up in `brought(up:)`, so on main each of them started
-    // from a queue that had just derived twice. Not reproduced, so stated as a candidate only: a runner slow
-    // enough to deliver that refetch after the settle went quiet would count the second derivation against
-    // the change under test, which is the reason #4591's two CI flakes recorded.
+    // from a queue that had just derived twice. #4591 offered a late refetch as the cause of its CI flakes,
+    // unreproduced. #4609 measured the one that remained: a fresh store at a recycled address, below.
     @Test func showsArrivingUnderAMountedQueueDeriveItOnce() async throws {
-        let c = try container()
+        try await showsArriving(in: container())
+    }
+
+    // #4609: the same, over a store made at the ADDRESS of one that took a save through a second context and
+    // was released, which is what an earlier test in a broad run leaves behind.
+    //
+    // `StoreSaveCount` kept its "this store has taken a foreign save" fact by `ObjectIdentifier`, an address,
+    // so the fresh store inherited it. A store with foreign saves never has a refetch served (#4252), so the
+    // save's refetch rebuilt the whole queue: `allProspects, prospects | nothing this view reads`, the exact
+    // pair #4609's broad run recorded, and every saved-change test here was exposed the same way. Run alone
+    // the address is never one a foreign save left, which is why the test only ever failed in company.
+    @Test func showsArrivingUnderAQueueOverARecycledStoreDeriveItOnce() async throws {
+        let recycled = try #require(try RecycledStore.whereAForeignSavedOneDied(AppSchema.models) { other in
+            other.insert(ExcludedTown(town: "Poughkeepsie"))
+        }, "UNMEASURED: no container was made at the address of a released foreign-saved one, so nothing was measured")
+        try await showsArriving(in: recycled)
+    }
+
+    private func showsArriving(in c: ModelContainer) async throws {
         let h = host(c)
         defer { tearDown(h) }
         _ = await settle(h.hosting)
@@ -375,7 +392,9 @@ struct OneChangeDerivesTheQueueOnceTests {
         #expect(why.count == 1, Comment(rawValue:
             "shows arriving under a mounted queue derived it \(why.count) times: \(why.joined(separator: " | ")). "
             + "One is the shows; a second is the first frame's cards bought with another whole-store pass "
-            + "because the save's refetch had marked the answer before they could be adopted (#4591)"))
+            + "because the save's refetch had marked the answer before they could be adopted (#4591), or a "
+            + "refetch the memo refused to serve because the store reads as foreign-saved: "
+            + "\(StoreSaveCount.shared.hasForeignSaves(in: c)) (#4609)"))
     }
 
     // #4591: a removal that REVEALS rows derives the queue once.

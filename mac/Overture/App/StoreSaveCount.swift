@@ -44,9 +44,20 @@ final class StoreSaveCount: @unchecked Sendable {
     static let shared = StoreSaveCount()
 
     private let lock = NSLock()
-    private var counts: [ObjectIdentifier: Int] = [:]
-    private var foreign: Set<ObjectIdentifier> = []
-    private var foreignCounts: [ObjectIdentifier: Int] = [:]
+    // #4609: ONE record per store, holding the store WEAKLY, so a record belongs to the store that made it
+    // and never to the next container made at its address. An `ObjectIdentifier` names an address, and the
+    // address is free again the moment a container is released. Keyed by it alone, a fresh store made where a
+    // foreign-saved one had died inherited that store's foreign saves, so every memo over it stopped serving
+    // SwiftData's refetch and derived the whole queue a second time. Measured in the hosted suite, where
+    // containers come and go by the thousand: in one broad run, the one test of 110 whose fresh store already
+    // read foreign was the one that failed, `refetchRefused hasChanges=false foreign=true`. The running app
+    // holds one store for its whole life, so there it never arose.
+    private struct Record {
+        weak var store: ModelContainer?
+        var saves = 0
+        var foreignSaves = 0
+    }
+    private var records: [ObjectIdentifier: Record] = [:]
     private var token: NSObjectProtocol?
     private let center: NotificationCenter
 
@@ -75,11 +86,25 @@ final class StoreSaveCount: @unchecked Sendable {
         let isMain = Thread.isMainThread
             && MainActor.assumeIsolated { ObjectIdentifier(container.mainContext) == savedID }
         lock.lock(); defer { lock.unlock() }
-        counts[store, default: 0] += 1
-        if !isMain {
-            foreign.insert(store)
-            foreignCounts[store, default: 0] += 1
+        var mine: Record
+        if let held = recordUnderLock(of: container) {
+            mine = held
+        } else {
+            // A store's first save. Records left by released stores are dropped here, so the table holds the
+            // stores that are alive rather than every one the process ever made.
+            records = records.filter { $0.value.store != nil }
+            mine = Record(store: container)
         }
+        mine.saves += 1
+        if !isMain { mine.foreignSaves += 1 }
+        records[store] = mine
+    }
+
+    /// The record `store` itself made, or nil when there is none, including when the one at its address was
+    /// made by a store since released (#4609). Called with the lock held.
+    private func recordUnderLock(of store: ModelContainer) -> Record? {
+        guard let found = records[ObjectIdentifier(store)], found.store === store else { return nil }
+        return found
     }
 
     /// #4358 (plan v7 D2): how many saves into `store` came through a context other than its main one. Only
@@ -88,19 +113,19 @@ final class StoreSaveCount: @unchecked Sendable {
     /// again when it moves, because such a save leaves the main context's own copies stale (#4106 probe 2).
     func foreignSaveCount(for store: ModelContainer) -> Int {
         lock.lock(); defer { lock.unlock() }
-        return foreignCounts[ObjectIdentifier(store)] ?? 0
+        return recordUnderLock(of: store)?.foreignSaves ?? 0
     }
 
     /// Whether `store` has ever taken a save through a context other than its main one.
     func hasForeignSaves(in store: ModelContainer) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        return foreign.contains(ObjectIdentifier(store))
+        return (recordUnderLock(of: store)?.foreignSaves ?? 0) > 0
     }
 
     /// Saves into `store`, through any of its contexts, since this counter was made. Only ever compared
     /// with an earlier reading of itself.
     func value(for store: ModelContainer) -> Int {
         lock.lock(); defer { lock.unlock() }
-        return counts[ObjectIdentifier(store)] ?? 0
+        return recordUnderLock(of: store)?.saves ?? 0
     }
 }
