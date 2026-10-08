@@ -322,7 +322,7 @@ enum RealUseSteps {
 
     /// Add a lead: one pasted page, its read answered at once with `events`, through the Add lead sheet's model.
     static func pasteLead(_ context: ModelContext, url: String, events: [ScoutExtractEvent], today: String,
-                          now: Date) async throws -> Bool {
+                          now: Date, exportURL: URL, importedHistory: URL) async throws -> Bool {
         guard let page = URL(string: url) else { return false }
         let leadId = LeadIntakeModel.sourceId(for: page)
         let answer = ScoutExtractResults(version: 1, generatedAt: today + "T12:00:00Z", results: [
@@ -333,7 +333,8 @@ enum RealUseSteps {
             defaults: ScratchDefaults.make("QueueEngineFullReadNets.lead"),
             fetch: { FetchedPage(normalizedHTML: html, finalURL: $0.absoluteString, contentHash: "probe-" + leadId) },
             pin: { _, name in URL(fileURLWithPath: "/dev/null/probe-\(name).html") }, launch: { _ in },
-            readResults: { $0 == leadId ? answer : nil }, isRunAlive: { false })
+            readResults: { $0 == leadId ? answer : nil }, isRunAlive: { false },
+            exportURL: exportURL, importedHistory: importedHistory)
         model.urlText = url
         await model.start(into: context, now: now, today: today, pollEvery: 0, giveUpAfter: 0, sleep: { _ in })
         guard case .added = model.phase else { return false }
@@ -416,7 +417,8 @@ final class QueueEngineFullReadNetsTests {
                 },
                 fetch: { url, _, _ in throw ReachedForTheNetwork(url: url) },
                 pin: { _, id in URL(fileURLWithPath: "/dev/null/probe-\(id).html") }, launch: { _ in },
-                now: LandingOracleCorpus.now, defaults: ScratchDefaults.make("QueueEngineFullReadNets.runScout"))
+                now: LandingOracleCorpus.now, defaults: ScratchDefaults.make("QueueEngineFullReadNets.runScout"),
+                exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
             try run.context.save()
             return outcome.sources.contains { if case .ingested = $0.state { return true } else { return false } }
         }
@@ -432,7 +434,9 @@ final class QueueEngineFullReadNetsTests {
         for source in LandingOracleCorpus.sources {
             try await run.step("add a lead (\(source.id))") {
                 try await RealUseSteps.pasteLead(run.context, url: source.listingsURL, events: source.events,
-                                                 today: LandingOracleCorpus.today, now: LandingOracleCorpus.now)
+                                                 today: LandingOracleCorpus.today, now: LandingOracleCorpus.now,
+                                                 exportURL: AbsentHandoff.export,
+                                                 importedHistory: AbsentHandoff.history)
             }
         }
         expectQuiet(run)
@@ -564,7 +568,8 @@ final class QueueEngineNetsRealUseProbeTests {
             let leadEvents = frozen.results.first { !$0.events.isEmpty }?.events ?? []
             try await run.step("add a lead") {
                 try await RealUseSteps.pasteLead(context, url: "https://lead-probe.example.org/season", events: leadEvents,
-                                                 today: today, now: now)
+                                                 today: today, now: now, exportURL: exportURL,
+                                                 importedHistory: work.appendingPathComponent("overture-history.json"))
             }
             try await RealUseSteps.actions(on: run, export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                            exportURL: exportURL, now: now)
