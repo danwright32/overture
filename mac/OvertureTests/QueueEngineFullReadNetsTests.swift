@@ -162,6 +162,12 @@ private struct NoNetworkSender: MailSender {
     }
 }
 
+/// A page fetch a corpus landing made, which has no page to fetch: said as itself, never as another failure (L11).
+private struct ReachedForTheNetwork: Error, CustomStringConvertible {
+    let url: URL
+    var description: String { "the native sweep reached for the network: \(url)" }
+}
+
 /// A native source's read, answered with events in hand.
 private struct EventsInHand: SourceExtractor {
     let events: [ExtractedEvent]
@@ -382,7 +388,7 @@ final class QueueEngineFullReadNetsTests {
                 extractorRegistry: { source in
                     EventsInHand(events: source.flatMap { byId[$0.sourceId] }?.events.map(\.asExtractedEvent) ?? [])
                 },
-                fetch: { url, _, _ in throw EngineNetRun.Unsettled(step: "a fetch of \(url)") },
+                fetch: { url, _, _ in throw ReachedForTheNetwork(url: url) },
                 pin: { _, id in URL(fileURLWithPath: "/dev/null/probe-\(id).html") }, launch: { _ in },
                 now: LandingOracleCorpus.now, defaults: ScratchDefaults.make("QueueEngineFullReadNets.runScout"))
             try run.context.save()
@@ -550,7 +556,9 @@ final class QueueEngineNetsRealUseProbeTests {
             // A step with nothing to act on fires no net either, so a quiet reading counts only when it ran (L159).
             let idle = run.readings.filter { !$0.exercised }.map(\.step)
             #expect(idle.isEmpty, "steps that found nothing to act on, so measured nothing: \(idle)")
-            #expect(verdict.received && verdict.factMismatches == 0 && verdict.outputMismatches == 0,
+            // A MATCH, never merely an outcome: superseded, cancelled and unmeasured say nothing about the facts.
+            #expect(verdict.received && verdict.matches == 1 && verdict.factMismatches == 0
+                        && verdict.outputMismatches == 0,
                     "the engine's facts did not verify against a fresh read: \(verdict)")
         }
     }
