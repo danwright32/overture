@@ -73,3 +73,72 @@ final class TermsOverFactsLiveStoreTests {
         }
     }
 }
+
+// #4358 slice E4a: what the queue's MEMO PATH derivation costs on the live clone and on its fourfold copy, so a
+// change to `QueueRenderPass.make` is priced against main rather than argued (the milestone's "no slower" rule).
+// The pass is handed what `QueueView.makeRenderData` hands it on a memo miss: every table read from the clone,
+// the opening stage, a viewport of requested cards, and producer tables already built (the view keeps them in
+// a memo of their own, so a pass pays nothing for them). Opt in, because it times rather than asserts; it says
+// so when it is not asked rather than passing in silence (L98).
+//
+//   TEST_RUNNER_MEASURE_4358_E4A=1 mac/scripts/run-tests-locked.sh \
+//     '-only-testing:OvertureTests/MemoPathDerivationCostProbeTests'
+@MainActor
+@Suite("What the queue's memo path derivation costs on the live clone and at 4x (#4358 E4a)")
+final class MemoPathDerivationCostProbeTests {
+    private let sandboxes = TemporarySandboxes()
+    private static let samples = 7
+
+    @Test(.enabled(if: LiveStorePresence.exists, LiveStorePresence.absenceReason))
+    func measureTheMemoPathDerivation() async throws {
+        guard ProcessInfo.processInfo.environment["MEASURE_4358_E4A"] != nil else {
+            print("e4a memo derivation: not measured. Set TEST_RUNNER_MEASURE_4358_E4A=1 to run it.")
+            return
+        }
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try sandboxes.make(named: "e4a-memo-cost")
+            guard let base = try LiveStoreClone.makeClone(in: dir) else {
+                throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
+            }
+            for (label, url) in [("1x", base), ("4x", try Phase0.scaledCopy(of: base, factor: 4, in: dir))] {
+                let container = try Phase0.openContainer(at: url)
+                let ctx = ModelContext(container)
+                let shows = try ctx.fetch(FetchDescriptor<Prospect>())
+                #expect(!shows.isEmpty, "the \(label) corpus holds no shows, so nothing was timed")
+                let inquiries = try ctx.fetch(FetchDescriptor<Inquiry>())
+                let answers = try ctx.fetch(FetchDescriptor<OrgReachabilityAnswer>())
+                let sources = try ctx.fetch(FetchDescriptor<WatchedSource>())
+                let refused = try ctx.fetch(FetchDescriptor<RefusedContactAddress>())
+                let overrides = ProducerOverrides(promotedRows: try ctx.fetch(FetchDescriptor<PromotedProducer>()),
+                                                  demotedRows: try ctx.fetch(FetchDescriptor<DemotedHouse>()))
+                let geo = GeoRefusals(
+                    userExcludedTowns: Set(try ctx.fetch(FetchDescriptor<ExcludedTown>()).map(\.town)),
+                    allowedSeedTowns: Set(try ctx.fetch(FetchDescriptor<AllowedSeedTown>()).map(\.town)))
+                let tables = QueueModel.ProducerTables(shows: shows.map(ProducerGate.Show.init), overrides: overrides)
+                let now = Date()
+                func inputs(cards: Set<String>?) -> QueueRenderPass.Inputs {
+                    QueueRenderPass.Inputs(allProspects: QueueRenderPass.Corpus(shows), inquiries: inquiries,
+                                           orgAnswers: answers, sources: sources,
+                                           refusals: ContactRefusal.ledger(from: refused), overrides: overrides,
+                                           context: StageContext(now: now, geo: geo, clients: .none),
+                                           focusedStage: StageNavigation.openingStage, focusedKeys: nil,
+                                           requestedCardKeys: cards, producerTables: tables)
+                }
+                // The viewport: the opening stage's first rows, as the last frame would have drawn them.
+                let viewport = Set(QueueRenderPass.make(inputs(cards: [])).focusedRows
+                    .prefix(QueueViewportAssumption.rows).map(\.id))
+                let before = Phase0.load()
+                let reading = Phase0.Reading(runs: (0..<Self.samples).map { _ in
+                    Phase0.time { _ = QueueRenderPass.make(inputs(cards: viewport)) }
+                })
+                print("e4a memo derivation, \(label): \(shows.count) show(s), \(viewport.count) card(s) requested, "
+                      + "median of \(Self.samples) " + reading.text + ", \(before) before, \(Phase0.load()) after")
+            }
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+}
