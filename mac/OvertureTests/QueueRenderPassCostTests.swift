@@ -191,7 +191,9 @@ struct QueueRenderPassCostTests {
 // The other half of the cost, and the one a sweep count cannot see: a file read on the render path. The
 // pass takes every file-backed answer as a value, so it cannot reach the filesystem at all, and this is
 // what holds it to that.
-@Suite("A render pass reads no files (#1913)")
+// `.sharesTheRenderCounter`: `thePassRecordsNothingAndIsBoundToNoActor` names the counter in a string it searches
+// for, and `SharedStateWiringTests` reads that as a use, so this suite takes the counter's lock rather than argue.
+@Suite("A render pass reads no files (#1913)", .sharesTheRenderCounter)
 struct QueueRenderPassIsPureTests {
     private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
