@@ -52,7 +52,7 @@ struct StoreSaveCountTests {
         // released one's address, so nothing below could have been inherited and the test measured nothing.
         let fresh = try #require(try RecycledStore.whereAForeignSavedOneDied(AppSchema.models) { other in
             other.insert(ExcludedTown(town: "Poughkeepsie"))
-        }, "no container was made at the address of a released foreign-saved one, so nothing was measured")
+        }, "UNMEASURED: no container was made at the address of a released foreign-saved one, so nothing was measured")
         #expect(!counter.hasForeignSaves(in: fresh) && counter.foreignSaveCount(for: fresh) == 0, Comment(rawValue:
             "a store nothing has saved into reads as foreign-saved (\(counter.foreignSaveCount(for: fresh)) foreign "
             + "saves), inherited from the released store that had its address, so its memos stop serving the refetch"))

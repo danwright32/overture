@@ -12,6 +12,9 @@ import SwiftData
 // earlier test had saved through a second context, and never in the test run alone.
 enum RecycledStore {
     /// The container, or nil when none landed on a released foreign-saved one's address within `attempts`.
+    /// A caller fails a nil as `UNMEASURED`, the suite's word for a test that could not set up what it
+    /// measures: red, because a test that measured nothing must not pass (L98), and named, so it is not read
+    /// as a regression (L411). Every run while #4609 was fixed found a reused address.
     ///
     /// `insert` puts one valid row into the second context, so this never has to know what a schema holds.
     /// Each attempt runs in its own autorelease pool, because a context left in the current pool keeps its

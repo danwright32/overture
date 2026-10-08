@@ -374,7 +374,7 @@ struct OneChangeDerivesTheQueueOnceTests {
     @Test func showsArrivingUnderAQueueOverARecycledStoreDeriveItOnce() async throws {
         let recycled = try #require(try RecycledStore.whereAForeignSavedOneDied(AppSchema.models) { other in
             other.insert(ExcludedTown(town: "Poughkeepsie"))
-        }, "no container was made at the address of a released foreign-saved one, so nothing was measured")
+        }, "UNMEASURED: no container was made at the address of a released foreign-saved one, so nothing was measured")
         try await showsArriving(in: recycled)
     }
 
