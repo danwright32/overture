@@ -77,7 +77,8 @@ final class RunScoutTailRowsTests {
                 let rows = try ScoutService.readProspectTable(context)
                 return hidden.map { key in rows.filter { $0.naturalKey != key } } ?? rows
             },
-            landings: landings)
+            landings: landings,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     @Test func theRetirementJudgesTheRowsItIsHandedAndOnlyThose() throws {

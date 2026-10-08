@@ -49,7 +49,8 @@ struct NativePathGuardTests {
             extractor: StubSourceExtractor(listing: ExtractedListing(events: events,
                                                                      verdict: .upcomingListings)),
             now: now,
-            defaults: defaults())
+            defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     private func stored(_ ctx: ModelContext) throws -> [Prospect] {
@@ -167,7 +168,8 @@ struct NativePathCannotCancelTests {
             extractor: StubSourceExtractor(listing: ExtractedListing(events: events,
                                                                      verdict: .upcomingListings)),
             now: now,
-            defaults: ScratchDefaults.make("NativeCancel"))
+            defaults: ScratchDefaults.make("NativeCancel"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     // #1472: an UNRELATED show is no longer sheltered by somebody else's blank venue field. This feed came

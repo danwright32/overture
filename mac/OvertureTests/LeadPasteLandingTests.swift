@@ -55,6 +55,7 @@ struct LeadPasteLandingTests {
         let result = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
             readProspectTable: { reads.note(); return try $0.fetch(FetchDescriptor<Prospect>()) },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             into: context)
         guard case .landed(let outcome) = result else {
             Issue.record("the paste did not land: \(result)")
@@ -81,6 +82,7 @@ struct LeadPasteLandingTests {
                 guard Thread.isMainThread else { throw Refused() }
                 return try context.fetch(FetchDescriptor<Prospect>())
             },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             into: context)
         guard case .landed(let outcome) = result else {
             Issue.record("the paste did not land: \(result)")
@@ -98,7 +100,9 @@ struct LeadPasteLandingTests {
         defer { withExtendedLifetime(container) {} }
         let result = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
-            readProspectTable: { _ in throw Refused() }, into: context)
+            readProspectTable: { _ in throw Refused() },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
+            into: context)
         // Said as a failed read, never as a page with nothing new on it (L215).
         #expect(result == .refused(LeadIntake.storeUnreadableMessage), "said \(result)")
         #expect(try count(container) == 1)
@@ -120,7 +124,9 @@ struct LeadPasteLandingTests {
         let (container, context) = try seeded()
         let result = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights"), event("Low Tide")], today: Self.today, now: Self.now,
-            landings: LandingSingleFlight(), saveSource: { _ in throw Refused() }, into: context)
+            landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
+            saveSource: { _ in throw Refused() }, into: context)
         guard case .refused(let sentence) = result else {
             Issue.record("a paste whose save failed reported \(result)")
             return
@@ -154,6 +160,7 @@ struct LeadPasteLandingTests {
         stored.groupName = "Renamed By Dan"
         let result = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             into: context)
         guard case .landed = result else {
             Issue.record("the paste did not land: \(result)")
@@ -170,7 +177,9 @@ struct LeadPasteLandingTests {
 
         // A second paste is a landing of its own, under its own identity, and with nothing pending counts zero.
         _ = await LeadPasteLanding.landPastedLead(
-            [event("Low Tide")], today: Self.today, now: Self.now, landings: LandingSingleFlight(), into: context)
+            [event("Low Tide")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
+            into: context)
         let both = try runs(container)
         #expect(Set(both.map(\.runIdentity)).count == 2, Comment(rawValue: "\(both.map(\.runIdentity))"))
         #expect(both.map(\.entryFlushSaves).sorted { ($0 ?? -1) < ($1 ?? -1) } == [0, 1])
@@ -185,7 +194,9 @@ struct LeadPasteLandingTests {
         stored.groupName = "Renamed Before"
         let paste = Task { @MainActor in
             await LeadPasteLanding.landPastedLead([event("Harbor Lights")], today: Self.today, now: Self.now,
-                                                  landings: flight, into: context)
+                                                  landings: flight,
+                                                  exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
+                                                  into: context)
         }
         let waiting = await waitUntil("the paste waits its turn", timeout: .seconds(30)) { flight.queue == [.leadPaste] }
         #expect(waiting, "the paste never queued for the store: \(flight.queue)")
@@ -204,7 +215,9 @@ struct LeadPasteLandingTests {
         defer { withExtendedLifetime(container) {} }
         let result = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
-            readProspectTable: { _ in throw Refused() }, into: context)
+            readProspectTable: { _ in throw Refused() },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
+            into: context)
         #expect(result == .refused(LeadIntake.storeUnreadableMessage), "said \(result)")
         let run = try #require(try runs(container).first, "the refused paste recorded no landing")
         #expect(run.landedAt == nil, "a refused paste was recorded as landed")
@@ -217,6 +230,7 @@ struct LeadPasteLandingTests {
         let (container, context) = try seeded()
         let result = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             saveClosing: { _ in throw Refused() }, into: context)
         guard case .landed = result else {
             Issue.record("a paste whose shows saved reported \(result)")
@@ -242,6 +256,7 @@ struct LeadPasteLandingTests {
         // committed row deleted cannot be brought back without `rollback()`, which is banned.
         let first = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             saveSource: { ctx in
                 if let stored = try? ctx.fetch(FetchDescriptor<Prospect>()).first(where: { $0.groupName == "Stored Show" }) {
                     ctx.delete(stored)
@@ -260,6 +275,7 @@ struct LeadPasteLandingTests {
         // "or tells you which shows it still can't save": a flush that cannot save names them and adds nothing.
         let refused = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             saveEntry: { _ in throw Refused() }, into: context)
         #expect(refused == .refused(LeadIntake.recentEditsUnsaved(["Stored Show"])), "said \(refused)")
         #expect(try count(container) == 1, "a paste that could not save what was left added shows")
@@ -267,6 +283,7 @@ struct LeadPasteLandingTests {
         // "Overture saves what is left first": the next paste that can save does, then adds the page.
         let landed = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             into: context)
         guard case .landed = landed else {
             Issue.record("the paste after a not reverted save did not land: \(landed)")
@@ -283,6 +300,7 @@ struct LeadPasteLandingTests {
         stored.groupName = "Renamed By Dan"
         let refused = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             saveEntry: { _ in throw Refused() }, into: context)
         #expect(refused == .refused(LeadIntake.recentEditsUnsaved(["Renamed By Dan"])), "said \(refused)")
         #expect(try count(container) == 1, "a refused paste landed shows")
@@ -290,6 +308,7 @@ struct LeadPasteLandingTests {
 
         let landed = await LeadPasteLanding.landPastedLead(
             [event("Harbor Lights")], today: Self.today, now: Self.now, landings: LandingSingleFlight(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
             into: context)
         guard case .landed = landed else {
             Issue.record("the paste did not land: \(landed)")
@@ -308,7 +327,9 @@ struct LeadPasteLandingTests {
         let held = try await flight.begin(entryPoint: .scoutExtractIngest, priority: .scout, deadline: .seconds(60))
         let paste = Task { @MainActor in
             await LeadPasteLanding.landPastedLead([event("Harbor Lights")], today: Self.today, now: Self.now,
-                                                  landings: flight, saveSource: { _ in throw Refused() },
+                                                  landings: flight,
+                                                  exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
+                                                  saveSource: { _ in throw Refused() },
                                                   into: context)
         }
         let waiting = await waitUntil("the paste waits its turn", timeout: .seconds(30)) { flight.queue == [.leadPaste] }
@@ -348,7 +369,8 @@ struct LeadPasteLandingTests {
             launch: { _ in },
             readResults: { $0 == leadId ? answer : nil },
             isRunAlive: { false },
-            landings: flight)
+            landings: flight,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         model.urlText = url.absoluteString
         let start = Task { @MainActor in
             await model.start(into: context, now: Self.now, today: Self.today, pollEvery: 0, giveUpAfter: 0,
@@ -380,7 +402,9 @@ struct LeadPasteLandingTests {
         #expect(scoutQueued, "the scout landing never queued: \(flight.queue)")
         let paste = Task { @MainActor in
             await LeadPasteLanding.landPastedLead([event("Harbor Lights")], today: Self.today, now: Self.now,
-                                                  landings: flight, into: context)
+                                                  landings: flight,
+                                                  exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history,
+                                                  into: context)
         }
         let waiting = await waitUntil("the paste waits at the front", timeout: .seconds(30)) {
             flight.queue == [.leadPaste, .runScoutLanding]

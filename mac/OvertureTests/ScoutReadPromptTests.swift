@@ -53,7 +53,8 @@ struct ScoutReadPromptTests {
         _ = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
             pin: noPin, launch: { launched = $0 }, now: now, defaults: defaults(),
-            askReadBudget: { _ in asked = true; return .all })
+            askReadBudget: { _ in asked = true; return .all },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(asked == false)
         #expect(launched.count == 5)
@@ -69,7 +70,8 @@ struct ScoutReadPromptTests {
         _ = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
             pin: noPin, launch: { _ in }, now: now, defaults: defaults(),
-            askReadBudget: { pending in askedAbout = pending; return .all })
+            askReadBudget: { pending in askedAbout = pending; return .all },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(askedAbout == 47)
     }
@@ -84,7 +86,8 @@ struct ScoutReadPromptTests {
         _ = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
             pin: noPin, launch: { launched = $0 }, now: now, defaults: defaults(),
-            askReadBudget: { _ in .all })
+            askReadBudget: { _ in .all },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched.count == 47)
     }
@@ -100,7 +103,8 @@ struct ScoutReadPromptTests {
         let outcome = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
             pin: noPin, launch: { launched = $0 }, now: now, defaults: defaults(),
-            askReadBudget: { _ in .firstBatch })
+            askReadBudget: { _ in .firstBatch },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched.count == ScoutReadBudget.askAbove)
         #expect(outcome.sources.filter { $0.state == .deferred }.count == 27)
@@ -117,7 +121,8 @@ struct ScoutReadPromptTests {
         let outcome = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
             pin: noPin, launch: { _ in launched = true }, now: now, defaults: defaults(),
-            askReadBudget: { _ in .none })
+            askReadBudget: { _ in .none },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched == false)
         #expect(outcome.sources.filter { $0.state == .deferred }.count == 47)
@@ -136,7 +141,8 @@ struct ScoutReadPromptTests {
         _ = try await ScoutService.runScout(
             into: ctx, depth: .watchOnly, extractor: noEvents, fetch: page("new"),
             pin: noPin, launch: { _ in }, now: now, defaults: defaults(),
-            askReadBudget: { _ in asked = true; return .all })
+            askReadBudget: { _ in asked = true; return .all },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(asked == false)
     }
@@ -151,7 +157,8 @@ struct ScoutReadPromptTests {
 
         _ = try await ScoutService.runScout(
             into: ctx, depth: .readChanged, extractor: noEvents, fetch: page("new"),
-            pin: noPin, launch: { launched = $0 }, now: now, defaults: defaults())
+            pin: noPin, launch: { launched = $0 }, now: now, defaults: defaults(),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(launched.count == 47)
     }

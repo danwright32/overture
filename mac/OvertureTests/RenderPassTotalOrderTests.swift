@@ -396,7 +396,7 @@ final class RenderPassTotalOrderTests {
             QueueModel.reachedOutEntries(prospects: [show], inquiries: order, now: now).map { entry in
                 switch entry {
                 case .prospect(let p, _, _): return p.naturalKey
-                case .inquiry(let i, _, _): return "\(i.eventName)/\(i.persistentModelID)"
+                case .inquiry(let identity, let row, _): return "\(row.eventName)/\(identity.inquiryID)"
                 }
             }
         }

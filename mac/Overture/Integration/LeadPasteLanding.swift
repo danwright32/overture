@@ -40,6 +40,8 @@ enum LeadPasteLanding {
         landings: LandingSingleFlight = .shared,
         readProspectTable: @escaping ScoutLandingStore.SendableRead = ScoutService.readProspectTable,
         readProducerOverrides: @escaping ScoutService.OverrideRead = ScoutService.readProducerOverrides,
+        // #4558: Downbeat's export and the imported booking history. The app passes neither, so it reads the real
+        // files; #4582: every test names its own (`TestsNameTheirLandingInputFilesTests`).
         exportURL: URL = DownbeatBridge.defaultURL,
         importedHistory: URL = LocalHistory.importedURL,
         saveEntry: (ModelContext) throws -> Void = { try $0.save() },

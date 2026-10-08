@@ -19,6 +19,8 @@ DownbeatExport.swift:hostingSite
 DownbeatExport.swift:isTaxExempt
 DownbeatExport.swift:phoneNumber
 DownbeatExport.swift:venueId
+FactStore.swift:batchesOverBudget  # #4358 slice E3: the launch fill's reading against plan v7's 16 ms per batch, read today by QueueEngineLaunchFillTests and the opt-in launch probe. Its app reader is the cutover's launch notice (#4358, slice E4); remove this line in that change.
+FactStore.swift:slowestBatch  # #4358 slice E3: the launch fill's slowest batch, read today by QueueEngineLaunchFillTests. Its app reader is the cutover's launch notice (#4358, slice E4); remove this line in that change.
 GeoRefusals.swift:resolvedPlaceCount
 InquiryReporting.swift:lostAfter
 InquiryReporting.swift:openPredicate

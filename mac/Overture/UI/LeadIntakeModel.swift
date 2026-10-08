@@ -71,6 +71,9 @@ final class LeadIntakeModel {
     private let defaults: UserDefaults
     // #4339 (A11): the queue the paste's landing waits its turn in.
     private let landings: LandingSingleFlight
+    // #4582: the two files the paste's landing reads, handed on to `LeadPasteLanding.landPastedLead`.
+    private let exportURL: URL
+    private let importedHistory: URL
     // #4339: bumped by `reset()`, so a landing that finishes after Dan closed or restarted the sheet does not
     // write its answer over the screen he moved on to.
     private var generation = 0
@@ -95,9 +98,16 @@ final class LeadIntakeModel {
                                      decode: ScoutExtractResultsDecoder.decode).value
          },
          isRunAlive: @escaping () -> Bool = { ScoutExtractService.isRunning(now: Date()) },
-         landings: LandingSingleFlight = .shared) {
+         landings: LandingSingleFlight = .shared,
+         // #4582: Downbeat's export and the imported booking history, which the paste's landing reads. The app
+         // passes neither, so it reads the real files; every test names its own
+         // (`TestsNameTheirLandingInputFilesTests`), since under test the default is a folder every test shares.
+         exportURL: URL = DownbeatBridge.defaultURL,
+         importedHistory: URL = LocalHistory.importedURL) {
         self.defaults = defaults
         self.landings = landings
+        self.exportURL = exportURL
+        self.importedHistory = importedHistory
         self.fetch = fetch
         self.pin = pin
         self.launch = launch
@@ -411,6 +421,7 @@ final class LeadIntakeModel {
         // recorded as handed over if its shows land.
         let pasted = URL(string: urlText.trimmingCharacters(in: .whitespacesAndNewlines))
         let result = await LeadPasteLanding.landPastedLead(events, today: today, now: now, landings: landings,
+                                                           exportURL: exportURL, importedHistory: importedHistory,
                                                            into: context)
         // A sheet Dan reset meanwhile keeps the screen he moved on to; what landed is still recorded below.
         let stillShowing = generation == started

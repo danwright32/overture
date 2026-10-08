@@ -220,7 +220,8 @@ struct AScoutRunDerivesTheQueueOnceTests {
                                    ticketTailorWidgetHTML: widget(for: id))
             },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
-            defaults: ScratchDefaults.make("AScoutRunDerivesTheQueueOnceTests"))
+            defaults: ScratchDefaults.make("AScoutRunDerivesTheQueueOnceTests"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         let after = await settle(hosting)
         let stored = try ctx.fetchCount(FetchDescriptor<Prospect>()) - Self.rows
         return Run(derivations: during + after, outcome: outcome, storedShows: stored)

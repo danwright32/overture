@@ -264,7 +264,8 @@ struct NativeFeedAdapterTests {
             extractorRegistry: { $0?.sourceId == "greenroom" ? viaRegistry : nil },
             fetch: { url, _, _ in FetchedPage(normalizedHTML: "", finalURL: url.absoluteString, contentHash: "h") },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
-            defaults: ScratchDefaults.make("nfa-dispatch"))
+            defaults: ScratchDefaults.make("nfa-dispatch"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(stored.contains { $0.groupName.contains("Luigi") })

@@ -166,10 +166,14 @@ struct StageListsFromThePassTests {
         #expect(drawn(data.inquiryGroups) == drawn(old),
                 "the pass's inquiry headings differ from the ones the body used to group")
         // Every row the block draws resolves to its own inquiry, which is what the body's lookup was for.
-        for row in data.inquiryRows {
-            #expect(data.inquiriesByRowID[row.id].map { String(describing: $0.persistentModelID) } == row.id,
-                    "an inquiry row the block draws resolves to no inquiry, so its buttons would act on nothing")
+        // #4579: through its identity against the live inquiries, as a press does, and no two rows to one.
+        let resolved = data.inquiryRows.map { data.inquiriesByRowID[$0.id]?.resolve(in: store.inquiries).inquiry }
+        for (row, inquiry) in zip(data.inquiryRows, resolved) {
+            #expect(inquiry.map(InquiryIdentity.rowID(of:)) == row.id,
+                    "an inquiry row the block draws resolves to no inquiry, or another, so its buttons would miss")
         }
+        #expect(Set(resolved.compactMap { $0?.persistentModelID }).count == data.inquiryRows.count,
+                "two inquiry rows resolve to one inquiry, so a press on one acts on the other")
 
         // The positive control: grouped over another stage's inquiries, the headings differ.
         let otherStage = QueueModel.groupRowsByDate(

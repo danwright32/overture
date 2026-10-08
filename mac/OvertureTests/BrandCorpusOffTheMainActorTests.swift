@@ -152,7 +152,8 @@ final class BrandCorpusOffTheMainActorTests {
                                              contentHash: "same") },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: ScratchDefaults.make("BrandCorpusOffTheMainActorTests"),
-            readProspectTable: { context in log.record(); return try ScoutService.readProspectTable(context) })
+            readProspectTable: { context in log.record(); return try ScoutService.readProspectTable(context) },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         #expect(outcome.inserted == 4, Comment(rawValue: "only \(outcome.inserted) shows landed"))
         // #4339 (A11) moved the history off the main actor, as this test's comment said it would: the corpus and
         // the history are read off it, and only the landing's working set stays on it.
@@ -204,7 +205,8 @@ final class BrandCorpusOffTheMainActorTests {
                                              contentHash: "same") },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: ScratchDefaults.make("BrandCorpusOffTheMainActorTests.sees"),
-            readProspectTable: Self.readSeeingTheEdit(saw))
+            readProspectTable: Self.readSeeingTheEdit(saw),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         #expect(outcome.inserted == 4)
         #expect(saw.answers == [true], Comment(rawValue:
             "the background corpus read saw the pending edit \(saw.answers), so it judged against an older store"))
@@ -243,7 +245,8 @@ final class BrandCorpusOffTheMainActorTests {
             fetch: { url, _, _ in FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString,
                                              contentHash: "same") },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
-            defaults: ScratchDefaults.make("BrandCorpusOffTheMainActorTests.flushCount"))
+            defaults: ScratchDefaults.make("BrandCorpusOffTheMainActorTests.flushCount"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         #expect(try ctx.fetch(FetchDescriptor<LandingRun>()).map(\.entryFlushSaves) == [1])
     }
 
@@ -286,7 +289,8 @@ final class BrandCorpusOffTheMainActorTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             defaults: ScratchDefaults.make("BrandCorpusOffTheMainActorTests.refused"),
             readProspectTable: { context in log.record(); return try ScoutService.readProspectTable(context) },
-            saveEntry: { _ in throw StoreSaysNo() })
+            saveEntry: { _ in throw StoreSaysNo() },
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
         #expect(outcome.inserted == 0, "the refused landing applied shows")
         // The history read sits above the flush and is the run's own; with this edit pending it stays on the main
         // thread (#4339: a background read would not see the edit). Nothing reads after the refused flush.

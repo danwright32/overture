@@ -469,7 +469,8 @@ final class ScoutFailedSaveIsolationTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
             now: now, defaults: ScratchDefaults.make("ScoutFailedSaveIsolationTests"),
             landings: LandingSingleFlight(sleep: { _ in }), sequenceFloor: { 0 },
-            saveSource: saveSource, classifySaveFailure: classify, journals: journals, movementLog: movementLog)
+            saveSource: saveSource, classifySaveFailure: classify, journals: journals, movementLog: movementLog,
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
     }
 
     private final class Lines: FeedMovementLog.Sink {

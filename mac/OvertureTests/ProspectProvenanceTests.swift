@@ -84,7 +84,8 @@ struct ProspectProvenanceTests {
             extractor: StubSourceExtractor(listing: ExtractedListing(events: [carnegie],
                                                                      verdict: .upcomingListings)),
             now: EasternDate.date(from: ScoutTestClock.provenanceAnchor)!,
-            defaults: ScratchDefaults.make("ProvenanceTests"))
+            defaults: ScratchDefaults.make("ProvenanceTests"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(try stored(ctx).first?.sourceIds == [WatchedSource.carnegieId])
     }

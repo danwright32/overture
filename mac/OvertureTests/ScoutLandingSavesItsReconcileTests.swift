@@ -106,7 +106,8 @@ struct ScoutLandingSavesItsReconcileTests {
             extractorRegistry: { $0?.sourceId == "feed-0" ? ListedFeed(events: events) : nil },
             fetch: { url, _, _ in FetchedPage(normalizedHTML: "<p/>", finalURL: url.absoluteString, contentHash: "same") },
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") }, launch: { _ in },
-            defaults: ScratchDefaults.make("ScoutLandingSavesItsReconcileTests"))
+            defaults: ScratchDefaults.make("ScoutLandingSavesItsReconcileTests"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(show.missedScoutCount == 1, "the sweep never counted the miss, so the store proves nothing")
         #expect(!outcome.saveFailed)

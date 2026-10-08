@@ -682,7 +682,8 @@ final class LandingAcceptanceRigTests {
                     },
                     pin: { _, id in URL(fileURLWithPath: "/dev/null/rig4343-\(id).html") }, launch: { _ in },
                     defaults: defaults, landings: world.flight, sequenceFloor: { world.pending.highestSequence },
-                    squarespaceProbe: { _ in nil }, journals: world.journals)
+                    squarespaceProbe: { _ in nil }, journals: world.journals,
+                    exportURL: world.exportURL, importedHistory: world.historyURL)
                 return "\(outcome.sources.count) sources, " + Self.said(outcome)
             }
         }

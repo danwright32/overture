@@ -103,7 +103,8 @@ struct TicketingFeedVenueTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
             now: now,
-            defaults: ScratchDefaults.make("tfv"))
+            defaults: ScratchDefaults.make("tfv"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         // Both productions reached the ingest, for free...
         #expect(outcome.found == 2)
@@ -127,7 +128,8 @@ struct TicketingFeedVenueTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
             now: now,
-            defaults: ScratchDefaults.make("tfv"))
+            defaults: ScratchDefaults.make("tfv"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         // Nothing is invented: with no room named, the shows have no venue and stay out of the queue.
         #expect(outcome.found == 0)
@@ -155,7 +157,8 @@ struct TicketingFeedVenueTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
             now: now,
-            defaults: ScratchDefaults.make("tfv"))
+            defaults: ScratchDefaults.make("tfv"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(outcome.found == 1)
         #expect(box.launched == false)
@@ -181,7 +184,8 @@ struct TicketingFeedVenueTests {
             pin: { _, id in URL(fileURLWithPath: "/tmp/\(id).html") },
             launch: { _ in box.launched = true },
             now: now,
-            defaults: ScratchDefaults.make("tfv"))
+            defaults: ScratchDefaults.make("tfv"),
+            exportURL: AbsentHandoff.export, importedHistory: AbsentHandoff.history)
 
         #expect(outcome.found == 2)
         #expect(box.launched == false)
