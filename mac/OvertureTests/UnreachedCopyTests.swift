@@ -33,8 +33,8 @@ struct UnreachedCopyTests {
     //
     // Keyed on file AND name, so allowing one does not quietly allow a same-named declaration elsewhere,
     // and each carries its reason, because an allowlist entry with no reason is indistinguishable from
-    // one somebody added to make a failure go away (L65). Empty today: every entry the measurement found
-    // was really dead and was deleted rather than allowed.
+    // one somebody added to make a failure go away (L65). The measurement's own findings were all really dead
+    // and were deleted rather than allowed; the entries now here are #4358's unwired engine, each naming E4d.
     //
     // Both of the measurement's findings have now left this list, and by the two different routes that
     // are available. #3068 closed one by WIRING it: `closingNoteOnStoodDownShow` is on the post-event row
@@ -45,7 +45,20 @@ struct UnreachedCopyTests {
     // Empty is the state to keep it in. An entry here is a declaration holding copy that nothing reaches,
     // kept on purpose, and each one has to name the issue that activates it, which is this repo's rule
     // for a value nothing reads yet.
-    private static let unreachedOnPurpose: [String: [String: String]] = [:]
+    private static let unreachedOnPurpose: [String: [String: String]] = [
+        // #4358 slice E4b builds the launch notice's sentences as values, unwired like the rest of the engine;
+        // slice E4d (the cutover) draws them in the launch notice and deletes these two entries.
+        "Domain/CardDivergenceReport.swift": [
+            "verifierSentence": "the launch notice's verifier line, drawn by #4358 E4d",
+            "faultSentence": "the launch notice's out of step line, drawn by #4358 E4d",
+        ],
+        // Not copy: member names and the comparator's reasons for leaving one out, inside a
+        // copy-inventory:ignore block, so the inventory never lists them; this guard does not read that
+        // marker. Reached by the engine's verifier once #4358 E4d wires it.
+        "UI/RenderDataComparison.swift": [
+            "cardStoreMembers": "member names inside copy-inventory:ignore, read by the verifier from #4358 E4d",
+        ],
+    ]
 
     private struct Finding: Equatable, CustomStringConvertible {
         let file: String
