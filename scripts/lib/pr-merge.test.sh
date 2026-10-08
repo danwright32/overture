@@ -155,6 +155,26 @@ gh_args_out() {
 }
 assert_contains "the merge is pinned to the head the review read" "$(gh_args_out)" "--match-head-commit abc1234"
 
+# #4358 slice E4d: with the review skipped, the merge is still pinned, to the head the engine gate was asked about.
+SKIPPED_HEAD="1111111111222222222233333333334444444444"
+gh_args_skipped_out() {
+  : > "${GH_CALL_LOG}"
+  gh_as_danwright32() {
+    printf '%s\n' "$*" >> "${GH_CALL_LOG}"
+    case "$*" in
+      *headRefOid*) printf '%s' "${SKIPPED_HEAD}" ;;
+      *files*) printf 'docs/x.md' ;;
+      *"pr merge"*) return 0 ;;
+      *view*) printf 'MERGED' ;;
+    esac
+  }
+  delete_merged_local_branch() { :; }
+  PR_REVIEW_CHECK="${FAKE_CHECK_DIR}/does-not-exist.sh" SKIP_PR_REVIEW=1 merge_pr "93" "feature-skipped" >/dev/null 2>&1
+  grep "pr merge" "${GH_CALL_LOG}"
+}
+assert_contains "a merge with the review skipped is pinned to the head the gate read" "$(gh_args_skipped_out)" \
+  "--match-head-commit ${SKIPPED_HEAD}"
+
 OUT="$(gate_out MISSING; echo "RC=${MERGE_PR_RC}"; echo "GH=$(tr '\n' ' ' < "${GH_CALL_LOG}")")"
 assert_contains "a missing checker refuses rather than merging unread" "${OUT}" "RC=1"
 assert_contains "and names the override" "${OUT}" "SKIP_PR_REVIEW=1"

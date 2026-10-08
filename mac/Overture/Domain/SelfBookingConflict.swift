@@ -112,8 +112,14 @@ enum SelfBookingConflict {
             // #4358 slice E4d (plan item 13): each night's shows in key order rather than input order, so two passes
             // over the same shows build EQUAL indexes whatever order the shows arrived in, and the engine's verifier
             // cannot read an input order as a mismatch. Every reader already sorts what it takes out (`overlaps`).
+            // Total: two shows equal on key and name (two rows holding one key between an insert and the save that
+            // refuses it) still sort one way, by the rest of what they hold, rendered (the lessons review of E4d1).
             committedByNight = byNight.mapValues { shows in
-                shows.sorted { $0.key != $1.key ? $0.key < $1.key : $0.name < $1.name }
+                shows.sorted {
+                    if $0.key != $1.key { return $0.key < $1.key }
+                    if $0.name != $1.name { return $0.name < $1.name }
+                    return String(describing: $0) < String(describing: $1)
+                }
             }
         }
     }
