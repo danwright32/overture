@@ -281,6 +281,12 @@ the subject named below.
 - **Is the store a landing leaves still what 6d3453d8 left**: `LandingOracleTests`, recorded from a
   worktree of that commit by `scripts/landing-oracle.sh`. A real-arm file (first line marked) never
   leaves this Mac; the push hook, CI and `scripts/real-arm-scan.sh` refuse one in any commit.
+- **A test that reaches a landing names the export and history it reads**: `AbsentHandoff.export` and
+  `.history`, or its own files. The default under test is one folder every test process shares.
+  `TestsNameTheirLandingInputFilesTests` fails a call that omits either.
+- **A probe's before and after comparison**: `scripts/compare-before-after.sh`, never two hand runs, because
+  the side run second under the shared lock reads slower. It runs ABBA rounds, judges only order cancelled
+  pairs, and says UNMEASURED rather than judging one round.
 
 ### `docs/agents/diagnostics.md`
 

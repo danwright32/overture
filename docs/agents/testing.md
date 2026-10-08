@@ -457,9 +457,9 @@ the measurement it came from lives here. Read the entry before the rule decides 
   A probe takes part by printing `Phase0.Reading.probeLine(<metric>)` beside its human readable line;
   `fixtures/probe-reading/lines.txt` is the one line shape both `Phase0ProbeLineTests` and the script's
   fixture read (L26). `MemoPathDerivationCostProbeTests` is the first probe that does; its header holds the
-  exact command. Every run builds and takes the lock, so six rounds are twelve runs, roughly 45 minutes
-  of the lock at the 3 min 51 s one run of the memo path probe took on 2026-10-08: the report states each
-  one's duration, including any wait for the lock, and the total.
+  exact command. Every run builds and takes the lock, so six rounds are twelve runs of it: the report states
+  each one's duration, including any wait for the lock, and the total, so read the cost there rather than
+  from a figure written here.
 
 ## Seeing a guard fail
 
