@@ -431,6 +431,25 @@ the measurement it came from lives here. Read the entry before the rule decides 
   readings, 2026-09-27: Debug median 176.1 ms (p10 174.6, p90 177.5), optimised median 10.6 ms (p10 10.5,
   p90 10.6), about 17 times faster.
 
+## Comparing a probe before and after a change
+
+- **A "no slower" claim from an opt in cost probe comes from `scripts/compare-before-after.sh`, never from
+  two hand runs (#4615).** A probe measures ONE side per run, so the comparison is two checkouts run one
+  after the other under the shared test lock, and the order decides the answer: measured by #4371 (PR
+  #4614, 2026-10-08, six rounds of median of 7), whichever side ran SECOND read about 32 ms slower at 4x
+  in all six rounds, so a single before then after pair reads a change as a regression or hides one.
+  The script runs the rounds in ABBA order (`--rounds`, even and at least 2, default 4), keeps every run's
+  log, and per metric reports each side's pooled median, the order effect, the order balanced difference
+  and the spread, calling SLOWER or FASTER only past the spread and WITHIN NOISE otherwise. A metric
+  without a complete round in each order is `UNMEASURED`, which is what one round always is, and a run
+  that failed or printed no reading is named with its log. Exit 0 no slower, 1 slower, 2 unmeasured.
+  `--analyse <readings.tsv>` re-reads a kept comparison without running anything.
+  A probe takes part by printing `Phase0.Reading.probeLine(<metric>)` beside its human readable line;
+  `fixtures/probe-reading/lines.txt` is the one line shape both `Phase0ProbeLineTests` and the script's
+  fixture read (L26). `MemoPathDerivationCostProbeTests` is the first probe that does; its header holds the
+  exact command. Every run builds and takes the lock, so four rounds are eight runs: the report states each
+  one's duration, including any wait for the lock, and the total.
+
 ## Seeing a guard fail
 
 - **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`

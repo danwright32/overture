@@ -120,3 +120,20 @@ struct Phase0LoadReaderTests {
             """)
     }
 }
+
+// #4615: a probe's reading as the one line `scripts/compare-before-after.sh` reads, so a before and after
+// comparison runs in balanced order and pools per side instead of being two runs read by eye. The Swift writer
+// and the shell reader are checked against ONE committed fixture, fixtures/probe-reading/lines.txt, which the
+// shell fixture feeds through the script's real log parser (L26): a change to either side's idea of the line
+// fails here or there rather than leaving the comparison with no readings.
+@Suite("A probe reading prints as the line the before and after comparison reads (#4615)")
+struct Phase0ProbeLineTests {
+    @Test func theLineIsTheMedianUnderItsMetricAsTheSharedFixtureHasIt() throws {
+        let fixture = try String(contentsOf: RepoRoot.url.appendingPathComponent("fixtures/probe-reading/lines.txt"),
+                                 encoding: .utf8)
+        let lines = fixture.split(separator: "\n").map(String.init)
+        #expect(lines.count == 2, "the shared fixture holds \(lines.count) line(s), expected 2")
+        #expect(Phase0.Reading(runs: [3, 1, 2]).probeLine("first-draw-4x") == lines.first)
+        #expect(Phase0.Reading(runs: [314.75]).probeLine("memo-derivation-1x") == lines.last)
+    }
+}

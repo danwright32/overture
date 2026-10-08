@@ -70,6 +70,10 @@ enum Phase0 {
         var low: Double { runs.min() ?? 0 }
         var high: Double { runs.max() ?? 0 }
         var text: String { String(format: "%.1f ms (%.1f to %.1f)", median, low, high) }
+        /// The line `scripts/compare-before-after.sh` reads out of a run's log (#4615): this reading's median
+        /// under `metric`, one word with no spaces. One run is one side; a verdict needs that script's balanced
+        /// rounds, because the side run second under the shared test lock reads slower (#4614).
+        func probeLine(_ metric: String) -> String { "probe reading: \(metric) " + String(format: "%.3f", median) }
     }
 
     nonisolated static func median5(_ work: () -> Void) -> Reading {

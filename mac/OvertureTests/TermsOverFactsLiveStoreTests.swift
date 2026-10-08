@@ -140,8 +140,16 @@ final class WholePassOverFactsLiveStoreTests {
 // a memo of their own, so a pass pays nothing for them). Opt in, because it times rather than asserts; it says
 // so when it is not asked rather than passing in silence (L98).
 //
-//   TEST_RUNNER_MEASURE_4358_E4A=1 mac/scripts/run-tests-locked.sh \
-//     '-only-testing:OvertureTests/MemoPathDerivationCostProbeTests'
+// ONE RUN IS ONE SIDE, AND IS NEVER A VERDICT (#4615). Before and after go through the comparison script, which
+// runs them in alternating ABBA rounds and reports pooled medians per side beside the order effect:
+//
+//   scripts/compare-before-after.sh --before <main plus this probe> --after <the branch> \
+//     --scope '-only-testing:OvertureTests/MemoPathDerivationCostProbeTests' \
+//     --env TEST_RUNNER_MEASURE_4358_E4A=1 --rounds 4
+//
+// because two runs back to back under the shared test lock read the SECOND one slower: about 32 ms at 4x in all
+// six of #4614's rounds, so a single before then after pair reads a change as a regression or hides one. The
+// script refuses a verdict (UNMEASURED) from one round. Each reading prints a `probe reading:` line for it.
 @MainActor
 @Suite("What the queue's memo path derivation costs on the live clone and at 4x (#4358 E4a)")
 final class MemoPathDerivationCostProbeTests {
@@ -193,6 +201,7 @@ final class MemoPathDerivationCostProbeTests {
                 })
                 print("e4a memo derivation, \(label): \(shows.count) show(s), \(viewport.count) card(s) requested, "
                       + "median of \(Self.samples) " + reading.text + ", \(before) before, \(Phase0.load()) after")
+                print(reading.probeLine("memo-derivation-\(label)"))
                 // #4371 (E4a part 2): the FIRST DRAW, which is where a card the pass did not build is built: the
                 // build asked for no card, as the first build after a mount is, and then each viewport row's card
                 // on demand through the store, as the queue's first frame asks for them. The resolver is made
@@ -212,6 +221,8 @@ final class MemoPathDerivationCostProbeTests {
                 print("e4a first draw, \(label): pass asked for no card then \(QueueViewportAssumption.rows) card(s) "
                       + "on demand, median of \(Self.samples) " + firstDraw.text + "; the on demand cards alone "
                       + Phase0.Reading(runs: onDemand).text + ", \(drawBefore) before, \(Phase0.load()) after")
+                print(firstDraw.probeLine("first-draw-\(label)"))
+                print(Phase0.Reading(runs: onDemand).probeLine("on-demand-cards-\(label)"))
             }
             await RealStoreTestLock.shared.release()
         } catch {
