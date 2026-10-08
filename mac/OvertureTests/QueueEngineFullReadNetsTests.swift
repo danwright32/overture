@@ -40,7 +40,7 @@ struct EngineNetReading: CustomStringConvertible {
     var netsFired: Int { foreignSaves + unclassifiedSaves + insertsMergedAway + unreadRows }
 
     var description: String {
-        let name = step.padding(toLength: 22, withPad: " ", startingAt: 0)
+        let name = step.padding(toLength: 26, withPad: " ", startingAt: 0)
         guard exercised else { return "\(name) NOT EXERCISED: nothing in the store to act on" }
         return String(format: "%@ turns %3d  rows changed %5d  full reads %d  foreign %d  unclassified %d  "
                       + "merged inserts %d  unread %d  engine turns %8.1f ms (longest %7.1f)",
