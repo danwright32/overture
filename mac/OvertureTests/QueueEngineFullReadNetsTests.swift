@@ -92,11 +92,40 @@ final class EngineNetRun {
         let turns = EngineAppTurns()
         self.turns = turns
         // The app's clock and schedule; notification centres of the test's own, so no real wake or day change
-        // reaches it; a private save counter; the verifier only when asked, so a step's counts are its own.
+        // reaches it; a private save counter; the verifier only when asked, so a step's counts are its own; and the
+        // launch's two reads (#4358 slice E3) made in a scheduled turn rather than on the launch thread, so the
+        // start step's settle waits for the first read and the whole fill rather than returning before the launch
+        // thread answers and letting the fill's work land in the next step's counts.
         engine = QueueEngine(context: context, derivation: EngineDerivations.counts(), saves: StoreSaveCount(),
                              clock: .system,
                              events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
-                             schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand))
+                             schedule: turns.schedule, verifier: QueueEngineVerifierSetup(triggers: .byHand),
+                             launch: QueueEngineLaunchSetup(reads: .inTurn))
+    }
+
+    struct LaunchDidNotEnd: Error, CustomStringConvertible {
+        let fill: String
+        var description: String { "the launch fill did not end with its forced verification settled: \(fill)" }
+    }
+
+    /// Starts the engine and waits for the whole launch: the first read, every fill batch, the shortfall check and
+    /// the verification the fill forces when it ends, so none of it is counted against the first real step.
+    @discardableResult
+    func start() async throws -> EngineNetReading {
+        let reading = try await step("start") {
+            engine.start()
+            return true
+        }
+        func inFlight(_ c: QueueEngineVerifierCounts) -> Int {
+            c.started - (c.matches + c.factMismatches + c.outputMismatches + c.superseded + c.cancelled
+                         + c.unmeasured.values.reduce(0, +))
+        }
+        let ended = await waitUntil("the launch fill and its forced verification", timeout: .seconds(300)) {
+            guard case .done = engine.launch.fill else { return false }
+            return inFlight(engine.verifierCounts) == 0
+        }
+        guard ended else { throw LaunchDidNotEnd(fill: "\(engine.launch.fill)") }
+        return reading
     }
 
     /// Runs `work`, waits for the engine to take in what it caused, and records what the engine counted.
@@ -346,10 +375,7 @@ final class QueueEngineFullReadNetsTests {
         let container = try TestModelContainer.inMemory(AppSchema.models)
         try LandingOracleCorpus.seed(into: container.mainContext, kind: kind)
         let run = EngineNetRun(context: container.mainContext)
-        try await run.step("start") {
-            run.engine.start()
-            return true
-        }
+        try await run.start()
         return run
     }
 
@@ -453,8 +479,10 @@ final class QueueEngineFullReadNetsTests {
 // MARK: - The measurement, opt in, on the frozen live store inputs
 
 // OPT IN: it copies the frozen inputs of Dan's store (#4327 step 0.0, read only, checked against their MANIFEST)
-// and runs a stopwatch, which measures whatever else the machine is doing (L224). Without the variable it says it
-// did not run, rather than passing silently (L98):
+// and runs a stopwatch, which measures whatever else the machine is doing (L224). Without the variable the test is
+// DISABLED by its `.enabled(if:)` trait, so the runner reports it as skipped rather than passed (L98). With it set
+// and the inputs archive missing or failing its MANIFEST, it records an issue and fails. xcodebuild hands the test
+// process every TEST_RUNNER_ variable with the prefix stripped, so the trait and the body both read the bare name:
 //
 //   TEST_RUNNER_MEASURE_4358_PRECONDITION=1 \
 //   TEST_RUNNER_MEASURE_4275_INPUTS=~/.overture-oracle/4275-frozen-inputs-20260929-rescaled-20261005 \
@@ -468,12 +496,12 @@ final class QueueEngineNetsRealUseProbeTests {
 
     private let sandboxes = TemporarySandboxes()
     private static let env = ProcessInfo.processInfo.environment
+    /// Whether the measurement was asked for: the bare name, as the test process receives it.
+    nonisolated static var enabled: Bool { ProcessInfo.processInfo.environment["MEASURE_4358_PRECONDITION"] != nil }
 
-    @Test func theNetsOverALandingAndAMorningsActionsAtOneAndFourTimes() async throws {
-        guard Self.env["MEASURE_4358_PRECONDITION"] != nil else {
-            print("engine-nets: not measured. Set TEST_RUNNER_MEASURE_4358_PRECONDITION=1 to run it.")
-            return
-        }
+    @Test(.enabled(if: QueueEngineNetsRealUseProbeTests.enabled,
+                   "not measured: set TEST_RUNNER_MEASURE_4358_PRECONDITION=1 to run it"))
+    func theNetsOverALandingAndAMorningsActionsAtOneAndFourTimes() async throws {
         guard let inputs = Self.env["MEASURE_4275_INPUTS"] else {
             Issue.record("UNMEASURED: TEST_RUNNER_MEASURE_4275_INPUTS must name the frozen inputs archive")
             return
@@ -526,10 +554,7 @@ final class QueueEngineNetsRealUseProbeTests {
             let blocked = ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
                                                        context: context)
             let run = EngineNetRun(context: context)
-            try await run.step("start") {
-                run.engine.start()
-                return true
-            }
+            try await run.start()
             try await run.step("scout landing (ingest)") {
                 _ = await ScoutExtractIngest.ingest(results, clients: loaded.clients, history: history,
                                                     blocked: blocked, today: today, now: now, into: context)
