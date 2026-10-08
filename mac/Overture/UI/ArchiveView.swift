@@ -132,7 +132,6 @@ struct ArchiveView: View {
         // `takeKeys()` empties the registry, so a memo hit that skipped it would let the registry
         // accumulate every frame's keys and silently grow the next real pass into one over a set nobody
         // asked for. Drained here, handed into the key, and handed into the build.
-        let keys = cardKeys.takeKeys()
         // Every input this derivation reads, named one per line. A seventh arriving here and not below
         // is what `ScopeMemoInputsAreCompleteGuardTests` refuses (L40, L96).
         var fingerprint = ScopeFingerprint()
@@ -142,6 +141,10 @@ struct ArchiveView: View {
         fingerprint.add(demotedHouses)
         fingerprint.add(watchedSources)
         fingerprint.add(refusedAddresses)
+        // #4570: the memo decides the card half of its own key, from one implementation shared with the
+        // queue: what the held answer already covers is served, and the cards the FIRST frame built on
+        // demand are adopted rather than paid for with a second whole-store derivation on every open.
+        let keys = scopeMemo.cardKeys(serving: cardKeys.takeKeys(), under: fingerprint)
         // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
         // #4356: one instant for the memo and the scope it builds, so they reason about the same moment.
         let now = clock()

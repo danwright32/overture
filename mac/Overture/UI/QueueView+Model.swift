@@ -3895,7 +3895,8 @@ enum QueueModel {
         // The keys the pass was ASKED to build, or nil for "every row", which is what a caller wanting
         // the whole set passes. A nil here can never produce an unexpected miss, because there was no
         // narrower belief to be wrong about.
-        let requestedKeys: Set<String>?
+        // #4570: settable only by `adopt`, which widens it to cards this store already built on demand.
+        private(set) var requestedKeys: Set<String>?
         // Where a request is RECORDED for the next pass. Nil outside the app, which is every test that
         // measures a pass on its own: the recording is about what the next frame should prebuild, and a
         // test asking what one pass costs has no next frame.
@@ -3972,6 +3973,27 @@ enum QueueModel {
             }
             cards[row.id] = built
             return built
+        }
+
+        /// #4570: count cards this store built ON DEMAND as if the pass had been asked for them, so the
+        /// memo holding this store can go on serving it rather than deriving the whole store again.
+        ///
+        /// Each card is BUILT AGAIN here, and that is the point rather than a cost: the caller runs this
+        /// inside the memo's observation tracking, so whatever the card reads is observed exactly as it
+        /// would have been had the pass prebuilt it, and an edit to a field only the card reads still makes
+        /// the answer stale (L40). A card built on demand during the render was built OUTSIDE that tracking,
+        /// which is the only reason it could not simply be counted.
+        ///
+        /// All or nothing: a key this store did not build on demand (never drawn, or a row with no show)
+        /// adopts nothing and returns false, so the caller derives as it always did.
+        func adopt(_ keys: Set<String>) -> Bool {
+            guard let requested = requestedKeys, keys.allSatisfy({ cards[$0] != nil }) else { return false }
+            // Through the same sources a miss is built from, so an adopted card is the card that miss built.
+            let rebuilt = keys.compactMap { key in sources.card(for: key, preamble: preamble).map { (key, $0) } }
+            guard rebuilt.count == keys.count else { return false }
+            for (key, card) in rebuilt { cards[key] = card }
+            requestedKeys = requested.union(keys)
+            return true
         }
     }
 

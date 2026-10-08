@@ -249,4 +249,76 @@ struct ScopeMemoTests {
             derivation takes.
             """)
     }
+
+    // #4570: one evaluation of a surface keyed the way ArchiveView and QueueView key theirs, with the card
+    // half decided by the memo from the keys the last frame drew.
+    private func evaluateScope(_ memo: ScopeMemo<QueueModel.Scope>, rows: [Prospect], in c: ModelContainer,
+                               drawn: Set<String>, registry: QueueModel.CardKeyRegistry,
+                               at when: Date) -> QueueModel.Scope {
+        var fingerprint = ScopeFingerprint()
+        fingerprint.add(rows)
+        let keys = memo.cardKeys(serving: drawn, under: fingerprint)
+        return memo.value(fingerprint: fingerprint, cardKeys: keys, now: when, savesIn: c,
+                          onRefetch: .rebuild) {
+            QueueModel.scope(from: rows, now: when, cardKeys: keys, cardKeyRegistry: registry)
+        }
+    }
+
+    // #4570: a surface's first build is asked for no card, so the first frame builds every card it draws
+    // on demand. The next evaluation adopts those cards rather than deriving the whole store again, and a
+    // frame that then draws a row nobody prebuilt (a scroll) still derives, as #3654's contract says.
+    @Test func theFirstFramesCardsAreAdoptedAndAScrollStillDerives() throws {
+        let c = try container()
+        let rows = seed(ModelContext(c), rows: 12)
+        let memo = ScopeMemo<QueueModel.Scope>(saves: StoreSaveCount(center: NotificationCenter()))
+        let registry = QueueModel.CardKeyRegistry()
+
+        let first = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry, at: t0)
+        #expect(memo.builds == 1, "the mount must build, or nothing below measures anything")
+        let drawnRows = Array(first.rows.prefix(3))
+        for row in drawnRows { _ = first.cards.card(for: row) }
+        #expect(first.cards.expectedFirstFrameMisses == drawnRows.count,
+                "the first frame's cards were not built on demand, so this fixture is not the mount")
+
+        let second = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
+                                   at: t0.addingTimeInterval(0.1))
+        #expect(memo.builds == 1, Comment(rawValue:
+            "the evaluation after the first frame built the store \(memo.builds) times, so every open derives "
+            + "it twice: the cards the first frame built on demand were not adopted (#4570)"))
+        #expect(second.cards.requestedKeys == Set(drawnRows.map(\.id)),
+                "the adopted cards were not counted as requested, so the next frame would derive again")
+
+        // THE CONTROL. A row the held answer never built is a scroll, which must still derive.
+        for row in first.rows.prefix(4) { _ = second.cards.card(for: row) }
+        _ = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
+                          at: t0.addingTimeInterval(0.2))
+        #expect(memo.builds == 2, Comment(rawValue:
+            "a frame drawing a row the held answer never built left the memo at \(memo.builds) builds, so "
+            + "adoption reached past the first frame and a scroll would be served cards nobody tracked"))
+    }
+
+    // #4570: an adopted card is WATCHED. Its show's `fitReason` is read by the card and by no part of the
+    // row, so only the tracking adoption arms can see an edit to it; served from the memo after that edit,
+    // the card would show the old reason (L40).
+    @Test func aFieldOnlyAnAdoptedCardReadsStillMakesTheAnswerStale() throws {
+        let c = try container()
+        let rows = seed(ModelContext(c), rows: 12)
+        let memo = ScopeMemo<QueueModel.Scope>(saves: StoreSaveCount(center: NotificationCenter()))
+        let registry = QueueModel.CardKeyRegistry()
+
+        let first = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry, at: t0)
+        let drawn = try #require(first.rows.first)
+        _ = first.cards.card(for: drawn)
+        _ = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
+                          at: t0.addingTimeInterval(0.1))
+        #expect(memo.builds == 1, "the first frame's card was not adopted, so nothing below is about adoption")
+
+        let show = try #require(rows.first { $0.naturalKey == drawn.id })
+        show.fitReason = "a reason edited in place"
+        _ = evaluateScope(memo, rows: rows, in: c, drawn: registry.takeKeys(), registry: registry,
+                          at: t0.addingTimeInterval(0.2))
+        #expect(memo.builds == 2, Comment(rawValue:
+            "editing a field only the adopted card reads left the memo at \(memo.builds) builds, so the card "
+            + "was adopted outside observation and would be served stale (#4570, L40)"))
+    }
 }
