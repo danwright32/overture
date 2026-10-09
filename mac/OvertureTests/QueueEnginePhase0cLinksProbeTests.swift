@@ -136,12 +136,15 @@ struct Phase0cSnapshot {
     var statusRaw: String
     var scoutGroupName: String?
     var scoutVenue: String?
+    /// #4362: the presenter, which T4 reads. Nil in every fixture but T4's (`Phase0cWorld(presenters: true)`).
+    var presenter: String?
 
     init(naturalKey: String, groupName: String, venue: String?, performanceDate: String?,
          runEndDate: String? = nil, runNights: [String] = [], droppedRunNights: [String] = [],
          sourceListingURL: String? = nil, runSourceURLs: [String] = [], missedScoutCount: Int = 0,
          statusRaw: String = ReviewStatus.approved.rawValue, scoutGroupName: String? = nil,
-         scoutVenue: String? = nil) {
+         scoutVenue: String? = nil, presenter: String? = nil) {
+        self.presenter = presenter
         self.naturalKey = naturalKey
         self.groupName = groupName
         self.venue = venue
@@ -162,7 +165,8 @@ struct Phase0cSnapshot {
                   performanceDate: p.performanceDate, runEndDate: p.runEndDate, runNights: p.runNights,
                   droppedRunNights: p.droppedRunNights, sourceListingURL: p.sourceListingURL,
                   runSourceURLs: p.runSourceURLs, missedScoutCount: p.missedScoutCount,
-                  statusRaw: p.statusRaw, scoutGroupName: p.scoutGroupName, scoutVenue: p.scoutVenue)
+                  statusRaw: p.statusRaw, scoutGroupName: p.scoutGroupName, scoutVenue: p.scoutVenue,
+                  presenter: p.presenter)
     }
 
     func apply(to p: Prospect) {
@@ -179,6 +183,7 @@ struct Phase0cSnapshot {
         p.statusRaw = statusRaw
         p.scoutGroupName = scoutGroupName
         p.scoutVenue = scoutVenue
+        if p.presenter != presenter { p.presenter = presenter }
     }
 
     func makeProspect() -> Prospect {
@@ -209,6 +214,24 @@ enum Phase0cFixture {
     static let asOf = "2027-03-01"
 
     static func url(_ token: String) -> String { "https://www.venuetix.com/showdetails/\(token)/seats" }
+
+    /// #4362: invented presenters, containment rich against `venues` above as the producer gate folds them: one
+    /// spelled exactly like a room (the equality arm), several containing a room's name or contained in one (the
+    /// containment arm, both directions), a single word that names no room, and producers that play several rooms.
+    static let presenters: [String?] = ["Harbor Hall Presents", "Harbor Hall", "Friends of Quarry Hall",
+                                        "Cedar Room", "Lantern Players", "Glass Lantern Ensemble",
+                                        "Marble Choir Society", "Willow Song Collective", "Quarry", "Annex Players",
+                                        "The Harbor Lights Company", "Willow Barn Theatre", nil]
+
+    /// The rows of one fixture. With `presenters`, every row also carries one, drawn from a generator of its own so
+    /// the rows every other term's fixtures are built from stay exactly what they were.
+    static func snapshots(size: Int, seed: UInt64, presenters: Bool) -> [Phase0cSnapshot] {
+        var rows = snapshots(size: size, seed: seed)
+        guard presenters else { return rows }
+        var rng = SeededGenerator(seed: seed &+ 4362)
+        for i in rows.indices { rows[i].presenter = self.presenters[Int(rng.next() % UInt64(self.presenters.count))] }
+        return rows
+    }
 
     static func snapshots(size: Int, seed: UInt64) -> [Phase0cSnapshot] {
         var rng = SeededGenerator(seed: seed)
@@ -297,6 +320,26 @@ enum Phase0cOp: String, CaseIterable {
     case twinAppear = "twin appearing"
     case flaggedEdit = "contradicted row counted up one with its room, title or dates changed (stays flagged)"
     case rollover = "clock rollover"
+    // T4's (plan section 7, #4362): 0b.1's ten kinds, then the plan's four.
+    case insertNewPresenter = "insert, new presenter"
+    case insertNewVenue = "insert, new venue"
+    case insertExistingPair = "insert, existing presenter and venue"
+    case deleteRow = "delete"
+    case presenterEdit = "presenter edit"
+    case venueToPresenterTheatre = "venue edit to '<presenter> Theatre'"
+    case venueToTheatre = "venue edit to 'Theatre'"
+    case mergeMovingVenue = "merge (two rows into one, the survivor taking the other's venue)"
+    case promote = "promote"
+    case demote = "demote"
+    case adversarialVenue = "adversarial venue of the corpus's commonest words"
+    case venueAddRemove = "one venue key added and removed (the same key every time)"
+    case presenterIsVenue = "presenter key that is also a venue key"
+    case venueOneToTwo = "venue-only edit taking a presenter from one venue to two"
+
+    static let t4: [Phase0cOp] = [.insertNewPresenter, .insertNewVenue, .insertExistingPair, .deleteRow,
+                                  .presenterEdit, .venueToPresenterTheatre, .venueToTheatre, .mergeMovingVenue,
+                                  .promote, .demote, .adversarialVenue, .venueAddRemove, .presenterIsVenue,
+                                  .venueOneToTwo]
 
     static let t1: [Phase0cOp] = [.scoutRenameInto, .scoutRenameOut, .venueRespellSame, .venueRespellOther,
                                   .bridgeNight, .dropNight, .poisonToken, .feedMiss, .dismissFront,
@@ -306,7 +349,7 @@ enum Phase0cOp: String, CaseIterable {
                                     .merge]
 
     /// Operations whose plan wording includes their own reversal ("then removed", "and back", "leaving").
-    var alwaysUndone: Bool { [.bridgeNight, .poisonToken, .thirdMemberJoin].contains(self) }
+    var alwaysUndone: Bool { [.bridgeNight, .poisonToken, .thirdMemberJoin, .venueAddRemove].contains(self) }
 }
 
 struct Phase0cEdit {
@@ -314,6 +357,9 @@ struct Phase0cEdit {
     var inserted: [Prospect] = []
     var deleted: [(pid: PersistentIdentifier, snapshot: Phase0cSnapshot)] = []
     var asOfBefore: String?
+    /// #4362: Dan's producer corrections an override op added and removed, by direction and folded key.
+    var overridesAdded: [(promoted: Bool, key: String)] = []
+    var overridesRemoved: [(promoted: Bool, key: String)] = []
 }
 
 /// One synthetic store: an in-memory container, the rows, the clock, and the seeded generator.
@@ -332,16 +378,83 @@ final class Phase0cWorld {
 
     // #4360: `models` is every table for the queue engine's whole pass harness (`PatchableShowLinkTests`), whose
     // engine reads the small tables beside the shows; the 0c probes keep the two they need.
-    init(size: Int, seed: UInt64, models: [any PersistentModel.Type] = [Prospect.self, Recipient.self]) throws {
+    // #4362: `presenters` gives every row a presenter, which T4 reads; T4's override ops also need the two override
+    // tables among `models`.
+    init(size: Int, seed: UInt64, models: [any PersistentModel.Type] = [Prospect.self, Recipient.self],
+         presenters: Bool = false) throws {
         flaggedEdits = Int(seed % 3)
         container = try TestModelContainer.inMemory(models)
         context = container.mainContext
         rng = SeededGenerator(seed: seed &* 2_654_435_761 &+ 4106)
-        for s in Phase0cFixture.snapshots(size: size, seed: seed) { context.insert(s.makeProspect()) }
+        for s in Phase0cFixture.snapshots(size: size, seed: seed, presenters: presenters) {
+            context.insert(s.makeProspect())
+        }
         try context.save()
     }
 
     func rows() throws -> [Prospect] { try context.fetch(FetchDescriptor<Prospect>()) }
+
+    /// #4362: Dan's producer corrections as the store holds them now.
+    func overrides() throws -> ProducerOverrides {
+        ProducerOverrides(promotedRows: try context.fetch(FetchDescriptor<PromotedProducer>()),
+                          demotedRows: try context.fetch(FetchDescriptor<DemotedHouse>()))
+    }
+
+    /// #4362: one correction added or taken back, by direction and key, recorded so an undo reverses it.
+    private func setOverride(promoted: Bool, key: String, on: Bool, _ edit: inout Phase0cEdit) {
+        if on {
+            if promoted { context.insert(PromotedProducer(orgKey: key)) } else { context.insert(DemotedHouse(orgKey: key)) }
+            edit.overridesAdded.append((promoted, key))
+        } else {
+            removeOverride(promoted: promoted, key: key)
+            edit.overridesRemoved.append((promoted, key))
+        }
+    }
+
+    private func removeOverride(promoted: Bool, key: String) {
+        if promoted {
+            for row in (try? context.fetch(FetchDescriptor<PromotedProducer>())) ?? [] where row.orgKey == key {
+                context.delete(row)
+            }
+        } else {
+            for row in (try? context.fetch(FetchDescriptor<DemotedHouse>())) ?? [] where row.orgKey == key {
+                context.delete(row)
+            }
+        }
+    }
+
+    /// #4362: a promote or demote of one presenter key, as `ProducerOverrideEditing` keeps the two lists: the key
+    /// already in the list asked for comes off it, otherwise it comes off the other list and goes on this one.
+    private func toggleOverride(promoted: Bool, rows: [Prospect], _ edit: inout Phase0cEdit) -> Bool {
+        guard let current = try? overrides() else { return false }
+        // Aimed, half the time, at a presenter whose brand verdict the correction MOVES: a promotion at a name the
+        // containment arm refuses, a demotion at one no arm refuses. A random pick mostly lands on a key whose verdict
+        // stays put, and measured on the first run of mutation 2 (#4362) that let the whole pass harness pass with the
+        // overrides never reaching T4 through five override ops.
+        let tables = QueueModel.ProducerTables(rows: rows, overrides: current)
+        let moves: (Prospect) -> Bool = promoted
+            ? { tables.venueBrands.contains($0.presenter) && !tables.venueBrands.isRoomName($0.presenter) }
+            : { $0.presenter != nil && !tables.venueBrands.contains($0.presenter) }
+        guard let row = (roll(2) == 0 ? pick(rows, moves) : nil) ?? pick(rows, { ProducerGate.key($0.presenter) != nil }),
+              let key = ProducerGate.key(row.presenter) else { return false }
+        let here = promoted ? current.promoted : current.demoted
+        let there = promoted ? current.demoted : current.promoted
+        if here.contains(key) {
+            setOverride(promoted: promoted, key: key, on: false, &edit)
+        } else {
+            if there.contains(key) { setOverride(promoted: !promoted, key: key, on: false, &edit) }
+            setOverride(promoted: promoted, key: key, on: true, &edit)
+        }
+        return true
+    }
+
+    /// #4362: a new row at `venue` under `presenter`, otherwise like any inserted row.
+    private func insertShow(presenter: String?, venue: String?, _ edit: inout Phase0cEdit) {
+        let title = Phase0cFixture.titles[roll(Phase0cFixture.titles.count)]
+        insert(Phase0cSnapshot(naturalKey: "ins-\(next())", groupName: title, venue: venue,
+                               performanceDate: Phase0cLinks.addDays(Phase0cFixture.firstDay, roll(120)),
+                               presenter: presenter), &edit)
+    }
 
     func roll(_ n: Int) -> Int { n <= 1 ? 0 : Int(rng.next() % UInt64(n)) }
 
@@ -582,6 +695,71 @@ final class Phase0cWorld {
         case .rollover:
             edit.asOfBefore = asOf
             asOf = Phase0cLinks.addDays(asOf, 1 + roll(14))
+        case .insertNewPresenter:
+            guard let r = pick(rows) else { return nil }
+            insertShow(presenter: "Zephyr Invented Ensemble \(next())", venue: r.venue, &edit)
+        case .insertNewVenue:
+            guard let r = pick(rows) else { return nil }
+            insertShow(presenter: r.presenter, venue: "Invented Room Number \(roll(7))", &edit)
+        case .insertExistingPair:
+            guard let r = pick(rows) else { return nil }
+            insertShow(presenter: r.presenter, venue: r.venue, &edit)
+        case .deleteRow:
+            guard rows.count > 2, let r = pick(rows) else { return nil }
+            delete(r, &edit)
+        case .presenterEdit:
+            guard let r = pick(rows), let donor = pick(rows, { !Self.same($0, r) && $0.presenter != r.presenter })
+            else { return nil }
+            modify(r, &edit) { $0.presenter = donor.presenter }
+        case .venueToPresenterTheatre:
+            guard let r = pick(rows, { $0.presenter != nil }), let presenter = r.presenter else { return nil }
+            modify(r, &edit) { $0.venue = "\(presenter) Theatre" }
+        case .venueToTheatre:
+            guard let r = pick(rows) else { return nil }
+            modify(r, &edit) { $0.venue = "Theatre" }
+        case .mergeMovingVenue:
+            guard rows.count > 3, let a = pick(rows), let b = pick(rows, { !Self.same($0, a) }) else { return nil }
+            modify(a, &edit) { $0.venue = b.venue }
+            delete(b, &edit)
+        case .promote, .demote:
+            guard toggleOverride(promoted: op == .promote, rows: rows, &edit) else { return nil }
+        case .adversarialVenue:
+            // A venue spelled from the corpus's commonest venue words, so it shares a word with nearly every name.
+            var freq: [String: Int] = [:]
+            for r in rows {
+                for word in ProducerGate.WordPostings.words(of: ProducerGate.key(r.venue) ?? "") {
+                    freq[String(word), default: 0] += 1
+                }
+            }
+            let common = freq.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(5).map(\.key)
+            guard common.count >= 2, let r = pick(rows) else { return nil }
+            insertShow(presenter: r.presenter, venue: common.joined(separator: " "), &edit)
+        case .venueAddRemove:
+            // The same key every time it runs, and always undone, so one venue key comes and goes all run long.
+            guard let r = pick(rows) else { return nil }
+            insertShow(presenter: r.presenter, venue: "Invented Annex Hall", &edit)
+        case .presenterIsVenue:
+            guard let v = pick(rows, { ProducerGate.key($0.venue) != nil }), let r = pick(rows) else { return nil }
+            insertShow(presenter: v.venue, venue: r.venue, &edit)
+        case .venueOneToTwo:
+            // A presenter on two or more rows that all play one room: one row moves to a second room.
+            var byPresenter: [String: [Prospect]] = [:]
+            for r in rows { if let k = ProducerGate.key(r.presenter) { byPresenter[k, default: []].append(r) } }
+            let oneRoom = byPresenter.filter { _, members in
+                members.count >= 2 && Set(members.compactMap { ProducerGate.key($0.venue) }).count == 1
+            }.keys.sorted()
+            guard !oneRoom.isEmpty else {
+                // None yet: make one, a second row of some presenter at its own room.
+                guard let r = pick(rows, { ProducerGate.key($0.presenter) != nil && ProducerGate.key($0.venue) != nil })
+                else { return nil }
+                insertShow(presenter: r.presenter, venue: r.venue, &edit)
+                return edit
+            }
+            let key = oneRoom[roll(oneRoom.count)]
+            guard let r = byPresenter[key]?.sorted(by: { $0.naturalKey < $1.naturalKey }).first else { return nil }
+            let room = ProducerGate.key(r.venue)
+            let other = Phase0cFixture.venues.compactMap { $0 }.first { ProducerGate.key($0) != nil && ProducerGate.key($0) != room }
+            modify(r, &edit) { $0.venue = other }
         }
         return edit
     }
@@ -614,6 +792,14 @@ final class Phase0cWorld {
             restored.append(p)
         }
         if let before = edit.asOfBefore { asOf = before }
+        for added in edit.overridesAdded.reversed() { removeOverride(promoted: added.promoted, key: added.key) }
+        for removed in edit.overridesRemoved {
+            if removed.promoted {
+                context.insert(PromotedProducer(orgKey: removed.key))
+            } else {
+                context.insert(DemotedHouse(orgKey: removed.key))
+            }
+        }
         try context.save()
         changed.formUnion(restored.map(\.persistentModelID))
         return changed

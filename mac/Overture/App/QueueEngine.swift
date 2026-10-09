@@ -751,7 +751,7 @@ final class QueueEngine<Value: Sendable> {
     /// term brought up to the facts first, from the shows that changed since the last pass (built cold the first time).
     private func passInput(now: Date, context: QueueEngineContextInputs) -> QueueEnginePassInput {
         // #4361: T3's day is the pass's own Eastern day.
-        patches.bringUp(to: facts.shows, asOf: EasternDate.today(now))
+        patches.bringUp(to: facts, asOf: EasternDate.today(now))
         return QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now, context: context, patches: patches)
     }
 
@@ -1421,7 +1421,7 @@ final class QueueEngine<Value: Sendable> {
     private func snapshot(of output: QueueEngineOutput<Value>) -> QueueEngineSnapshot<Value> {
         // #4360: the patched terms brought up to the facts this snapshot carries, so the verifier holds each term to
         // its oracle over the same store the facts are compared with (a landing can hold facts no pass has read yet).
-        patches.bringUp(to: facts.shows)
+        patches.bringUp(to: facts)
         return QueueEngineSnapshot(saveCount: output.saveCount, generation: output.generation, facts: facts,
                                    viewInputs: publishedViewInputs ?? viewInputs, context: output.context,
                                    now: output.now, value: output.value, clean: !context.hasChanges, patches: patches)
@@ -1912,8 +1912,8 @@ extension QueueEngine {
                                disposition: .resolved { $0.facts.allowedSeedTowns.resolve($1) }),
             // #4360: after `facts.shows` above, so a re-keyed show is read under its new identifier. A deleted or re-keyed
             // show leaves the pending set and is applied to every patched term at once, rather than waiting for a pass.
-            // The terms' own indexes (`patches.showLink`) are keyed by identity too, inside a type this registry's walk
-            // does not enter; this entry is what brings them to every resolution.
+            // The terms' own indexes (`patches.showLink`, `patches.producerTables`) are keyed by identity too, inside
+            // a type this registry's walk does not enter; this entry is what brings them to every resolution.
             IdentityKeyedState(path: "patches.pending", disposition: .resolved { engine, resolution in
                 engine.patches.resolve(resolution, shows: engine.facts.shows)
             }),

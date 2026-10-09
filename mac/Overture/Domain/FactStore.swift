@@ -282,11 +282,15 @@ struct QueueEnginePassInput: Sendable {
 /// recorded as `patchMismatch`), and the heal is a cold build.
 struct QueueEnginePatches: Sendable {
     typealias ShowLinkTerm = PatchableShowLink<PersistentIdentifier>
+    typealias ProducerTablesTerm = PatchableProducerTables<PersistentIdentifier>
 
     /// T1 ShowLink, or nil until the first bring-up builds it cold.
     private(set) var showLink: ShowLinkTerm?
+    /// #4362 (plan v7 Phase 4b(c)): T4 the producer tables, with witness sets, or nil until the first bring-up. Built
+    /// and dropped together with every other term, so one pending set serves them all.
+    private(set) var producerTables: ProducerTablesTerm?
     /// #4361: T2 ContradictedCancellation and T3 feed breaks (Domain/CancellationPatches.swift), built and dropped with
-    /// T1, so all three are cold or all three are patched. T3 is judged at a day, which a bring-up moves.
+    /// every other term. T3 is judged at a day, which a bring-up moves.
     private(set) var contradictions: PatchableContradictions?
     private(set) var feedBreaks: PatchableFeedBreaks?
     /// Shows whose stored value changed since the last bring-up.
@@ -296,7 +300,7 @@ struct QueueEnginePatches: Sendable {
 
     /// A show's stored value changed. Nothing is noted before the first build, which reads every show anyway.
     mutating func noteChanged(_ id: PersistentIdentifier) {
-        guard showLink != nil else { return }
+        guard showLink != nil || producerTables != nil else { return }
         pending.insert(id)
     }
 
@@ -304,6 +308,7 @@ struct QueueEnginePatches: Sendable {
     /// built cold at the next bring-up.
     mutating func invalidate() {
         showLink = nil
+        producerTables = nil
         contradictions = nil
         feedBreaks = nil
         pending = []
@@ -318,41 +323,53 @@ struct QueueEnginePatches: Sendable {
         guard !touched.isEmpty else { return }
         pending.subtract(touched)
         showLink?.apply(touched.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) })
+        // A resolution moves shows and never the overrides, so T4 keeps the overrides it was last brought up to.
+        if let overrides = producerTables?.overrides {
+            producerTables?.apply(touched.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
+                                  overrides: overrides)
+        }
         applyCancellations(Array(touched), shows: shows) // patch-resolve-cancellations
     }
 
-    /// Every term brought up to `shows`: built cold when it has never been built, else patched from the pending shows.
-    /// Returns what T1's patch changed, or nil for a cold build. #4361: `asOf` is the Eastern day T3 is judged at, which
-    /// the engine's pass hands in (its own day); nil keeps the day T3 was last brought to, which is what the verifier's
-    /// snapshot wants, since it holds the terms to the day the output on screen was derived at.
-    @discardableResult
-    mutating func bringUp(to shows: [PersistentIdentifier: RowFacts], asOf: String? = nil) -> ShowLinkTerm.Changed? {
-        guard var term = showLink else {
+    /// Every term brought up to `facts`: built cold when it has never been built, else patched from the pending shows.
+    /// T4 also reads the overrides (`FactStore.producerOverrides`) and compares them with the ones it holds on every
+    /// bring-up, because a promotion or a demotion changes no show and so is never pending.
+    /// #4361: `asOf` is the Eastern day T3 is judged at, which the engine's pass hands in (its own day); nil keeps the
+    /// day T3 was last brought to, which is what the verifier's snapshot wants, since it holds the terms to the day the
+    /// output on screen was derived at.
+    mutating func bringUp(to facts: FactStore, asOf: String? = nil) {
+        let shows = facts.shows
+        let overrides = facts.producerOverrides
+        guard var link = showLink, var producers = producerTables, contradictions != nil, feedBreaks != nil else {
             showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
+            producerTables = ProducerTablesTerm(
+                rows: shows.map { (key: $0.key, facts: ProducerTablesTerm.Facts(of: $0.value)) }, overrides: overrides)
             contradictions = PatchableContradictions()
             feedBreaks = PatchableFeedBreaks(asOf: asOf ?? "")
             applyCancellations(Array(shows.keys), shows: shows)
             pending = []
-            return nil
+            return
         }
         defer { if let asOf { advanceFeedBreaks(to: asOf) } }
-        guard !pending.isEmpty else { return ShowLinkTerm.Changed() }
-        let ids = Array(pending)
-        let changes = ids.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }
+        guard !pending.isEmpty || producers.overrides != overrides else { return }
+        let ids = pending
         pending = []
-        // Taken out and put back, so the patch mutates the one copy rather than a copy the optional still shares.
+        // Taken out and put back, so each patch mutates the one copy rather than a copy the optional still shares.
         showLink = nil
-        let changed = term.apply(changes)
-        showLink = term
-        applyCancellations(ids, shows: shows) // patch-bringup-cancellations
-        return changed
+        producerTables = nil
+        if !ids.isEmpty { link.apply(ids.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }) }
+        producers.apply(ids.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
+                        overrides: overrides)
+        showLink = link
+        producerTables = producers
+        applyCancellations(Array(ids), shows: shows) // patch-bringup-cancellations
     }
 
     /// #4361: the shows `ids` name, as `shows` holds them now (nil for one gone), taken into T2 and then into T3 with the
     /// identities whose contradicted state T2 flipped (section 5: T3 reads T2). Nothing before the first build.
     private mutating func applyCancellations(_ ids: [PersistentIdentifier], shows: [PersistentIdentifier: RowFacts]) {
         guard var t2 = contradictions, var t3 = feedBreaks, !ids.isEmpty else { return }
-        // Taken out and put back, for the reason T1's are.
+        // Taken out and put back, for the reason the other terms are.
         contradictions = nil
         feedBreaks = nil
         let flips = t2.apply(ids.map { ($0, shows[$0].map(PatchableContradictions.Slice.init)) })
@@ -372,13 +389,23 @@ struct QueueEnginePatches: Sendable {
     /// The verifier's comparison (plan v7 D7, one per term): each term held to its oracle over `fresh`, by the name of
     /// what differs, `term.table` (C7: names only, never a value). Empty when every term agrees, or none is built.
     func mismatches(against fresh: FactStore) -> [String] {
-        guard let held = showLink?.tables else { return [] }
         let shows = Array(fresh.shows.values)
-        let oracle = ShowLink.tables(among: shows, drawn: Set(QueueModel.queueScope(shows).map(\.naturalKey)))
         var out: [String] = []
-        if held.group != oracle.group { out.append("showLink.group") }
-        if held.fronts != oracle.fronts { out.append("showLink.fronts") }
-        if held.hidden != oracle.hidden { out.append("showLink.hidden") }
+        if let held = showLink?.tables {
+            let oracle = ShowLink.tables(among: shows, drawn: Set(QueueModel.queueScope(shows).map(\.naturalKey)))
+            if held.group != oracle.group { out.append("showLink.group") }
+            if held.fronts != oracle.fronts { out.append("showLink.fronts") }
+            if held.hidden != oracle.hidden { out.append("showLink.hidden") }
+        }
+        // #4362: plan v7 D7's comparison (ii), T4 held to the two tables built cold from the same shows and overrides.
+        if let held = producerTables?.tables {
+            let oracle = QueueModel.ProducerTables(rows: shows, overrides: fresh.producerOverrides)
+            if held.corpus.venues != oracle.corpus.venues { out.append("producerTables.venues") }
+            if held.corpus.venuesByPresenter != oracle.corpus.venuesByPresenter {
+                out.append("producerTables.venuesByPresenter")
+            }
+            if held.venueBrands != oracle.venueBrands { out.append("producerTables.venueBrands") }
+        }
         // #4361: T2 against `contradictedKeys` and T3 against `events` with `contradicted` nil (so it stays independent
         // of T2), at the day T3 was brought to. Both answer the same whatever order the rows come in.
         if let t2 = contradictions,
@@ -390,6 +417,16 @@ struct QueueEnginePatches: Sendable {
             out.append("feedBreaks.events")
         }
         return out
+    }
+}
+
+extension FactStore {
+    /// #4362: Dan's producer corrections as the pass reads them, from the two small tables. One derivation, read by
+    /// the engine's pass (`QueueEngineQueue.passInputs`), the patched producer tables and the verifier's comparison,
+    /// so the three cannot disagree about which keys are promoted (L370).
+    var producerOverrides: ProducerOverrides {
+        ProducerOverrides(promoted: Set(promotedProducers.values.map(\.orgKey)),
+                          demoted: Set(demotedHouses.values.map(\.orgKey)))
     }
 }
 
