@@ -426,8 +426,17 @@ final class Phase0cWorld {
     /// #4362: a promote or demote of one presenter key, as `ProducerOverrideEditing` keeps the two lists: the key
     /// already in the list asked for comes off it, otherwise it comes off the other list and goes on this one.
     private func toggleOverride(promoted: Bool, rows: [Prospect], _ edit: inout Phase0cEdit) -> Bool {
-        guard let row = pick(rows, { ProducerGate.key($0.presenter) != nil }),
-              let key = ProducerGate.key(row.presenter), let current = try? overrides() else { return false }
+        guard let current = try? overrides() else { return false }
+        // Aimed, half the time, at a presenter whose brand verdict the correction MOVES: a promotion at a name the
+        // containment arm refuses, a demotion at one no arm refuses. A random pick mostly lands on a key whose verdict
+        // stays put, and measured on the first run of mutation 2 (#4362) that let the whole pass harness pass with the
+        // overrides never reaching T4 through five override ops.
+        let tables = QueueModel.ProducerTables(rows: rows, overrides: current)
+        let moves: (Prospect) -> Bool = promoted
+            ? { tables.venueBrands.contains($0.presenter) && !tables.venueBrands.isRoomName($0.presenter) }
+            : { $0.presenter != nil && !tables.venueBrands.contains($0.presenter) }
+        guard let row = (roll(2) == 0 ? pick(rows, moves) : nil) ?? pick(rows, { ProducerGate.key($0.presenter) != nil }),
+              let key = ProducerGate.key(row.presenter) else { return false }
         let here = promoted ? current.promoted : current.demoted
         let there = promoted ? current.demoted : current.promoted
         if here.contains(key) {
