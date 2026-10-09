@@ -419,6 +419,12 @@ enum QueueRenderPass {
         // #4364 (plan v7 Phase 4b(e)): T5's inherited answers from the queue engine's patched ledger
         // (`PatchableAnswerLedger`), or nil to derive them in the pass, which every caller but the engine does.
         var inherited: [String: OrgAnswerLedger.Inherited]? = nil
+        // #4361 (plan v7 Phase 4b(b)): T2's contradicted set and T3's feed breaks, when the caller keeps them patched
+        // (the queue engine, `QueueEnginePatches`) rather than having the pass recompute both over every show. Nil
+        // means "derive them in the pass", which every caller but the engine's own turn does, so the cost tests and
+        // the verifier's rebuild keep measuring and comparing against the whole derivation.
+        var contradictedCancellations: Set<String>? = nil
+        var feedBreakEvents: [FeedBreakEvent.Event]? = nil
         // #4358 slice E4b (#4357 step 9): whether the pass checks one card against a fresh build of it. True over the
         // models, as it always was; the queue engine's pass over facts sets false and checks at publish, over the
         // main context's model, because a fresh build over the same facts can only agree with itself (L70).
@@ -462,7 +468,9 @@ enum QueueRenderPass {
                                      // prebuilt value on `Inputs` follows.
                                      producerTables: i.producerTables, showLink: i.showLink,
                                      inherited: i.inherited, today: context.today,
-                                     checksACard: i.checksACardInThePass)
+                                     checksACard: i.checksACardInThePass,
+                                     // #4361: T2's set, when the caller keeps it patched.
+                                     contradicted: i.contradictedCancellations)
         // #3653 Phase 3: one build, two halves. The cards are what the screen draws; the rows are what
         // every whole-scope sweep below reads, and they cost one contacts walk between them rather than
         // one each.
@@ -492,9 +500,10 @@ enum QueueRenderPass {
         // keys the queue will actually render, which is what decides whether the notice may offer to show
         // them (L109, `StageNavigation.opensInQueue` is the same question asked one key at a time).
         let feedBreaks = AppNotices.feedBreaks(
-            // #4106 Step C: the scope's own contradicted set, taken over this same `everyProspect`.
-            FeedBreakEvent.events(among: everyProspect, asOf: EasternDate.today(i.context.now),
-                                  contradicted: scope.contradictedCancellations),
+            // #4361: the caller's patched events when it keeps them, else (#4106 Step C) built here from the scope's
+            // own contradicted set, taken over this same `everyProspect`.
+            i.feedBreakEvents ?? FeedBreakEvent.events(among: everyProspect, asOf: EasternDate.today(i.context.now),
+                                                       contradicted: scope.contradictedCancellations),
             shownInQueue: { inAStage.contains($0) })
         // #3596: the rows a merge kept that the next sweep did not list. Derived here for the same two
         // reasons as the line above: it is a whole-store question, and this pass already holds both

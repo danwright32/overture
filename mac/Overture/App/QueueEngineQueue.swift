@@ -168,6 +168,14 @@ enum QueueEngineQueue {
         // #4362 (plan v7 Phase 4b(c)): T4 the same way. Before the switch `QueueView` kept these in a memo; the engine
         // built them cold on every pass until this (#4623 measured 25.1 ms at 1x and 201.7 ms at 4x, optimised).
         inputs.producerTables = input.patches?.producerTables?.tables
+        // #4361: T2 and T3 as the engine keeps them patched, T3 taken only when it was judged at this pass's own Eastern
+        // day: a value judged at another day would describe that day's breaks, so the pass derives both itself instead
+        // (the engine brings T3 to the pass's day before every pass it runs, so this is a net, not a path).
+        if let t2 = input.patches?.contradictions, let t3 = input.patches?.feedBreaks,
+           t3.asOf == EasternDate.today(input.now) {
+            inputs.contradictedCancellations = t2.contradictedKeys
+            inputs.feedBreakEvents = t3.output
+        }
         // #4364 (plan v7 Phase 4b(e)): T5 the same way, brought up to this pass's instant (`QueueEnginePatches.bringUp`).
         inputs.inherited = input.patches?.ledger?.inherited
         return inputs
