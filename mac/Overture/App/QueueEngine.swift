@@ -122,6 +122,9 @@ struct QueueEngineOutput<Value> {
     /// #4358 slice E4b: the inputs that arrive by a signal, as they were read for this pass, so a verification
     /// rebuilds the output from exactly what it was derived from.
     let context: QueueEngineContextInputs
+    /// #4361: T2 and T3 as the engine had them patched for this pass, which the verifier judges against the terms
+    /// themselves over a fresh read. Nil for an output derived with nothing patched.
+    var patched: QueueEnginePatchedValues? = nil
 }
 
 /// #4369 (#4358 slice E4b): one scout landing, open from `QueueEngine.openLanding()` until `closeLanding(_:)`, which
@@ -504,6 +507,14 @@ final class QueueEngine<Value: Sendable> {
 
     /// Every queue input as a value.
     @ObservationIgnored private(set) var facts = FactStore()
+    /// #4361 (plan v7 Phase 4b(b)): T2's contradicted set and T3's feed breaks, kept and patched from the shows a change
+    /// touched rather than recomputed by every pass (`QueueEnginePatches`). Every write to `facts.shows` reaches it:
+    /// a show taken in (`take`), the resolve step (its entries in `identityKeyedState`), and a whole read, which
+    /// rebuilds it cold (`landFirstRead`, `readEverything`).
+    @ObservationIgnored private(set) var patches = QueueEnginePatches()
+    /// The verifier found a patched value wrong (`patchMismatch`), or a whole read replaced the facts, so the next pass
+    /// rebuilds the patches cold.
+    @ObservationIgnored private var rebuildPatches = false
     /// The main context's rows the trackers are armed on, so a fired row is read again without a fetch.
     @ObservationIgnored private var showMembers: [PersistentIdentifier: Prospect] = [:]
     @ObservationIgnored private var contactMembers: [PersistentIdentifier: Recipient] = [:]
@@ -739,6 +750,18 @@ final class QueueEngine<Value: Sendable> {
         }
     }
 
+    /// #4361: T2 and T3 as the next pass is handed them, at `now`'s Eastern day: rebuilt cold first when a whole read
+    /// replaced the facts or the verifier found a patched value wrong, then advanced to the day.
+    private func patchedValues(at now: Date) -> QueueEnginePatchedValues {
+        let day = EasternDate.today(now)
+        if rebuildPatches {
+            rebuildPatches = false
+            patches = QueueEnginePatches(shows: facts.shows, asOf: day)
+        }
+        patches.advance(to: day)
+        return patches.values
+    }
+
     /// One pass in the engine's own turn: the derivation's main actor form when it has one, so what a main-thread
     /// pass records is recorded, and the plain pass otherwise.
     private func mainPass(_ input: QueueEnginePassInput) -> Value {
@@ -909,11 +932,12 @@ final class QueueEngine<Value: Sendable> {
         heldReasons = []
         guard !reasons.isEmpty else { return }
         let context = contextInputs()
+        let patched = patchedValues(at: now)
         let value = mainPass(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now,
-                                                           context: context))
+                                                           context: context, patched: patched))
         let previous = output
         guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: mintGeneration(), now: now,
-                                        reasons: reasons, context: context)) else {
+                                        reasons: reasons, context: context, patched: patched)) else {
             // Unreachable while every publisher mints: a minted number is newer than everything published, minted
             // or not. `publish` has already reported the refusal (a Debug stop), and an output never applied is no
             // pass (L78).
@@ -972,16 +996,18 @@ final class QueueEngine<Value: Sendable> {
         }
         counters.fullReads += 1
         facts = fresh.facts
+        rebuildPatches = true
         // This pass is the one every reason gathered while loading asked for: the clock's, a source's, the view's.
         clockDue = []
         sourcesFired = []
         viewInputsMoved = false
         let context = contextInputs()
+        let patched = patchedValues(at: now)
         let value = mainPass(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now,
-                                                           context: context))
+                                                           context: context, patched: patched))
         // Nothing is on screen yet, so the gate applies it whatever its number.
         publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
-                                  reasons: [.first], context: context))
+                                  reasons: [.first], context: context, patched: patched))
         counters.passes += 1
         launch.firstPaint = .ready(at: now, attempts: attempt)
         fillAttempts = 1
@@ -1411,7 +1437,7 @@ final class QueueEngine<Value: Sendable> {
     private func snapshot(of output: QueueEngineOutput<Value>) -> QueueEngineSnapshot<Value> {
         QueueEngineSnapshot(saveCount: output.saveCount, generation: output.generation, facts: facts,
                             viewInputs: publishedViewInputs ?? viewInputs, context: output.context, now: output.now,
-                            value: output.value, clean: !context.hasChanges)
+                            value: output.value, clean: !context.hasChanges, patched: output.patched)
     }
 
     /// The card check at publish (#4357 step 9): the output as it should go on screen, with the card the check
@@ -1431,7 +1457,8 @@ final class QueueEngine<Value: Sendable> {
         writeFinding(.cardDivergence, fields: found.fields, at: incoming.now, judged: incoming.generation,
                      cardsBuilt: found.cardsBuilt)
         return QueueEngineOutput(value: found.corrected, saveCount: incoming.saveCount, generation: incoming.generation,
-                                 now: incoming.now, reasons: incoming.reasons, context: incoming.context)
+                                 now: incoming.now, reasons: incoming.reasons, context: incoming.context,
+                                 patched: incoming.patched)
     }
 
     private func startVerification() {
@@ -1499,6 +1526,16 @@ final class QueueEngine<Value: Sendable> {
             verifierCounts.cardMismatches += 1
             writeFinding(.cardMismatch, fields: fields, at: now, judged: judged)
             armUnverifiedTimer()
+        case .patchMismatch(let terms, let judged):
+            // #4361: a patched term disagreed with the term itself over facts that agree with the store. The patches
+            // are rebuilt cold and the output derived again over them, which is the heal (the output was derived from
+            // the wrong value, so it is healed exactly as an output mismatch is).
+            verifierCounts.patchMismatches += 1
+            for term in terms { writeFinding(term.mismatchKind, fields: [term.rawValue], at: now, judged: judged) }
+            rebuildPatches = true
+            outputHealFields = terms.map(\.rawValue)
+            armUnverifiedTimer()
+            scheduleTurn()
         case .outputMismatch(let fields, let judged):
             verifierCounts.outputMismatches += 1
             writeFinding(.outputMismatch, fields: fields, at: now, judged: judged)
@@ -1522,7 +1559,7 @@ final class QueueEngine<Value: Sendable> {
         // on screen: once more after the next quiet moment (L710).
         let verdict: Bool
         switch result {
-        case .match, .factMismatch, .outputMismatch, .cardMismatch: verdict = true
+        case .match, .factMismatch, .outputMismatch, .cardMismatch, .patchMismatch: verdict = true
         case .superseded, .cancelled, .unmeasured: verdict = false
         }
         if verdict { consecutiveRetries = 0 }
@@ -1647,6 +1684,8 @@ final class QueueEngine<Value: Sendable> {
         }
         let oldKey = facts.shows[id]?.naturalKey
         let changed = facts.record(show)
+        // #4361: the patched terms take the row's new value at once, so they never lag the facts they patch.
+        if changed { patches.take([(id, facts.shows[id])]) } // patch-engine-take
         // A rename under the same identity renames the key everywhere a surface keyed the show by it.
         if let oldKey, let newKey = facts.shows[id]?.naturalKey, newKey != oldKey {
             resolution.rekeyedKeys[oldKey] = newKey
@@ -1762,6 +1801,8 @@ final class QueueEngine<Value: Sendable> {
         }
         let contactsBefore = contactMembers
         facts = fresh
+        // #4361: every row read again, so the patched terms are rebuilt from them before the next pass.
+        rebuildPatches = true
         var contactsNow: Set<PersistentIdentifier> = []
         for show in shows {
             let id = show.persistentModelID
@@ -1856,6 +1897,9 @@ extension QueueEngine {
         case namesInputsNotRows
         /// Holds the NAMES of an output's fields (C7), never a row's identity or key, so nothing reaches it.
         case namesFieldsNotRows
+        /// #4361: an index inside a value another entry resolves whole, through the value's own resolve (the value is
+        /// named), so it is not resolved a second time on its own.
+        case resolvedWith(String)
     }
 
     struct IdentityKeyedState {
@@ -1884,6 +1928,19 @@ extension QueueEngine {
                                disposition: .resolved { $0.facts.excludedTowns.resolve($1) }),
             IdentityKeyedState(path: "facts.allowedSeedTowns",
                                disposition: .resolved { $0.facts.allowedSeedTowns.resolve($1) }),
+            // #4361: the patched terms, after `facts.shows` above, because a re-keyed row is read again from it. One
+            // call resolves the whole value; each other index inside it is named, resolved by that call.
+            IdentityKeyedState(path: "patches.contradictions.slices", disposition: .resolved { engine, resolution in
+                engine.patches.resolve(resolution, shows: engine.facts.shows) // patch-engine-resolve
+            }),
+            IdentityKeyedState(path: "patches.contradictions.live", disposition: .resolvedWith("patches")),
+            IdentityKeyedState(path: "patches.contradictions.flagged", disposition: .resolvedWith("patches")),
+            IdentityKeyedState(path: "patches.contradictions.twins", disposition: .resolvedWith("patches")),
+            IdentityKeyedState(path: "patches.contradictions.contradicted", disposition: .resolvedWith("patches")),
+            IdentityKeyedState(path: "patches.feedBreaks.slices", disposition: .resolvedWith("patches")),
+            IdentityKeyedState(path: "patches.feedBreaks.buckets", disposition: .resolvedWith("patches")),
+            IdentityKeyedState(path: "patches.feedBreaks.byLastNight", disposition: .resolvedWith("patches")),
+            IdentityKeyedState(path: "patches.feedBreaks.events", disposition: .resolvedWith("patches")),
             IdentityKeyedState(path: "showMembers", disposition: .resolved { $0.showMembers.resolve($1) }),
             IdentityKeyedState(path: "contactMembers", disposition: .resolved { $0.contactMembers.resolve($1) }),
             IdentityKeyedState(path: "inquiryMembers", disposition: .resolved { $0.inquiryMembers.resolve($1) }),

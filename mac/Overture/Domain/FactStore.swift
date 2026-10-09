@@ -263,6 +263,9 @@ struct QueueEnginePassInput: Sendable {
     let now: Date
     /// #4358 slice E4b: the inputs that arrive by a signal, as the engine read them for this pass.
     let context: QueueEngineContextInputs
+    /// #4361 (plan v7 Phase 4b(b)): T2 and T3 as the engine keeps them patched (`QueueEnginePatches`), or nil for a
+    /// pass that derives both itself, which is what the verifier's rebuild over a fresh read is.
+    var patched: QueueEnginePatchedValues? = nil
 }
 
 /// #4358 slice E4b: every input of the queue's pass that is neither a store row, the clock nor the surface's view,

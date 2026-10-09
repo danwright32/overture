@@ -149,6 +149,13 @@ enum QueueEngineQueue {
         inputs.requestedCardKeys = input.viewInputs.requestedCardKeys
         // The engine checks a card at publish, over the main context's model, rather than inside the pass.
         inputs.checksACardInThePass = false
+        // #4361: T2 and T3 as the engine keeps them patched, taken only when they were judged at this pass's own
+        // Eastern day. A value judged at another day would describe another day's breaks, so the pass derives both
+        // itself rather than draw it (the engine advances the patches to the pass's day before every pass it runs).
+        if let patched = input.patched, patched.asOf == EasternDate.today(input.now) {
+            inputs.contradictedCancellations = patched.contradicted
+            inputs.feedBreakEvents = patched.feedBreaks
+        }
         return inputs
     }
 

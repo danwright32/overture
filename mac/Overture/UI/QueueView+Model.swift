@@ -3414,7 +3414,10 @@ enum QueueModel {
                       // build. Over the live models it does, as it always has. The queue engine passes false: over
                       // retained facts the fresh build reads the same facts, so it could only ever agree with itself
                       // (L70), and the engine checks the card at publish over the main context's model instead.
-                      checksACard: Bool = true) -> Scope {
+                      checksACard: Bool = true,
+                      // #4361 (plan v7 Phase 4b(b)): T2's contradicted set over the unfiltered corpus, when the caller
+                      // keeps it patched (the queue engine). Nil means "derive it here", which every other caller does.
+                      contradicted: Set<String>? = nil) -> Scope {
         let day = today ?? EasternDate.today(now)
         // #3652/#3644: over `rowsForLinking`, which defaults to the rows being built. Its three
         // neighbours below judge against `corpus ?? prospects` and each says why; this one carried no
@@ -3455,7 +3458,8 @@ enum QueueModel {
         // queue's window, and a contradiction the caller's scope happens to exclude is still a
         // contradiction. Judging it against a filtered set would let the warning come back for exactly
         // the rows Dan has already dealt with.
-        let contradictedCancellations = ContradictedCancellation.contradictedKeys(among: corpus ?? prospects)
+        let contradictedCancellations = contradicted
+            ?? ContradictedCancellation.contradictedKeys(among: corpus ?? prospects)
         // #3282: over the UNFILTERED corpus for the same reason `contradictedCancellations` above is.
         // The second row holding this show may itself be dismissed, or outside the queue's date window,
         // and a duplicate the caller's scope happens to exclude is still a duplicate. Judging it against
