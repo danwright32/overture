@@ -113,7 +113,6 @@ final class QueueEngineQueueDerivationTests {
         #expect(differing.isEmpty, Comment(rawValue: "the engine's pass differs from the models' in: "
             + differing.joined(separator: ", ")))
         #expect(engines.data.gmailConnected, "a signal input did not reach the pass")
-        #expect(Set(QueueEngineQueue.derivation(freezeWatch: { nil }).builtCardKeys(engines)) == keys)
     }
 
     // The derivation is deterministic over one input, so a rebuild on the verifier's thread can only differ from the
@@ -254,9 +253,9 @@ final class QueueEngineCardCheckTests {
                                            cards: cards, shows: pass.builtCards.shows,
                                            contacts: pass.builtCards.contacts,
                                            requestedKeys: pass.builtCards.requestedKeys),
-                                       nextChange: pass.nextChange, checkKey: key)
+                                       nextChange: pass.nextChange, checkKey: key, toPrep: pass.toPrep)
             },
-            differingFields: real.differingFields, nextChange: real.nextChange, builtCardKeys: real.builtCardKeys)
+            differingFields: real.differingFields, nextChange: real.nextChange)
         derivation.checkAtPublish = checkAtPublish ? real.checkAtPublish : nil
         derivation.compareCards = real.compareCards
         return derivation
@@ -269,6 +268,8 @@ final class QueueEngineCardCheckTests {
         let key = show.naturalKey
         let engine = QueueEngineRig.started(store, turns, derivation: Self.tampering(key, checkAtPublish: true))
         engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil, requestedCardKeys: [key]))
+        // A frame's cards are no reason for a pass (#4358 slice E4d), so a signal asks for the one that builds them.
+        engine.sourceFired("gmailConnected")
         turns.run()
         let output = try #require(engine.output)
         #expect(engine.verifierCounts.cardDivergences >= 1)
@@ -286,6 +287,8 @@ final class QueueEngineCardCheckTests {
         let key = try #require(try store.shows().first).naturalKey
         let engine = QueueEngineRig.started(store, turns)
         engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil, requestedCardKeys: [key]))
+        // A frame's cards are no reason for a pass (#4358 slice E4d), so a signal asks for the one that builds them.
+        engine.sourceFired("gmailConnected")
         turns.run()
         #expect(engine.output?.value.checkKey == key, "no card was sampled, so agreement was not measured")
         #expect(engine.verifierCounts.cardDivergences == 0)
@@ -300,6 +303,8 @@ final class QueueEngineCardCheckTests {
         let key = try #require(try store.shows().first).naturalKey
         let engine = QueueEngineRig.started(store, turns, derivation: Self.tampering(key, checkAtPublish: false))
         engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil, requestedCardKeys: [key]))
+        // A frame's cards are no reason for a pass (#4358 slice E4d), so a signal asks for the one that builds them.
+        engine.sourceFired("gmailConnected")
         turns.run()
         engine.verifyNow()
         await waitUntil("the verification") { engine.verifierCounts.cardMismatches + engine.verifierCounts.matches > 0 }
@@ -315,6 +320,8 @@ final class QueueEngineCardCheckTests {
         let keys = Set(try store.shows().prefix(4).map(\.naturalKey))
         let engine = QueueEngineRig.started(store, turns)
         engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil, requestedCardKeys: keys))
+        // A frame's cards are no reason for a pass (#4358 slice E4d), so a signal asks for the one that builds them.
+        engine.sourceFired("gmailConnected")
         turns.run()
         let pass = try #require(engine.output?.value)
         #expect(pass.builtCards.cards.count == 4, "no cards were built, so nothing was compared")
@@ -460,6 +467,33 @@ final class QueueEngineReloadTests {
         #expect(engine.facts.shows[show.persistentModelID] != nil, "a failed read was taken as a deletion (L215)")
     }
 
+    // #4358 slice E4d (the E4b review, L11): a show the engine no longer holds, deleted since its card was drawn, is
+    // NOT "already in step", which would claim a match nobody measured. Seen to fail by asking the fault set first.
+    @Test func aShowTheEngineNoLongerHoldsIsNotHeldRatherThanInStep() throws {
+        let store = try EngineStore(shows: 3, seed: 4437)
+        let turns = EngineTurns()
+        let engine = QueueEngineRig.started(store, turns)
+        let show = try #require(try store.shows().first)
+        let identity = ShowIdentity(show)
+        store.context.delete(show)
+        try store.context.save()
+        turns.run()
+        #expect(engine.facts.shows[identity.showID] == nil, "the deletion never reached the engine, so nothing was measured")
+        #expect(engine.reload(identity) == .notHeld)
+    }
+
+    // #4358 slice E4d (plan item 12): the observed set a card's "Reload this show" row is drawn from follows the faults
+    // both ways: in when the verifier faults the show, out when it is reloaded and heals.
+    @Test func theOutOfStepSetFollowsAFaultAndItsReload() async throws {
+        let store = try EngineStore(shows: 4, seed: 4438)
+        let turns = EngineTurns()
+        let (engine, show) = try await QueueEngineRig.faulted(store, turns,
+                                                              setup: QueueEngineVerifierSetup(triggers: .byHand))
+        #expect(engine.outOfStepShows == [show.persistentModelID], "the faulted show is not in the observed set")
+        #expect(engine.reload(ShowIdentity(show)) == .reloaded)
+        #expect(engine.outOfStepShows.isEmpty, "the reloaded show is still drawn as out of step")
+    }
+
     @Test func everyOutcomeSaysItsOwnWholeSentenceNamingTheShow() {
         let sentences = QueueEngineReload.allCases.map { $0.sentence(org: "Lark & Finch Players") }
         #expect(Set(sentences).count == QueueEngineReload.allCases.count, "two outcomes share a sentence (L260)")
@@ -467,6 +501,29 @@ final class QueueEngineReloadTests {
             #expect(sentence.contains("Lark & Finch Players"), Comment(rawValue: sentence))
             #expect(sentence.range(of: "[\u{2014}\u{2013}]", options: .regularExpression) == nil, Comment(rawValue: sentence))
         }
+    }
+
+    // #4358 slice E4d (the E4b review, L11): a press whose look for the show THREW, which only the engine's fill fallback
+    // can produce, is refused as unreadable, never as a show that is gone. Produced through a resolver that says so.
+    @MainActor
+    private struct AReadThatThrew: ShowResolver {
+        func liveShow(_ id: PersistentIdentifier) -> Prospect? { nil }
+        func identities(forKeys keys: Set<String>) -> [String: ShowIdentity] { [:] }
+        var everyShow: [Prospect] { [] }
+        func readFailed(_ id: PersistentIdentifier) -> Bool { true }
+    }
+
+    @Test func aLookThatThrewIsRefusedAsUnreadableAndSaidAsOne() throws {
+        let store = try EngineStore(shows: 2, seed: 4439)
+        let show = try #require(try store.shows().first)
+        guard case .refused(.unreadable) = ShowIdentity(show).resolve(in: AReadThatThrew()) else {
+            Issue.record("a look that threw was not refused as unreadable")
+            return
+        }
+        let feedback = ActionFeedback()
+        #expect(AReadThatThrew().show(for: QueueItem(show), feedback: feedback) == nil)
+        #expect(feedback.message == ShowIdentity.Refusal.unreadable.sentence(org: show.groupName))
+        #expect(feedback.message != ShowIdentity.Refusal.gone.sentence(org: show.groupName))
     }
 
     // The resolver's fourth refusal names the button that unsticks the row, in both forms.
@@ -632,5 +689,32 @@ struct QueueEngineNoticeCopyTests {
                      "unclassified saves 0", "merged inserts 0", "unread rows 0"] {
             #expect(line.contains(part), Comment(rawValue: "\(part) is missing from: \(line)"))
         }
+    }
+}
+
+// MARK: - What the switch reads off the pass (#4358 slice E4d)
+
+@Suite("The engine's pass carries the shows the next Prep run would take (#4358 E4d)")
+@MainActor
+final class QueueEngineSwitchReadsTests {
+
+    // `toPrep` is the whole Prep rule (`needsPrepEligible`, on the pass's own day) over the engine's shows, in key
+    // order: the query it replaced fetched the status half only. Seen to fail by dropping the date half.
+    @Test func thePrepOutputIsThePrepRuleOverTheSameShows() throws {
+        let store = try EngineStore(shows: 12, seed: 4440)
+        let shows = try store.shows()
+        for show in shows.prefix(4) {
+            show.statusRaw = ReviewStatus.queued.rawValue
+            show.draftBody = nil
+        }
+        try store.context.save()
+        let turns = EngineTurns()
+        let engine = QueueEngineRig.started(store, turns)
+        let pass = try #require(engine.output?.value)
+        let today = EasternDate.today(try #require(engine.output?.now))
+        let expected = Prospect.inKeyOrder(try store.shows())
+            .filter { PrepQueueBuilder.needsPrepEligible($0, today: today) }.map(ShowIdentity.init)
+        #expect(!expected.isEmpty, "the fixture holds no show to prep, so the comparison is about nothing")
+        #expect(pass.toPrep == expected)
     }
 }

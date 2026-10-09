@@ -55,7 +55,11 @@ merge_refusal_out() {
       merge) return "${merge_rc}" ;;
       # The head question the lessons review gate asks first is not the state question these cases
       # are about, so it always has an answer.
-      view) case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *) printf '%s' "${reported_state}" ;; esac ;;
+      # The queue engine gate's files question (#4358 slice E4d) answers a file outside the engine, so these
+      # cases are about the merge rather than the gate, which has its own cases below.
+      view) case "$*" in *headRefOid*) printf 'abc1234\tmain' ;;
+                         *) printf '%s' "${reported_state}" ;; esac ;;
+      --paginate) printf 'scripts/lib/scratch.sh' ;;
     esac
   }
   delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
@@ -118,6 +122,7 @@ gate_out() {  # gate_out <checker path or MISSING> [SKIP]
     echo "$2" >> "${GH_CALL_LOG}"
     case "$*" in
       *headRefOid*) printf 'abc1234\tmain' ;;
+      */files*) printf 'scripts/lib/scratch.sh' ;;
       *merge*) return 0 ;;
       *view*) printf 'MERGED' ;;
     esac
@@ -144,13 +149,34 @@ gh_args_out() {
   : > "${GH_CALL_LOG}"
   gh_as_danwright32() {
     printf '%s\n' "$*" >> "${GH_CALL_LOG}"
-    case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; *"pr merge"*) return 0 ;; *view*) printf 'MERGED' ;; esac
+    case "$*" in *headRefOid*) printf 'abc1234\tmain' ;; */files*) printf 'scripts/lib/scratch.sh' ;;
+      *"pr merge"*) return 0 ;; *view*) printf 'MERGED' ;; esac
   }
   delete_merged_local_branch() { :; }
   PR_REVIEW_CHECK="${FAKE_CHECK_DIR}/allow.sh" SKIP_PR_REVIEW="" merge_pr "92" "feature-pinned" >/dev/null 2>&1
   grep "pr merge" "${GH_CALL_LOG}"
 }
 assert_contains "the merge is pinned to the head the review read" "$(gh_args_out)" "--match-head-commit abc1234"
+
+# #4358 slice E4d: with the review skipped, the merge is still pinned, to the head the engine gate was asked about.
+SKIPPED_HEAD="1111111111222222222233333333334444444444"
+gh_args_skipped_out() {
+  : > "${GH_CALL_LOG}"
+  gh_as_danwright32() {
+    printf '%s\n' "$*" >> "${GH_CALL_LOG}"
+    case "$*" in
+      *headRefOid*) printf '%s' "${SKIPPED_HEAD}" ;;
+      *files*) printf 'docs/x.md' ;;
+      *"pr merge"*) return 0 ;;
+      *view*) printf 'MERGED' ;;
+    esac
+  }
+  delete_merged_local_branch() { :; }
+  PR_REVIEW_CHECK="${FAKE_CHECK_DIR}/does-not-exist.sh" SKIP_PR_REVIEW=1 merge_pr "93" "feature-skipped" >/dev/null 2>&1
+  grep "pr merge" "${GH_CALL_LOG}"
+}
+assert_contains "a merge with the review skipped is pinned to the head the gate read" "$(gh_args_skipped_out)" \
+  "--match-head-commit ${SKIPPED_HEAD}"
 
 OUT="$(gate_out MISSING; echo "RC=${MERGE_PR_RC}"; echo "GH=$(tr '\n' ' ' < "${GH_CALL_LOG}")")"
 assert_contains "a missing checker refuses rather than merging unread" "${OUT}" "RC=1"
@@ -162,6 +188,124 @@ assert_contains "and says out loud that it did" "${OUT}" "NOT held for the lesso
 
 rm -rf "${FAKE_CHECK_DIR}"
 rm -f "${GH_CALL_LOG}"
+
+
+# --- the queue engine's merge gate (#4358 slice E4d) ---------------------------------------------------
+#
+# engine_gate_allows, driven with the gh wrapper answering the PR's files and the run replaced
+# (ENGINE_GATE_RUNNER), so no case reaches GitHub or the live store. Every outcome it names is produced here
+# (L151): not an engine PR, a pass, a failed run, a run that printed no PASSED line (skipped), unreadable
+# files, a head that is not a whole commit, and the override.
+GATE_SHA="0123456789abcdef0123456789abcdef01234567"
+GATE_RUNS="$(mktemp "${TMPDIR:-/tmp}/engine-gate-runs.XXXXXX")"
+gate_files_out() {
+  local files="$1" head="$2" runner="$3"
+  : > "${GATE_RUNS}"
+  gh_as_danwright32() { printf '%s' "${GATE_FILES}"; }
+  GATE_FILES="${files}" ENGINE_GATE_RUNNER="${runner}" engine_gate_allows "93" "${head}" 2>&1
+  echo "RC=$?"
+  echo "RUNS=$(wc -l < "${GATE_RUNS}" | tr -d ' ')"
+}
+gate_passes() { echo "$1" >> "${GATE_RUNS}"; echo "noise"; echo "engine-divergence-gate: PASSED matches 5, records 0"; }
+gate_fails() { echo "$1" >> "${GATE_RUNS}"; echo "the merge gate REFUSED: factMismatch x1"; return 1; }
+gate_skipped() { echo "$1" >> "${GATE_RUNS}"; echo "Test theBranchsVerifier... skipped: no live store"; return 0; }
+
+# engine_gate_run itself, over a throwaway repository whose runner is a stub committed at the head, so the run
+# reaches no live store: its verdict and exit code come back, and the worktree and its temporary folder are gone
+# afterwards on every exit, an interrupt included (the lessons review of E4d1, L114, L473).
+GATE_REPO="$(mktemp -d "${TMPDIR:-/tmp}/engine-gate-repo.XXXXXX")"
+GATE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/engine-gate-tmp.XXXXXX")"
+gate_repo_commit() {  # gate_repo_commit <runner body>: commits the stub runner and prints the commit
+  mkdir -p "${GATE_REPO}/mac/scripts"
+  printf '#!/bin/bash\n%s\n' "$1" > "${GATE_REPO}/mac/scripts/run-tests-locked.sh"
+  chmod +x "${GATE_REPO}/mac/scripts/run-tests-locked.sh"
+  git -C "${GATE_REPO}" add -A >/dev/null
+  git -C "${GATE_REPO}" -c user.name=fixture -c user.email=fixture@example.invalid commit -q -m stub >/dev/null
+  git -C "${GATE_REPO}" rev-parse HEAD
+}
+git -C "${GATE_REPO}" init -q
+gate_run_out() {  # gate_run_out <commit>: runs engine_gate_run against the throwaway repository
+  local rc=0
+  REPO_ROOT="${GATE_REPO}" TMPDIR="${GATE_TMP}" engine_gate_run "$1" 2>&1 || rc=$?
+  echo "RC=${rc}"
+  echo "WORKTREES=$(git -C "${GATE_REPO}" worktree list | wc -l | tr -d ' ')"
+  echo "LEFT=$(ls -A "${GATE_TMP}" | wc -l | tr -d ' ')"
+}
+PASS_HEAD="$(gate_repo_commit 'echo "commit ${TEST_RUNNER_OVERTURE_GATE_COMMIT}"; echo "engine-divergence-gate: PASSED matches 6, records 0"')"
+OUT="$(gate_run_out "${PASS_HEAD}")"
+assert_contains "the gate's run reports its verdict" "${OUT}" "engine-divergence-gate: PASSED"
+assert_contains "and is handed the commit it runs at" "${OUT}" "commit ${PASS_HEAD}"
+assert_contains "and exits 0 when the suite does" "${OUT}" "RC=0"
+assert_contains "and leaves no worktree behind" "${OUT}" "WORKTREES=1"
+assert_contains "and no temporary folder" "${OUT}" "LEFT=0"
+FAIL_HEAD="$(gate_repo_commit 'echo "the merge gate REFUSED"; exit 3')"
+OUT="$(gate_run_out "${FAIL_HEAD}")"
+assert_contains "a failed suite's exit code comes back" "${OUT}" "RC=3"
+assert_contains "and the worktree is still removed" "${OUT}" "WORKTREES=1"
+assert_contains "and the temporary folder" "${OUT}" "LEFT=0"
+KILL_HEAD="$(gate_repo_commit 'kill -TERM "${PPID}"; exit 0')"
+OUT="$(gate_run_out "${KILL_HEAD}")"
+assert_contains "an interrupted run says so in its exit code" "${OUT}" "RC=130"
+assert_contains "and still removes its worktree" "${OUT}" "WORKTREES=1"
+assert_contains "and its temporary folder" "${OUT}" "LEFT=0"
+rm -rf "${GATE_REPO}" "${GATE_TMP}"
+
+# The files are asked for every page (`gh api --paginate`), never `gh pr view --json files`, which stops at 100: an
+# app Swift file past the first hundred still runs the gate (the lessons review of E4d1).
+FILES_ASKED="$(mktemp "${TMPDIR:-/tmp}/engine-gate-files.XXXXXX")"
+gate_many_files_out() {
+  : > "${GATE_RUNS}"
+  gh_as_danwright32() {
+    printf '%s\n' "$*" > "${FILES_ASKED}"
+    for n in $(seq 1 120); do printf 'docs/page-%s.md\n' "${n}"; done
+    printf 'mac/Overture/Domain/SelfBookingConflict.swift\n'
+  }
+  ENGINE_GATE_RUNNER=gate_passes engine_gate_allows "94" "${GATE_SHA}" 2>&1
+  echo "RUNS=$(wc -l < "${GATE_RUNS}" | tr -d ' ')"
+}
+OUT="$(gate_many_files_out)"
+assert_contains "an app Swift file past the first hundred still runs the gate" "${OUT}" "RUNS=1"
+assert_contains "and the files were asked for every page" "$(cat "${FILES_ASKED}")" "--paginate"
+rm -f "${FILES_ASKED}"
+
+OUT="$(gate_files_out "scripts/lib/scratch.sh" "${GATE_SHA}" gate_fails)"
+assert_contains "a PR touching no engine file is allowed" "${OUT}" "RC=0"
+assert_contains "and says why the gate was not run" "${OUT}" "touches no app Swift file"
+assert_contains "and runs nothing" "${OUT}" "RUNS=0"
+
+# A rule the engine's pass runs, in a file no list of engine files named, still runs the gate (the lessons review of
+# E4d1): the set is every app Swift file, and a file outside the app (a doc, a script, a test) is not in it.
+for rule_file in mac/Overture/Domain/SelfBookingConflict.swift mac/Overture/UI/QueueLongTailTerms.swift; do
+  OUT="$(gate_files_out "${rule_file}" "${GATE_SHA}" gate_passes)"
+  assert_contains "a PR touching only ${rule_file} runs the gate" "${OUT}" "RUNS=1"
+done
+OUT="$(gate_files_out "mac/OvertureTests/QueueEngineQueueTests.swift" "${GATE_SHA}" gate_fails)"
+assert_contains "a PR touching only a test runs nothing" "${OUT}" "RUNS=0"
+
+OUT="$(gate_files_out "mac/Overture/App/QueueEngine.swift" "${GATE_SHA}" gate_passes)"
+assert_contains "an engine PR whose suite says PASSED is allowed" "${OUT}" "RC=0"
+assert_contains "and the suite ran once" "${OUT}" "RUNS=1"
+assert_contains "and the verdict is printed" "${OUT}" "engine-divergence-gate: PASSED"
+
+OUT="$(gate_files_out "mac/Overture/UI/QueueView.swift" "${GATE_SHA}" gate_fails)"
+assert_contains "an engine PR whose suite failed is refused" "${OUT}" "RC=1"
+assert_contains "and the refusal names the gate" "${OUT}" "queue engine's merge gate failed"
+
+OUT="$(gate_files_out "mac/Overture/Domain/FactStore.swift" "${GATE_SHA}" gate_skipped)"
+assert_contains "a run that never said PASSED (skipped, no live store) is refused" "${OUT}" "RC=1"
+assert_contains "and says it was skipped or ran nothing" "${OUT}" "skipped or ran nothing"
+
+OUT="$(gate_files_out "" "${GATE_SHA}" gate_passes)"
+assert_contains "unreadable files refuse rather than reading as no engine change" "${OUT}" "RC=1"
+assert_contains "and runs nothing" "${OUT}" "RUNS=0"
+
+OUT="$(gate_files_out "mac/Overture/App/QueueEngine.swift" "abc1234" gate_passes)"
+assert_contains "an abbreviated head is refused, since the stamp needs a whole commit" "${OUT}" "RC=1"
+
+OUT="$(ALLOW_ENGINE_GATE_SKIP=1 gate_files_out "mac/Overture/App/QueueEngine.swift" "${GATE_SHA}" gate_fails)"
+assert_contains "the override lets it through" "${OUT}" "RC=0"
+assert_contains "and says out loud that it did" "${OUT}" "NOT checked by the queue engine's merge gate"
+rm -f "${GATE_RUNS}"
 
 
 # --- there is ONE implementation of the merge ---------------------------------------------------------

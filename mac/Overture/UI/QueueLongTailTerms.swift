@@ -36,13 +36,10 @@ extension ProspectFacts {
 }
 
 extension QueueModel {
-    // The order `queueScope` sorts by, for any `ProspectFacts`: date ascending, fit descending, with the
-    // `String` comparison `SortDescriptor` uses by default (`.localizedStandard`), which is what the removed
-    // query used. `queueScopeOrder` beside `queueScope` is the same two descriptors over `Prospect` itself,
-    // kept because a fetch can only translate a key path to a stored property, and one written in a generic
-    // context goes through the protocol. Two spellings of one order, so they are held to each other:
-    // `QueueScopeMatchesTheQueryTests` compares `queueScope` over models against a real fetch sorted by
-    // `queueScopeOrder`, and `TermsOverFacts` compares it over models against facts.
+    // The two keys `queueScope` sorts by, for any `ProspectFacts`: date ascending, fit descending, with the `String`
+    // comparison `SortDescriptor` uses by default (`.localizedStandard`), which is what the removed query used.
+    // #4358 slice E4d: `queueScope` breaks a full tie on both by the natural key in byte order and then the identifier,
+    // after these, so the order is total; `TermsOverFacts` compares it over models against facts.
     static func queueScopeOrder<Row: ProspectFacts>(for _: Row.Type) -> [SortDescriptor<Row>] {
         [SortDescriptor(\Row.performanceDate, order: .forward), SortDescriptor(\Row.fitScore, order: .reverse)]
     }

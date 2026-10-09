@@ -210,11 +210,16 @@ final class OrderDependenceReproductionTests {
         ]
     }
 
-    @Test func todayQueueScopeBreaksFullTiesByInputPosition() {
+    // #4358 slice E4d INVERTED this (L373): it held that `queueScope` broke a full tie by input position, the premise
+    // the canonical wrapper below stood in for, and the cutover gave the scope its own natural key tie break (decision
+    // 13(i)). So the scope itself is now the one answer over every order.
+    @Test func queueScopeIsOneAnswerOverEveryOrder() {
         let rows = queueScopeRows()
-        let forward = OracleRendering.keys(QueueModel.queueScope(rows))
-        let reversed = OracleRendering.keys(QueueModel.queueScope(rows.reversed()))
-        #expect(forward != reversed, "queueScope no longer breaks full ties by position; retire this test (L373)")
+        let seed: UInt64 = 4358_13
+        let distinct = distinctAnswers({ order in
+            OracleRendering.keys(QueueModel.queueScope(order.map { rows[$0] }))
+        }, size: rows.count, seed: seed)
+        #expect(distinct.count == 1, report("queueScope", distinct, seed: seed))
     }
 
     @Test func canonicalQueueScopeIsOneAnswerOverEveryOrder() {

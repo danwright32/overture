@@ -74,6 +74,94 @@ lessons_review_allows() {
   return 0
 }
 
+# #4358 slice E4d (plan v7 section 15, the E4 plan's section 4): THE QUEUE ENGINE'S MERGE GATE.
+#
+# A pull request that touches the queue engine merges only when the BRANCH'S OWN verifier, over a clone of Dan's live
+# store, matched a fresh read at least five times and recorded nothing (`EngineDivergenceGateTests`, which holds the
+# rule). GitHub's runners have no live store, so this Mac is the only place it can run, and the merge path is where
+# every merge passes (L593). It runs the suite at the PR head, in a throwaway worktree, with the head's commit in
+# TEST_RUNNER_OVERTURE_GATE_COMMIT so the run's log lines are stamped as that commit's test run.
+#
+# Refuses, by name: files it cannot read (an empty list is what a failed gh call returns, L98), a run that failed, and
+# a run that did not print the suite's PASSED line, which is what a skipped or crashed suite looks like. Allows, and
+# says so, a PR that touches no engine file. ALLOW_ENGINE_GATE_SKIP=1 skips it for one command, loudly; explain to Dan
+# first. ENGINE_GATE_RUNNER replaces the run, for the fixture.
+#
+# WHICH PRs: every one that changes app Swift. Not a list of the engine's files, which is what this was first and is
+# what the lessons review of E4d1 refused (L41, L96): the engine's pass runs the queue's rules wherever they live
+# (`QueueLongTailTerms`, `SelfBookingConflict`, the stage rules, the contact and producer rules), so a hand-written
+# list misses whichever file the next rule moves into, and deriving it from what `QueueEngineQueue.derive` reaches
+# needs a call graph no shell script has. Every app Swift file is the set no rule can live outside. The price is a
+# run of about a minute on every app PR, on the one Mac with a live store.
+ENGINE_GATE_PATHS_RE='^mac/Overture/.*\.swift$'
+ENGINE_GATE_PASSED_LINE='engine-divergence-gate: PASSED'
+
+# engine_gate_run <head-sha>: the suite at that commit, in a worktree of its own, removed afterwards on EVERY exit,
+# an interrupt included, by a trap in a subshell of its own (L114, L473; the lessons review of E4d1). No deadline of
+# its own: run-tests-locked.sh ends a run that stops moving and says STALLED AND ENDED (#3976), which this then
+# reports as a failed gate.
+engine_gate_run() {
+  local head="$1" parent
+  parent="$(mktemp -d "${TMPDIR:-/tmp}/overture-engine-gate.XXXXXX")" || return 1
+  (
+    # Copied out of the function's scope (its locals, and a REPO_ROOT given for the call alone), which an EXIT trap
+    # reached from a signal trap no longer sees under macOS bash 3.2 (measured: `parent: unbound variable` under
+    # set -u, and the worktree left behind in the repository the call named).
+    gate_parent="${parent}"
+    gate_repo="${REPO_ROOT}"
+    wt="${gate_parent}/tree"
+    engine_gate_cleanup() {
+      git -C "${gate_repo}" worktree remove --force "${wt}" >/dev/null 2>&1 || true
+      rm -rf "${gate_parent}"
+      git -C "${gate_repo}" worktree prune >/dev/null 2>&1 || true
+    }
+    trap engine_gate_cleanup EXIT
+    trap 'exit 130' INT TERM
+    git -C "${gate_repo}" worktree add --detach --quiet "${wt}" "${head}" 2>&1 || exit 1
+    TEST_RUNNER_OVERTURE_GATE_COMMIT="${head}" \
+      "${wt}/mac/scripts/run-tests-locked.sh" -only-testing:OvertureTests/EngineDivergenceGateTests 2>&1
+  )
+}
+
+# engine_gate_allows <pr-number> <head-sha>
+engine_gate_allows() {
+  local pr_number="$1" head="$2" files out rc=0
+  if [[ "${ALLOW_ENGINE_GATE_SKIP:-}" == "1" ]]; then
+    echo "ALLOW_ENGINE_GATE_SKIP=1: PR #${pr_number} was NOT checked by the queue engine's merge gate. Tell Dan why it was skipped." >&2
+    return 0
+  fi
+  # Every page of the PR's files: `gh pr view --json files` stops at the first 100, so a large PR whose app Swift
+  # sits past them read as touching none and skipped the gate in silence (the lessons review of E4d1).
+  files="$(gh_as_danwright32 api --paginate "repos/${REPO}/pulls/${pr_number}/files" --jq '.[].filename' \
+    2>/dev/null)" || files=""
+  if [[ -z "${files}" ]]; then
+    echo "Refusing to merge PR #${pr_number}: its changed files could not be read, so whether it touches the queue engine is unknown." >&2
+    return 1
+  fi
+  if ! grep -Eq "${ENGINE_GATE_PATHS_RE}" <<< "${files}"; then
+    echo "engine gate: PR #${pr_number} touches no app Swift file, so the live clone gate was not needed."
+    return 0
+  fi
+  if [[ ! "${head}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "Refusing to merge PR #${pr_number}: the queue engine's merge gate needs the head's whole commit, and got '${head}'." >&2
+    return 1
+  fi
+  echo "engine gate: PR #${pr_number} touches the queue engine; running its verifier over the live clone at ${head}."
+  out="$("${ENGINE_GATE_RUNNER:-engine_gate_run}" "${head}")" || rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    printf '%s\n' "${out}" | tail -40 >&2
+    echo "Refusing to merge PR #${pr_number}: the queue engine's merge gate failed (exit ${rc}); its output is above." >&2
+    return 1
+  fi
+  if ! grep -Fq "${ENGINE_GATE_PASSED_LINE}" <<< "${out}"; then
+    printf '%s\n' "${out}" | tail -40 >&2
+    echo "Refusing to merge PR #${pr_number}: the gate suite did not say PASSED, so it was skipped or ran nothing (no live store, or no run)." >&2
+    return 1
+  fi
+  grep -F "${ENGINE_GATE_PASSED_LINE}" <<< "${out}"
+  return 0
+}
+
 # merge_pr <pr-number> [local-branch-name]
 #
 # Returns 0 only when GitHub confirms the PR is MERGED. Prints the reason and returns 1 otherwise,
@@ -86,12 +174,26 @@ merge_pr() {
     return 1
   fi
 
+  # #4358 slice E4d: the queue engine's merge gate, at the commit the review read (or the PR's head when the review
+  # was skipped), before GitHub is asked for anything.
+  local gate_head="${REVIEWED_HEAD:-}"
+  if [[ -z "${gate_head}" ]]; then
+    gate_head="$(gh_as_danwright32 pr view "${pr_number}" -R "${REPO}" --json headRefOid --jq .headRefOid 2>/dev/null || echo "")"
+  fi
+  if ! engine_gate_allows "${pr_number}" "${gate_head}"; then
+    echo "PR #${pr_number} was not merged: the queue engine's merge gate refused it (above). Nothing else was done to it." >&2
+    return 1
+  fi
+
   # Pinned to the commit the review read, so a push landing between the check and this line is
   # refused by GitHub rather than merged unreviewed (L179; the first real review of this change
   # found the gap).
   # Expanded with the guarded form below: macOS bash 3.2 under set -u errors on an EMPTY array (L486).
-  local pin=()
-  [[ -n "${REVIEWED_HEAD:-}" ]] && pin=(--match-head-commit "${REVIEWED_HEAD}")
+  # #4358 slice E4d: with the review skipped there is no REVIEWED_HEAD, so the merge is pinned to the head the engine
+  # gate ran at instead, and a push between that run and this line is refused rather than merged unseen (L179).
+  local pin=() merge_head="${REVIEWED_HEAD:-}"
+  [[ -z "${merge_head}" && "${gate_head}" =~ ^[0-9a-f]{40}$ ]] && merge_head="${gate_head}"
+  [[ -n "${merge_head}" ]] && pin=(--match-head-commit "${merge_head}")
   if ! gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch ${pin[@]+"${pin[@]}"}; then
     echo "gh refused to merge PR #${pr_number}; its message is above. Nothing else was done to it," >&2
     echo "so the branch is untouched and this can be rerun once the cause is dealt with." >&2

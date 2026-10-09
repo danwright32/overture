@@ -16,7 +16,6 @@ import SwiftData
 //   * `nextChange`, the earliest moment a rule already in play comes due: `DueWork.nextChange` over the facts, and
 //     the soonest Reached out moment the answer holds. A LOWER BOUND, as `DueWork.nextChange` says of itself; the
 //     engine's 60 second floor covers what it cannot see;
-//   * `builtCardKeys`, the cards the pass built, so a frame asking only for those is no reason to derive again;
 //   * the card check at publish (#4357 step 9), over the row the MAIN CONTEXT holds, and the verifier's comparison
 //     (iv), over models a context of its own reads. Neither builds its side through `RowFacts.extract`, which is
 //     where the answer's own cards came from, so neither can agree with the answer for the reason it is wrong (L70).
@@ -45,6 +44,10 @@ struct QueueEnginePass: @unchecked Sendable {
     let nextChange: Date?
     /// The built card the check at publish samples: the riskiest, chosen by the scope's own rule (C4).
     let checkKey: String?
+    /// #4358 slice E4d (plan item 3): the shows the next Prep run would take (`PrepQueueBuilder.needsPrepEligible` on the
+    /// pass's own day), in key order, as identities. RootView's "Prep kept" gate and its selection sheet read this in
+    /// place of the query they held over the prep status (`needsPrepPredicate`), which could not follow the clock.
+    let toPrep: [ShowIdentity]
     /// Cards the check at publish proved wrong, each replaced by the fresh build (C1). Drawn in place of the store's.
     fileprivate(set) var corrected: [String: QueueItem] = [:]
 
@@ -71,8 +74,7 @@ enum QueueEngineQueue {
         var derivation = QueueEngineDerivation<QueueEnginePass>(
             derive: { derive($0) },
             differingFields: { differingFields($0, $1) },
-            nextChange: { $0.nextChange },
-            builtCardKeys: { Set($0.builtCards.cards.keys) })
+            nextChange: { $0.nextChange })
         derivation.onTheMainActor = { input in
             let freezeWatch = watch()
             freezeWatch?.recordPass()
@@ -156,12 +158,16 @@ enum QueueEngineQueue {
             among: built.cards.keys,
             contactsByKey: Dictionary(builtShows.map { ($0.naturalKey, $0.factContacts) }, uniquingKeysWith: { a, _ in a }),
             draftBodies: Dictionary(builtShows.map { ($0.naturalKey, $0.draftBody) }, uniquingKeysWith: { a, _ in a }))
-        return QueueEnginePass(data: data, builtCards: built, nextChange: soonest, checkKey: checkKey)
+        let today = EasternDate.today(now)
+        let toPrep = shows.filter { PrepQueueBuilder.needsPrepEligible(PrepEligibilityView(row: $0), today: today) }
+            .map(ShowIdentity.init)
+        return QueueEnginePass(data: data, builtCards: built, nextChange: soonest, checkKey: checkKey, toPrep: toPrep)
     }
 
     /// The members of two passes that differ, by name, judged on each pass's cards as captured when it was derived.
     static func differingFields(_ a: QueueEnginePass, _ b: QueueEnginePass) -> [String] {
         RenderDataComparison.differingFields(a.data, b.data, cards: (a.builtCards, b.builtCards))
+            + (a.toPrep == b.toPrep ? [] : ["toPrep"])
     }
 
     // MARK: - The card check at publish (#4357 step 9)
@@ -244,6 +250,12 @@ extension QueueEngineReload {
                 + "changed, and Overture will keep trying on its own"
         case .gone:
             return ActionAck.couldNotFindShow(org: org)
+        // COLD READ, 2026-10-08 (#4358 slice E4d): Dan pressed Reload this show on a card whose show had already left
+        // the queue before the press, so nothing was compared with the saved show at all. It says so rather than
+        // "already matches", which would be a match nobody measured (L11), and names the card as what is stale.
+        case .notHeld:
+            return "\(org) left the queue before this card could be reloaded, so nothing was checked or reloaded. "
+                + "The card you pressed is out of date"
         case .unreadable:
             return "Overture could not read the saved copy of \(org), so nothing was reloaded. Try again in a moment"
         }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1827 sentences**.
+Every sentence Overture can say to Dan: **1831 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 692 of the 1827 below hold a
+  sentence carrying a VALUE: 695 of the 1831 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1722,10 +1722,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "Overture could not open its record of when it stopped responding, so nothing here can say whether it did."
     `Domain/FreezeReport.swift`
+"Overture could not read \(org) from your saved shows just now, so nothing was changed. Press it again in a moment"
+    `Domain/ShowIdentity.swift`
+"Overture could not read \(org) from your saved shows just now, so nothing was undone"
+    `Domain/ShowIdentity.swift`
 "Overture could not read its records of interrupted landings (\(why)), so it cannot finish one yet. It will try again when you are away from the Mac."
     `Domain/LandingSingleFlight.swift`
 "Overture could not read kept calendar results at \(path) (\(why))."
     `Domain/LandingSingleFlight.swift`
+"Overture could not read that show from your saved shows just now, so nothing was changed. Press it again in a moment"
+    `Domain/ShowIdentity.swift`
 "Overture could not read the saved copy of \(org), so nothing was reloaded. Try again in a moment"
     `App/QueueEngineQueue.swift`
 "Overture could not rewrite the freeze archive without its records older than a month, so nothing was deleted from the archive. It tries again every hour."
@@ -3508,6 +3514,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) is open again. \"\(outcome.label)\" is no longer recorded against it."
     `Domain/ShowOutcome.swift`
+"\(org) left the queue before this card could be reloaded, so nothing was checked or reloaded. The card you pressed is out of date"
+    `App/QueueEngineQueue.swift`
 "\(org) recorded as booked."
     `Domain/ShowOutcome.swift`
 "\(org) was already pitched, so \"\(outcome.label)\" doesn't apply to it. Nothing changed."

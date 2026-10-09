@@ -109,7 +109,28 @@ enum SelfBookingConflict {
             for show in shows where show.isCommitment {
                 for night in Set(show.nights) { byNight[night, default: []].append(show) }
             }
-            committedByNight = byNight
+            // #4358 slice E4d (plan item 13): each night's shows in key order rather than input order, so two passes
+            // over the same shows build EQUAL indexes whatever order the shows arrived in, and the engine's verifier
+            // cannot read an input order as a mismatch. Every reader already sorts what it takes out (`overlaps`).
+            // Total: two shows equal on key and name (two rows holding one key between an insert and the save that
+            // refuses it) still sort one way, by the rest of what they hold in a fixed order (`orderKey`), never a
+            // reflected description, which prints a dictionary in whatever order it holds it (the lessons review).
+            committedByNight = byNight.mapValues { shows in
+                shows.sorted {
+                    if $0.key != $1.key { return $0.key < $1.key }
+                    if $0.name != $1.name { return $0.name < $1.name }
+                    return Self.orderKey($0) < Self.orderKey($1)
+                }
+            }
+        }
+
+        /// Every stored field of `show` but its key and name, each in an order of its own making, so two equal shows
+        /// give equal keys and two that differ anywhere give different ones.
+        static func orderKey(_ show: Show) -> String {
+            let times = show.timesByNight.sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value.joined(separator: ","))" }.joined(separator: ";")
+            return [show.commitment.map { "\($0.rank)" } ?? "-", show.engagementKey ?? "-",
+                    show.nights.joined(separator: ","), times].joined(separator: "|")
         }
     }
 
