@@ -75,8 +75,8 @@ enum FeedBreakEvent {
     /// #4357 (plan v7 Phase 3, T3): generic over `ProspectFacts`, one body for live models and retained
     /// `RowFacts`, for the reason `ContradictedCancellation.liveTwin` records.
     ///
-    /// #4361 (plan v7 Phase 4b(b)): built from the four pieces below, which the queue engine's patched value
-    /// (`QueueEnginePatchedFeedBreaks`) builds its events through as well, so a bucket, a member, a label or the order cannot
+    /// #4361 (plan v7 Phase 4b(b)): built from the pieces below, which the queue engine's patched value
+    /// (`PatchableFeedBreaks`) builds its events through as well, so a bucket, a member, a label or the order cannot
     /// mean one thing here and another there (L370).
     static func events<Row: ProspectFacts>(among rows: [Row], asOf: String,
                                            contradicted: Set<String>? = nil) -> [Event] {

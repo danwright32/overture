@@ -42,7 +42,7 @@ enum ContradictedCancellation {
 
     // The two arms a live candidate in the flagged row's own room must pass to contradict it: overlapping nights and
     // a title the app calls the same act. #4361: one predicate, asked by `liveTwin`, by `contradictedKeys` and by the
-    // queue engine's patched value (`QueueEnginePatchedContradictions`), so the rule cannot be copied into a second body that
+    // queue engine's patched value (`PatchableContradictions`), so the rule cannot be copied into a second body that
     // drifts (L370).
     static func isTwin(candidateStart: String?, candidateEnd: String?, candidateTitle: String,
                        flaggedStart: String?, flaggedEnd: String?, flaggedTitle: String) -> Bool {
