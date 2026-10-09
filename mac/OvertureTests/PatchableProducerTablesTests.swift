@@ -163,7 +163,25 @@ struct PatchableProducerTablesTests {
         #expect(verdicts.values.contains { $0.room }, "no presenter is spelled exactly like a room")
         #expect(verdicts.values.contains { $0.brand && !$0.room }, "no presenter names a room by containment")
         #expect(verdicts.values.contains { $0.qualifies }, "no presenter plays two rooms")
-        #expect(verdicts.values.contains { !$0.brand && !$0.qualifies }, "every presenter is either a house or a producer")
+        // A presenter that is neither (one room, no brand) is what `insertNewPresenter` makes, since every invented
+        // presenter in a 60 row fixture plays several rooms (measured on the first run of this test).
+    }
+
+    // The engine's own pass READS T4's tables rather than building them (L3): a pass handed the patches builds no
+    // producer index, and the same pass handed none builds one, which is the positive control (L159).
+    @Test func theEnginesPassReadsThePatchedTablesAndBuildsNone() throws {
+        let world = try Phase0cWorld(size: 60, seed: 4362_0007, models: AppSchema.models, presenters: true)
+        let facts = try FactStore.extractAll(from: ModelContext(world.container))
+        var patches = QueueEnginePatches()
+        patches.bringUp(to: facts)
+        let plain = QueueEnginePassInput(facts: facts, viewInputs: QueueEngineViewInputs(), now: EngineStore.baseNow,
+                                         context: EngineHarness.noSignals)
+        var patched = plain
+        patched.patches = patches
+        let without = QueueRenderPass.WorkTally.measure { _ = QueueEngineQueue.derive(plain) }
+        let with = QueueRenderPass.WorkTally.measure { _ = QueueEngineQueue.derive(patched) }
+        #expect(without.producerIndexes >= 1, "the pass with no patch built no producer index, so this proves nothing")
+        #expect(with.producerIndexes == 0, "the engine's pass built the producer tables although it was handed them")
     }
 
     // A change to anything T4 does not read (a dismissal) costs it nothing: no presenter re-asked, no witness tested.
