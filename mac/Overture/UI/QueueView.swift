@@ -2623,7 +2623,11 @@ struct QueueLaunchView: View {
                     .foregroundStyle(OVColor.ink)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                // #4626: the queue's own primary action, as the Prep button on the queue heading wears it, never a
+                // default system button (L607). The one way on from this screen, so it is the prominent control.
                 Button(QueueLaunchCopy.retry, action: retry)
+                    .buttonStyle(.borderedProminent)
+                    .tint(OVColor.forestText)
             case .notStarted, .loading, .ready:
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     HStack(spacing: OVSpacing.xs) {
