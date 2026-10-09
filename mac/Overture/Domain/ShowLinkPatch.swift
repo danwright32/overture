@@ -77,7 +77,8 @@ struct PatchableShowLink<Key: Hashable & Sendable>: Sendable {
 
     /// What one `apply` changed (the plan's ChangedKeys): every key whose answer moved, and among them every key whose
     /// HIDDEN state flipped, which is T7's membership hand-off once T7 is patched (#4363). Today the pass rebuilds the
-    /// rows from `tables` on every pass, so the engine reads only the counts, for its cost record.
+    /// rows from `tables` on every pass, so nothing in the engine reads it yet: the per term harness checks `keys` and
+    /// `hiddenFlips` against the oracle, and T7 is its first engine reader.
     struct Changed: Equatable, Sendable {
         var keys: Set<Key> = []
         var hiddenFlips: Set<Key> = []
