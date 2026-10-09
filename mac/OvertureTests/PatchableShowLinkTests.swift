@@ -86,7 +86,7 @@ enum PatchPropertyHarness {
     static func run<Term: PatchHarnessTerm>(_: Term.Type, size: Int, seed: UInt64, steps: Int,
                                            outcome: inout PatchHarnessOutcome) throws {
         let world = try Phase0cWorld(size: size, seed: seed)
-        var rows = try world.rows()
+        var rows = try PatchPropertyHarness.rows(world)
         var term = Term(rows: rows, world: world)
         let sampled = Set((0..<10).map { steps * $0 / 10 })
         func check(_ step: Int, _ op: String) {
@@ -119,12 +119,12 @@ enum PatchPropertyHarness {
             }
             outcome.applied[op, default: 0] += 1
             let changed = try world.commit(edit)
-            rows = try world.rows()
+            rows = try PatchPropertyHarness.rows(world)
             feed(changed, step, op.rawValue)
             check(step, op.rawValue)
             if op.alwaysUndone || world.roll(2) == 0 {
                 let undone = try world.undo(edit)
-                rows = try world.rows()
+                rows = try PatchPropertyHarness.rows(world)
                 feed(undone, step, op.rawValue + " (undo)")
                 check(step, op.rawValue + " (undo)")
             }
@@ -132,6 +132,12 @@ enum PatchPropertyHarness {
         }
         check(steps, "end")
         sampledChecks(steps)
+    }
+
+    /// The world's rows in natural key order, so the op mix's picks, and so a failing seed, do not depend on the order a
+    /// fetch happened to return (L343).
+    static func rows(_ world: Phase0cWorld) throws -> [Prospect] {
+        try world.rows().sorted(by: CanonicalOracle.byNaturalKey)
     }
 
     /// The oracle's fronts over `rows`, which the op mix aims its dismissals and deletions at.
@@ -166,6 +172,8 @@ struct ShowLinkHarnessTerm: PatchHarnessTerm {
     static let ops = Phase0cOp.t1
 
     private var patch: Patch
+    /// Each row's natural key as of the last apply, so a re-keyed row's answer BEFORE is read under the key it had.
+    private var keyOf: [PersistentIdentifier: String] = [:]
 
     /// The queue's drawn rows, by the scope's DEFINITION (every row not dismissed) rather than through the predicate
     /// the patch itself reads, so the two sides do not share it (L70).
@@ -187,6 +195,7 @@ struct ShowLinkHarnessTerm: PatchHarnessTerm {
 
     init(rows: [Prospect], world: Phase0cWorld) {
         patch = Patch(rows: rows.map { (key: $0.persistentModelID, facts: Self.facts($0)) })
+        keyOf = Dictionary(rows.map { ($0.persistentModelID, $0.naturalKey) }, uniquingKeysWith: { first, _ in first })
     }
 
     mutating func apply(_ changed: Set<PersistentIdentifier>, rows: [Prospect],
@@ -201,8 +210,9 @@ struct ShowLinkHarnessTerm: PatchHarnessTerm {
         for row in rows {
             let id = row.naturalKey
             let pid = row.persistentModelID
-            let flipped = before.hidden.contains(id) != after.hidden.contains(id)
-            let moved = flipped || before.group[id] != after.group[id] || before.fronts[id] != after.fronts[id]
+            let was = keyOf[pid] ?? id
+            let flipped = before.hidden.contains(was) != after.hidden.contains(id)
+            let moved = flipped || before.group[was] != after.group[id] || before.fronts[was] != after.fronts[id]
             if moved && !result.keys.contains(pid) {
                 failures.append("ChangedKeys missed a row whose answer moved (\(Phase0b.hash8(id)))")
             }
@@ -210,6 +220,7 @@ struct ShowLinkHarnessTerm: PatchHarnessTerm {
                 failures.append("ChangedKeys missed a hidden flip (\(Phase0b.hash8(id)))")
             }
         }
+        keyOf = Dictionary(rows.map { ($0.persistentModelID, $0.naturalKey) }, uniquingKeysWith: { first, _ in first })
         return (failures, result.hiddenFlips.count)
     }
 
@@ -253,7 +264,7 @@ enum EnginePropertyHarness {
         let world = try Phase0cWorld(size: size, seed: seed, models: AppSchema.models)
         let turns = EngineTurns()
         let engine = engine(world, turns)
-        var rows = try world.rows()
+        var rows = try PatchPropertyHarness.rows(world)
         func requestEveryCard() {
             engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil,
                                                        requestedCardKeys: Set(rows.map(\.naturalKey))))
@@ -296,12 +307,12 @@ enum EnginePropertyHarness {
             outcome.applied[op, default: 0] += 1
             _ = try world.commit(edit)
             turns.run()
-            rows = try world.rows()
+            rows = try PatchPropertyHarness.rows(world)
             try check(step, op.rawValue)
             if op.alwaysUndone || world.roll(2) == 0 {
                 _ = try world.undo(edit)
                 turns.run()
-                rows = try world.rows()
+                rows = try PatchPropertyHarness.rows(world)
                 try check(step, op.rawValue + " (undo)")
             }
             requestEveryCard()
