@@ -3,8 +3,8 @@ import SwiftData
 import Testing
 
 // #4361 (plan v7 Phase 4b(b)): T2 ContradictedCancellation and T3 feed breaks, patched inside the queue engine
-// (`QueueEnginePatches`), tested. One file for every suite, on E1a's reasoning (each new file adds project file
-// hunks to the review diff).
+// (`QueueEnginePatches` in Domain/FactStore.swift, the terms in Domain/CancellationPatches.swift), tested. One
+// file for every suite, on E1a's reasoning (each new file adds project file hunks to the review diff).
 //
 // What each suite here holds, in the plan's words (discussion #4267, sections 4 and 7):
 //   * the PER-TERM harness: seeded operation sequences over 0c.2's committed synthetic fixtures and op mix
@@ -393,6 +393,42 @@ final class PatchedCancellationsVerifierTests {
         patches.noteChanged(twin.persistentModelID)
         patches.bringUp(to: after.shows, asOf: asOf)
         #expect(patches.mismatches(against: after).isEmpty, "\(patches.mismatches(against: after))")
+    }
+
+    // The resolve step, through the engine itself: a show inserted and taken in under its TEMPORARY identifier, then
+    // saved (a re-key), then deleted (a removal). Neither is a stored value changing, so neither is noted; the resolve
+    // step is the only route either takes into T2 and T3. Mutation that must turn this red: leave T2 and T3 out of the
+    // resolve step (`patch-resolve-cancellations`).
+    @Test func aFirstSaveAndADeletionReachTwoAndThreeThroughTheResolveStep() throws {
+        let (store, twin) = try store()
+        let turns = EngineTurns()
+        let engine = EngineHarness.started(store, turns)
+        func expectInStep(_ step: String) throws {
+            let fresh = try store.freshFacts()
+            #expect(engine.patches.mismatches(against: fresh).isEmpty,
+                    Comment(rawValue: step + ": " + engine.patches.mismatches(against: fresh).joined(separator: ", ")))
+            let held = Set(engine.patches.contradictions?.slices.keys.map { $0 } ?? [])
+            #expect(held == Set(fresh.shows.keys), Comment(rawValue: step + ": T2 holds other identities than the store"))
+        }
+        // A second twin, unsaved, so the engine takes it in under a temporary identifier.
+        let second = store.addShow(contacts: 0)
+        second.groupName = "Lantern Hour"
+        second.venue = "Willow Barn"
+        second.performanceDate = twin.performanceDate
+        engine.noteChanged(second)
+        turns.run()
+        #expect(engine.patches.contradictions?.slices[second.persistentModelID] != nil,
+                "the unsaved show was not taken in, so its first save re-keys nothing here")
+        try store.context.save()
+        turns.run()
+        try expectInStep("after the first save")
+        // Both twins deleted: the contradiction goes, and the break's covered count with it.
+        store.context.delete(twin)
+        store.context.delete(second)
+        try store.context.save()
+        turns.run()
+        try expectInStep("after the deletion")
+        #expect(engine.patches.contradictions?.contradictedKeys.isEmpty == true, "the contradiction outlived its twins")
     }
 
     // The verifier reports the stale terms as `patchMismatch` once the facts agree (#4360's verdict).
