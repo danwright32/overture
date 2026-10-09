@@ -253,9 +253,15 @@ enum EnginePropertyHarness {
         let world = try Phase0cWorld(size: size, seed: seed, models: AppSchema.models)
         let turns = EngineTurns()
         let engine = engine(world, turns)
+        var rows = try world.rows()
+        func requestEveryCard() {
+            engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil,
+                                                       requestedCardKeys: Set(rows.map(\.naturalKey))))
+        }
+        // Before the start, so the first pass builds every card too and the check below compares like with like.
+        requestEveryCard()
         engine.start()
         turns.run()
-        var rows = try world.rows()
         var hidden = engine.patches.showLink?.tables.hidden ?? []
         func check(_ step: Int, _ op: String) throws {
             outcome.checks += 1
@@ -280,11 +286,6 @@ enum EnginePropertyHarness {
             outcome.hiddenFlips += now.symmetricDifference(hidden).count
             hidden = now
         }
-        func requestEveryCard() {
-            engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil,
-                                                       requestedCardKeys: Set(rows.map(\.naturalKey))))
-        }
-        requestEveryCard()
         try check(-1, "start")
         for step in 0..<steps {
             let op = ShowLinkHarnessTerm.ops[world.roll(ShowLinkHarnessTerm.ops.count)]
@@ -533,7 +534,7 @@ final class PatchableShowLinkCostProbeTests {
         var drawn: [Phase0cKey: Bool] = [:]
         for show in shows {
             rows[.row(show.persistentModelID)] = ShowLink.Row(show)
-            drawn[.row(show.persistentModelID)] = QueueModel.isInQueueScope(show)
+            drawn[.row(show.persistentModelID)] = QueueModel.queueScopeHolds(show)
         }
         func slice(_ key: Phase0cKey) -> Patch.Facts? { rows[key].map { Self.facts($0, drawn: drawn[key] ?? true) } }
         var patch = Patch(rows: [])

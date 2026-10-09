@@ -1125,7 +1125,7 @@ enum QueueModel {
     static func queueScope<Row: ProspectFacts>(_ all: [Row]) -> [Row] {
         let order = queueScopeOrder(for: Row.self)
         return all
-            .filter { isInQueueScope($0) }
+            .filter { queueScopeHolds($0) }
             .sorted { lhs, rhs in
                 for descriptor in order {
                     switch descriptor.compare(lhs, rhs) {
@@ -1144,7 +1144,7 @@ enum QueueModel {
     // #4360: whether the queue's own scope holds a row, as ONE predicate, read here and by T1's patched collapse
     // (`PatchableShowLink`), whose drawn rows are exactly this scope (L16): a second copy of the filter would let the
     // patch hide a sibling behind a front the queue does not draw.
-    static func isInQueueScope(_ row: some ProspectFacts) -> Bool { row.statusRaw != "dismissed" }
+    static func queueScopeHolds(_ row: some ProspectFacts) -> Bool { row.statusRaw != "dismissed" }
 
     // MARK: - Copy and filtering the queue used to do in its own body (#885)
 
@@ -3414,7 +3414,7 @@ enum QueueModel {
                       // #4360 (plan v7 Phase 4b(a)): T1's three tables, already brought up to date by the queue
                       // engine's patched value, or nil to build them here, which is what every caller but the
                       // engine does. Handed in only where `prospects` is the queue's own scope of `corpus`, which
-                      // is the drawn set the patched collapse keeps (`QueueModel.isInQueueScope`).
+                      // is the drawn set the patched collapse keeps (`QueueModel.queueScopeHolds`).
                       showLink: ShowLink.Tables? = nil,
                       today: String? = nil,
                       // #4356: where every cross-row read of this build is recorded, or nil for none, which is

@@ -63,7 +63,7 @@ struct PatchableShowLink<Key: Hashable & Sendable>: Sendable {
             self.init(id: row.naturalKey, title: keys.showLinkTitle, venue: keys.showLinkVenue,
                       nights: keys.showLinkNights, tokens: keys.productionTokens,
                       stillInFeed: row.missedScoutCount == 0, opening: row.performanceDate ?? "",
-                      drawn: QueueModel.isInQueueScope(row))
+                      drawn: QueueModel.queueScopeHolds(row))
         }
     }
 
