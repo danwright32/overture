@@ -134,8 +134,7 @@ enum QueueEngineQueue {
         var inputs = QueueRenderPass.PassInputs<RowFacts>(
             allProspects: QueueRenderPass.RowCorpus(shows), inquiries: inquiries, orgAnswers: answers,
             sources: sources, refusals: ContactRefusal.Ledger(rows: refusals),
-            overrides: ProducerOverrides(promoted: Set(facts.promotedProducers.values.map(\.orgKey)),
-                                         demoted: Set(facts.demotedHouses.values.map(\.orgKey))),
+            overrides: facts.producerOverrides,
             context: StageContext(now: input.now, geo: geo, clients: context.clients),
             focusedStage: input.viewInputs.focusedStage, focusedKeys: input.viewInputs.focusedKeys)
         inputs.gmailConnected = context.gmailConnected
@@ -152,6 +151,9 @@ enum QueueEngineQueue {
         // #4360 (plan v7 Phase 4b(a)): T1 from the engine's patched value when it handed one in; the verifier's rebuild
         // hands none, so its pass derives T1 over the facts, which is the oracle the patch is held to.
         inputs.showLink = input.patches?.showLink?.tables
+        // #4362 (plan v7 Phase 4b(c)): T4 the same way. Before the switch `QueueView` kept these in a memo; the engine
+        // built them cold on every pass until this (#4623 measured 25.1 ms at 1x and 201.7 ms at 4x, optimised).
+        inputs.producerTables = input.patches?.producerTables?.tables
         return inputs
     }
 
