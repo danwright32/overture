@@ -143,14 +143,11 @@ enum QueueEngineQueue {
         let sources = facts.watchedSources.values.sorted {
             $0.sourceId != $1.sourceId ? $0.sourceId < $1.sourceId : $0.persistentModelID < $1.persistentModelID
         }
-        let refusals = facts.refusedAddresses.values
-            .map { ContactRefusal.Ledger.Row(scopeRaw: $0.scopeRaw, scopeId: $0.scopeId, handleKey: $0.handleKey) }
-            .sorted { ($0.scopeRaw, $0.scopeId, $0.handleKey) < ($1.scopeRaw, $1.scopeId, $1.handleKey) }
         let geo = GeoRefusals(userExcludedTowns: Set(facts.excludedTowns.values.map(\.town)),
                               allowedSeedTowns: Set(facts.allowedSeedTowns.values.map(\.town)))
         var inputs = QueueRenderPass.PassInputs<RowFacts>(
             allProspects: QueueRenderPass.RowCorpus(shows), inquiries: inquiries, orgAnswers: answers,
-            sources: sources, refusals: ContactRefusal.Ledger(rows: refusals),
+            sources: sources, refusals: facts.refusalLedger,
             overrides: facts.producerOverrides,
             context: StageContext(now: input.now, geo: geo, clients: context.clients),
             focusedStage: input.viewInputs.focusedStage, focusedKeys: input.viewInputs.focusedKeys)
@@ -171,6 +168,8 @@ enum QueueEngineQueue {
         // #4362 (plan v7 Phase 4b(c)): T4 the same way. Before the switch `QueueView` kept these in a memo; the engine
         // built them cold on every pass until this (#4623 measured 25.1 ms at 1x and 201.7 ms at 4x, optimised).
         inputs.producerTables = input.patches?.producerTables?.tables
+        // #4364 (plan v7 Phase 4b(e)): T5 the same way, brought up to this pass's instant (`QueueEnginePatches.bringUp`).
+        inputs.inherited = input.patches?.ledger?.inherited
         return inputs
     }
 

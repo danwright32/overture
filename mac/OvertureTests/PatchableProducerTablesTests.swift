@@ -173,7 +173,7 @@ struct PatchableProducerTablesTests {
         let world = try Phase0cWorld(size: 60, seed: 4362_0007, models: AppSchema.models, presenters: true)
         let facts = try FactStore.extractAll(from: ModelContext(world.container))
         var patches = QueueEnginePatches()
-        patches.bringUp(to: facts)
+        patches.bringUp(to: facts, now: EngineStore.baseNow)
         let plain = QueueEnginePassInput(facts: facts, viewInputs: QueueEngineViewInputs(), now: EngineStore.baseNow,
                                          context: EngineHarness.noSignals)
         var patched = plain
@@ -220,7 +220,7 @@ struct PatchableProducerTablesTests {
         let world = try Phase0cWorld(size: 60, seed: 4362_0004, models: AppSchema.models, presenters: true)
         var stale = QueueEnginePatches()
         let before = try FactStore.extractAll(from: ModelContext(world.container))
-        stale.bringUp(to: before)
+        stale.bringUp(to: before, now: EngineStore.baseNow)
         #expect(stale.mismatches(against: before).isEmpty, "a patch built from these facts disagreed with them")
         // A presenter spelled exactly like a room the fixture always has (its feed break rows play Willow Barn), which
         // no row's presenter is: a new presenter key, and a room name brand.
@@ -235,7 +235,7 @@ struct PatchableProducerTablesTests {
         // Brought up to the same facts, the same patch agrees, so the verdict was about T4 and nothing else.
         var current = stale
         current.noteChanged(row.persistentModelID)
-        current.bringUp(to: fresh)
+        current.bringUp(to: fresh, now: EngineStore.baseNow)
         #expect(current.mismatches(against: fresh).isEmpty)
         #expect(QueueEngineVerifier.compare(snapshot(fresh, current, generation: 8), with: fresh,
                                             derivation: EngineDerivations.counts()) == .match(generation: 8))
@@ -247,7 +247,7 @@ struct PatchableProducerTablesTests {
         let world = try Phase0cWorld(size: 60, seed: 4362_0005, models: AppSchema.models, presenters: true)
         var patches = QueueEnginePatches()
         let before = try FactStore.extractAll(from: ModelContext(world.container))
-        patches.bringUp(to: before)
+        patches.bringUp(to: before, now: EngineStore.baseNow)
         let stale = patches
         // A presenter the containment arm refuses (a brand that is not a room name), which promotion relaxes.
         let verdicts = Phase0cT4Check.oracleOutputs(ProducerTablesHarnessTerm.shows(try world.rows()), overrides: .none)
@@ -257,7 +257,7 @@ struct PatchableProducerTablesTests {
         let fresh = try FactStore.extractAll(from: ModelContext(world.container))
         #expect(stale.mismatches(against: fresh) == ["producerTables.venueBrands"])
         #expect(patches.pending.isEmpty, "an override noted a show, so this does not test the overrides route")
-        patches.bringUp(to: fresh)
+        patches.bringUp(to: fresh, now: EngineStore.baseNow)
         #expect(patches.mismatches(against: fresh).isEmpty, "the bring-up did not carry the promotion into T4")
         #expect(patches.producerTables?.verdict(key)?.brand == false)
     }
@@ -267,7 +267,7 @@ struct PatchableProducerTablesTests {
         let world = try Phase0cWorld(size: 60, seed: 4362_0006, models: AppSchema.models, presenters: true)
         var patches = QueueEnginePatches()
         let facts = try FactStore.extractAll(from: ModelContext(world.container))
-        patches.bringUp(to: facts)
+        patches.bringUp(to: facts, now: EngineStore.baseNow)
         // A row whose presenter no other row carries, so the deletion takes its key out of the corpus.
         let rows = try world.rows()
         let counts = Dictionary(rows.compactMap { ProducerGate.key($0.presenter) }.map { ($0, 1) }, uniquingKeysWith: +)
@@ -278,7 +278,9 @@ struct PatchableProducerTablesTests {
         resolution.deletedKeys = [lone.naturalKey]
         var remaining = facts.shows
         remaining[lone.persistentModelID] = nil
-        patches.resolve(resolution, shows: remaining)
+        var resolved = facts
+        resolved.shows = remaining
+        patches.resolve(resolution, facts: resolved)
         #expect(patches.pending.isEmpty)
         var pruned = facts
         pruned.shows = remaining
@@ -369,8 +371,8 @@ final class PatchableProducerTablesCostProbeTests {
         // The engine's whole pass over the same facts, with no patch and with the patches brought up, the first screen's
         // cards requested as the queue requests them. Alternated.
         var patches = QueueEnginePatches()
-        patches.bringUp(to: facts)
         let now = Date()
+        patches.bringUp(to: facts, now: now)
         let firstView = QueueEngineViewInputs(focusedStage: .scout, focusedKeys: nil, requestedCardKeys: [])
         let probeView = QueueEngineQueue.derive(QueueEnginePassInput(facts: facts, viewInputs: firstView, now: now,
                                                                      context: EngineHarness.noSignals))

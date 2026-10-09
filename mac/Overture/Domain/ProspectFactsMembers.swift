@@ -226,3 +226,14 @@ extension OrgAnswerLedger.Show {
                   hasOwnAnswer: row.reachabilityProbedAt != nil)
     }
 }
+
+// #4364 (plan v7 Phase 4b(e)): a stored organisation answer as the ledger reads it, or nil for one whose verdict this
+// build cannot read. One flattening for the ledger's own boundary (`QueueModel.inheritedAnswers`) and the queue
+// engine's patched ledger (`PatchableAnswerLedger`), over the live model and the engine's retained record alike.
+extension OrgAnswerLedger.Answer {
+    init?(_ row: some OrgAnswerFacts) {
+        guard let result = row.result else { return nil }
+        self.init(orgKey: row.orgKey, result: result, probedAt: row.probedAt, presenterName: row.presenterName,
+                  emails: row.foundEmails)
+    }
+}

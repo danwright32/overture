@@ -66,6 +66,10 @@ enum QueueInputSource: Equatable, Sendable {
             The engine's patched copy of the ShowLink grouping and collapse the pass otherwise derives from its own \
             store inputs (plan v7 T1, #4360); it is never an input in its own right.
             """),
+        "inherited": .notAnInput(reason: """
+            The engine's patched copy of the inherited organisation answers the pass otherwise derives from its own \
+            store inputs and the clock (plan v7 T5, #4364); it is never an input in its own right.
+            """),
     ]
 }
 
