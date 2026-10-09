@@ -437,6 +437,47 @@ struct PatchableRowEntriesTests {
         #expect(RowEntriesHarness.mismatches(patch, fx).isEmpty)
     }
 
+    // The lessons review's question (on 031dfc8 and 7820a7e): the geography memo is resolved over an earlier pass's
+    // shows and kept while Dan's refusals stand, so is a show moved, or added, to a place it never resolved judged
+    // against a stale verdict? Measured here: the refused town is kept out of every show at the cold build, so its
+    // place is not in the memo; a drafted show (in Review) then moves there and must leave every stage, and a new
+    // show inserted there must be judged the same way, with the memo shown NOT to hold the place.
+    @Test func aShowMovedToAPlaceTheMemoNeverSawIsJudgedOnItsNewPlace() throws {
+        let fx = try Phase0cRowsFixture(size: 60, seed: 4363_0104)
+        let refusedPlace = "Beacon, NY"
+        for p in fx.rows where p.location == refusedPlace { p.location = "Hudson, NY" }
+        fx.excludedTowns = [Phase0cRowsFixture.refusableTown]
+        var patch = PatchableRowEntries(shows: RowEntriesHarness.shows(fx), context: RowEntriesHarness.context(fx),
+                                        now: fx.now)
+        let memo = patch.context.geo.resolvedPlaceCount
+        // A drafted show in Review, which the geography may cut (approved and contacted shows it never hides).
+        let mover = try #require(fx.rows.first {
+            $0.status == .drafted && !$0.keptVisibleAfterGenreChange
+                && patch.entries[$0.persistentModelID]?.inScope?.focuses.contains(.review) == true
+        }, "no drafted show in Review, so leaving it would prove nothing")
+        // Moved to the refused town.
+        mover.location = refusedPlace
+        patch.bringUp(changed: [mover.persistentModelID], shows: RowEntriesHarness.shows(fx), now: fx.now,
+                      context: RowEntriesHarness.context(fx))
+        #expect(patch.context.geo.resolvedPlaceCount == memo, "the memo was resolved again, so it was not a miss")
+        #expect(patch.context.geo.resolving([RowFacts.extract(mover)]).resolvedPlaceCount == memo + 1,
+                "the memo already held the refused place, so this did not reach a place it never saw")
+        #expect(patch.entries[mover.persistentModelID]?.inScope?.focuses == [],
+                "a show moved to a refused town kept its stages")
+        #expect(RowEntriesHarness.mismatches(patch, fx).isEmpty)
+        // Added there.
+        let op = try #require(try fx.perform(.insertRow))
+        let added = try #require(fx.rows.first { op.changed.contains($0.persistentModelID) })
+        added.location = refusedPlace
+        added.discipline = mover.discipline
+        added.status = .drafted
+        patch.bringUp(changed: op.changed, shows: RowEntriesHarness.shows(fx), now: fx.now,
+                      context: RowEntriesHarness.context(fx))
+        #expect(patch.entries[added.persistentModelID]?.inScope?.focuses == [],
+                "a show added in a refused town was given stages")
+        #expect(RowEntriesHarness.mismatches(patch, fx).isEmpty)
+    }
+
     // The verifier's comparison (plan v7 D7): T7 left at facts the store has since moved past is `patchMismatch`,
     // naming the tables that differ, and the same value brought up agrees.
     @Test func aRowEntriesValueOutOfStepWithFactsThatAgreeIsAPatchMismatch() throws {

@@ -277,6 +277,11 @@ struct PatchableRowEntries: Sendable {
         for field in RowEntryContext.Field.allCases where context.differs(from: newContext, in: field) {
             dirty.formUnion(readers[field] ?? [])
         }
+        // The geography's place memo is resolved over the shows the scope held when Dan's refusals last changed, and
+        // kept while they stand. A show added since, or moved to a place the memo never saw, is NOT judged against a
+        // stale verdict: `GeoRefusals.hidesFromQueue` works a missing place out from the refusals themselves, the same
+        // way `resolving` would (#1962: a miss costs what the whole thing used to and can never change an answer).
+        // `aShowMovedToAPlaceTheMemoNeverSawIsJudgedOnItsNewPlace` holds that, since the lessons review asked.
         if newContext.geo != context.geo {
             context = newContext
             context.geo = newContext.geo.resolving(Self.inScope(shows))
