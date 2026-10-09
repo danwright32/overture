@@ -105,12 +105,29 @@ enum QueueEngineQueue {
     // MARK: - The pass
 
     /// The shows in the declared order: natural key in byte order, then identifier.
+    ///
+    /// #4623: decided over the two keys, never by sorting the rows themselves. A `RowFacts` carries every stored
+    /// field of a show, so each move a sort makes copies all of them; sorting the rows cost 46.9 ms of a 269.4 ms
+    /// pass at 1x and 229.8 ms at 4x in an optimised build (2026-10-08, `PassCostByTermProbeTests`), the one thing
+    /// the engine's pass paid that the pass over models did not. Here each row is copied into its place once.
     static func shows(_ facts: FactStore) -> [RowFacts] {
-        facts.shows.values.sorted { a, b in
-            a.naturalKey.utf8.elementsEqual(b.naturalKey.utf8)
-                ? a.persistentModelID < b.persistentModelID
-                : a.naturalKey.utf8.lexicographicallyPrecedes(b.naturalKey.utf8)
+        let rows = Array(facts.shows.values)
+        let keys = rows.map { (bytes: Array($0.naturalKey.utf8), id: $0.persistentModelID) }
+        let order = keys.indices.sorted { i, j in
+            let byBytes = byteOrder(keys[i].bytes, keys[j].bytes)
+            return byBytes == 0 ? keys[i].id < keys[j].id : byBytes < 0
         }
+        return order.map { rows[$0] }
+    }
+
+    /// Two encodings compared byte by byte as unsigned values, shorter first on a shared prefix: negative, zero or
+    /// positive, the order `utf8.lexicographicallyPrecedes` gives, in one native comparison.
+    static func byteOrder(_ a: [UInt8], _ b: [UInt8]) -> Int {
+        let shared = min(a.count, b.count)
+        let prefix = shared == 0 ? 0 : a.withUnsafeBufferPointer { x in
+            b.withUnsafeBufferPointer { y in Int(memcmp(x.baseAddress!, y.baseAddress!, shared)) }
+        }
+        return prefix != 0 ? prefix : a.count - b.count
     }
 
     /// What `QueueRenderPass.make` is handed for one engine pass.

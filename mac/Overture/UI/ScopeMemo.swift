@@ -20,7 +20,9 @@ import SwiftData
 //      pointers rather than over fields: measured below in `ScopeMemoTests`, and a pointer hash of
 //      1,233 rows is microseconds against a derivation of hundreds of milliseconds. Comparing the model
 //      arrays BY VALUE would be whole-store work, which trades one O(n) pass for a cheaper one rather
-//      than removing it, and a COUNT would be blind to a row swapped for another (L40).
+//      than removing it, and a COUNT would be blind to a row swapped for another (L40). An address names an
+//      object only while it lives, so the memo HOLDS the rows its key was taken over until the next build
+//      (#4612): no other row can be made at one of their addresses while that key is compared.
 //   2. OBSERVATION TRACKING, which is what a fingerprint cannot do. A `@Model` object is `@Observable`,
 //      so a field edited IN PLACE leaves every pointer where it was and changes what the derivation
 //      would produce. The build runs inside `withObservationTracking`, so the memo is marked stale by
@@ -92,6 +94,10 @@ final class ScopeMemo<Value> {
     }
 
     private var key: Key?
+    // #4612: the rows `key`'s fingerprint was taken over, HELD for as long as that key is. The fingerprint hashes
+    // addresses, and an address names an object only while it lives (L1019), so holding them is what makes two
+    // equal hashes mean the same rows: no other object can be made at one of these addresses while they are here.
+    private var keyRows = ScopeRows()
     private var value: Value?
     private var builtAt: Date?
     // #4106: the store's save count when the answer was built. See `value(...)`'s `savesIn`.
@@ -145,7 +151,12 @@ final class ScopeMemo<Value> {
     /// edits, #4252; the save count still covers every context, since a test does.) So any save into the store a derivation reads makes its answer stale. A
     /// derivation that reads no store, or whose fingerprint already hashes the CONTENT it reads, passes
     /// nil and says why at the call site.
-    func value(fingerprint: Int,
+    ///
+    /// #4612: keyed by a `ScopeFingerprint` rather than the bare hash it finalizes to, so the memo can hold the rows
+    /// the hash was taken over (`keyRows`). The hash is of ADDRESSES, and an address names an object only while it
+    /// lives (L1019): a row freed after the build and another made at its address hashed identically, and the memo
+    /// served the first row's answer for the second (`ScopeMemoTests.aRowMadeAtAFreedRowsAddressRebuilds`).
+    func value(fingerprint: ScopeFingerprint,
                cardKeys: Set<String>,
                now: Date,
                staleAfter: Staleness = .seconds(ScopeMemo.staleAfterSeconds),
@@ -206,7 +217,7 @@ final class ScopeMemo<Value> {
                 return current
             }
         }
-        return rebuild(wanted, now: now, savesNow: savesNow, build: build)
+        return rebuild(wanted, rows: fingerprint.sources, now: now, savesNow: savesNow, build: build)
     }
 
     /// #4252: whether an answer observation has marked stale, with no save since its build, is a refetch
@@ -237,22 +248,22 @@ final class ScopeMemo<Value> {
         return value
     }
 
-    private func resolve(fingerprint: Int,
+    private func resolve(fingerprint: ScopeFingerprint,
                          cardKeys: Set<String>,
                          now: Date,
                          staleAfter: Staleness,
                          savesIn store: ModelContainer?,
                          build: () -> Value) -> Value {
-        let wanted = Key(fingerprint: fingerprint, cardKeys: cardKeys)
+        let wanted = Key(fingerprint: fingerprint.finalized(), cardKeys: cardKeys)
         let savesNow = store.map { saves.value(for: $0) }
         if let current = held(wanted, now: now, staleAfter: staleAfter), !staleFlag.isSet,
            savesAtBuild == savesNow {
             return current
         }
-        return rebuild(wanted, now: now, savesNow: savesNow, build: build)
+        return rebuild(wanted, rows: fingerprint.sources, now: now, savesNow: savesNow, build: build)
     }
 
-    private func rebuild(_ wanted: Key, now: Date, savesNow: Int?, build: () -> Value) -> Value {
+    private func rebuild(_ wanted: Key, rows: ScopeRows, now: Date, savesNow: Int?, build: () -> Value) -> Value {
         var built: Value?
         let generation = staleFlag.arm()
         withObservationTracking {
@@ -266,6 +277,7 @@ final class ScopeMemo<Value> {
         let result = built!
         builds += 1
         key = wanted
+        keyRows = rows
         value = result
         builtAt = now
         savesAtBuild = savesNow
@@ -368,6 +380,10 @@ extension ScopeMemo where Value: CarriesCardStore {
 /// point. Each of a view's inputs is named at the call site, so an input added to the view and not to
 /// the key is a line that is missing rather than an argument that is subtly wrong, and
 /// `ScopeMemoInputsAreCompleteGuardTests` can see it (L96).
+///
+/// #4612: it hashes ADDRESSES, which are sound only while the objects behind them live, so the memo holds the rows
+/// (`sources`) for as long as it holds the key. A memo is therefore handed the fingerprint itself, never the hash
+/// alone.
 struct ScopeFingerprint {
     private var hasher = Hasher()
     // #4252: the rows themselves, so a memo that serves a refetch can re-arm observation on every one of
