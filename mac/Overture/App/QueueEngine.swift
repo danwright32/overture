@@ -1912,11 +1912,15 @@ extension QueueEngine {
                                disposition: .resolved { $0.facts.allowedSeedTowns.resolve($1) }),
             // #4360: after `facts.shows` above, so a re-keyed show is read under its new identifier. A deleted or re-keyed
             // show leaves the pending set and is applied to every patched term at once, rather than waiting for a pass.
-            // The terms' own indexes (`patches.showLink`, `patches.producerTables`, `patches.ledger` and the answer
-            // records it was brought up to, #4364) are keyed by identity too, inside
+            // The terms' own indexes (`patches.showLink`, `patches.producerTables`, `patches.ledger`, #4364) are keyed
+            // by identity too, inside
             // a type this registry's walk does not enter; this entry is what brings them to every resolution.
             IdentityKeyedState(path: "patches.pending", disposition: .resolved { engine, resolution in
-                engine.patches.resolve(resolution, facts: engine.facts)
+                engine.patches.resolveShows(resolution, facts: engine.facts)
+            }),
+            // #4364: the answer records T5 was brought up to, and T5 with them, after `facts.orgAnswers` above.
+            IdentityKeyedState(path: "patches.ledgerAnswers", disposition: .resolved { engine, resolution in
+                engine.patches.resolveAnswers(resolution, facts: engine.facts)
             }),
             IdentityKeyedState(path: "showMembers", disposition: .resolved { $0.showMembers.resolve($1) }),
             IdentityKeyedState(path: "contactMembers", disposition: .resolved { $0.contactMembers.resolve($1) }),

@@ -323,14 +323,23 @@ struct QueueEnginePatches: Sendable {
 
     /// One resolution, applied at once: a deleted show leaves every term, and a show whose temporary identifier its
     /// first save replaced moves to the new one; #4364: so does a deleted or re-keyed answer, in T5. `facts` is AFTER
-    /// the resolution (the engine resolves its facts first), so a re-keyed row is read under its new identifier.
+    /// the resolution (the engine resolves its facts first), so a re-keyed row is read under its new identifier. The
+    /// engine's registry applies the two halves as two entries (`patches.pending`, `patches.ledgerAnswers`).
     mutating func resolve(_ resolution: QueueEngineResolution, facts: FactStore) {
+        resolveShows(resolution, facts: facts)
+        resolveAnswers(resolution, facts: facts)
+    }
+
+    private static func touched(by resolution: QueueEngineResolution, in table: FactStore.Table) -> Set<PersistentIdentifier> {
+        resolution.deletedIDs.union(resolution.rekeyedIDs.keys).union(resolution.rekeyedIDs.values)
+            .filter { FactStore.Table.holding($0.entityName) == table }
+    }
+
+    /// The shows a resolution deleted or re-keyed, out of the pending set and into every term.
+    mutating func resolveShows(_ resolution: QueueEngineResolution, facts: FactStore) {
         let shows = facts.shows
-        let moved = Set(resolution.rekeyedIDs.keys).union(resolution.rekeyedIDs.values)
-        let ids = resolution.deletedIDs.union(moved)
-        let touched = ids.filter { FactStore.Table.holding($0.entityName) == .shows }
-        let touchedAnswers = ids.filter { FactStore.Table.holding($0.entityName) == .orgAnswers }
-        guard !touched.isEmpty || !touchedAnswers.isEmpty else { return }
+        let touched = Self.touched(by: resolution, in: .shows)
+        guard !touched.isEmpty else { return }
         pending.subtract(touched)
         showLink?.apply(touched.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) })
         // A resolution moves shows and never the overrides, so T4 keeps the overrides it was last brought up to.
@@ -343,10 +352,20 @@ struct QueueEnginePatches: Sendable {
         // T5 keeps the instant, held keys and refusals it was last brought up to: a resolution moves none of them.
         guard var held = ledger, let producers = producerTables else { return }
         ledger = nil
-        for id in touchedAnswers { ledgerAnswers[id] = facts.orgAnswers[id] }
-        held.apply(rows: touched.map { (key: $0, facts: shows[$0].map(LedgerTerm.Facts.init(of:))) },
-                   answers: touchedAnswers.map { (key: $0, answer: facts.orgAnswers[$0].flatMap(OrgAnswerLedger.Answer.init)) },
+        held.apply(rows: touched.map { (key: $0, facts: shows[$0].map(LedgerTerm.Facts.init(of:))) }, answers: [],
                    refusals: held.refusals, heldKeys: held.heldKeys, now: held.now, verdictsMoved: verdictsMoved,
+                   qualifies: { producers.verdict($0)?.qualifies ?? false })
+        ledger = held
+    }
+
+    /// #4364: the answers a resolution deleted or re-keyed, out of the records T5 was brought up to and into T5.
+    mutating func resolveAnswers(_ resolution: QueueEngineResolution, facts: FactStore) {
+        let touched = Self.touched(by: resolution, in: .orgAnswers)
+        guard !touched.isEmpty, var held = ledger, let producers = producerTables else { return }
+        ledger = nil
+        for id in touched { ledgerAnswers[id] = facts.orgAnswers[id] }
+        held.apply(rows: [], answers: touched.map { (key: $0, answer: facts.orgAnswers[$0].flatMap(OrgAnswerLedger.Answer.init)) },
+                   refusals: held.refusals, heldKeys: held.heldKeys, now: held.now, verdictsMoved: [],
                    qualifies: { producers.verdict($0)?.qualifies ?? false })
         ledger = held
     }
