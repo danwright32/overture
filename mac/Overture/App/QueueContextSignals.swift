@@ -62,6 +62,15 @@ enum QueueInputSource: Equatable, Sendable {
             A prebuilt copy of a value the pass derives from its own store inputs. The engine owns that \
             table and patches it (plan v7 T4); it is never an input in its own right.
             """),
+        // #4361: T2 and T3, patched by the engine from the same store rows the pass reads.
+        "contradictedCancellations": .notAnInput(reason: """
+            A patched copy of the contradicted set the pass derives from its own store inputs (plan v7 T2). The \
+            engine keeps it from the shows a change touched; it is never an input in its own right.
+            """),
+        "feedBreakEvents": .notAnInput(reason: """
+            A patched copy of the feed breaks the pass derives from its own store inputs and the day (plan v7 \
+            T3). The engine keeps it from the shows a change touched; it is never an input in its own right.
+            """),
     ]
 }
 

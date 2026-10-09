@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1838 sentences**.
+Every sentence Overture can say to Dan: **1840 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 695 of the 1838 below hold a
+  sentence carrying a VALUE: 695 of the 1840 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -488,6 +488,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/BounceService.swift`
 "A nudge will arrive as a new email"
     `Domain/InquiryCopy.swift`
+"A patched copy of the contradicted set the pass derives from its own store inputs (plan v7 T2). The \\nengine keeps it from the shows a change touched; it is never an input in its own right."
+    `App/QueueContextSignals.swift`
+"A patched copy of the feed breaks the pass derives from its own store inputs and the day (plan v7 \\nT3). The engine keeps it from the shows a change touched; it is never an input in its own right."
+    `App/QueueContextSignals.swift`
 "A prebuilt copy of a value the pass derives from its own store inputs. The engine owns that \\ntable and patches it (plan v7 T4); it is never an input in its own right."
     `App/QueueContextSignals.swift`
 "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."

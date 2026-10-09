@@ -1900,6 +1900,9 @@ extension QueueEngine {
         /// #4361: an index inside a value another entry resolves whole, through the value's own resolve (the value is
         /// named), so it is not resolved a second time on its own.
         case resolvedWith(String)
+        /// #4361: part of the published output, which every pass replaces whole; a resolution is a fact change, so the
+        /// next publish replaces it.
+        case replacedByTheNextPublish
     }
 
     struct IdentityKeyedState {
@@ -1941,6 +1944,11 @@ extension QueueEngine {
             IdentityKeyedState(path: "patches.feedBreaks.buckets", disposition: .resolvedWith("patches")),
             IdentityKeyedState(path: "patches.feedBreaks.byLastNight", disposition: .resolvedWith("patches")),
             IdentityKeyedState(path: "patches.feedBreaks.events", disposition: .resolvedWith("patches")),
+            // #4361: the natural keys the output on screen was handed as T2's answer. A resolution that removes or
+            // renames a show changes a fact, so a new output carrying the patched value as it now stands follows: in
+            // the turn that applies it, or, while a landing holds the queue, in the one publish when it closes. The
+            // whole output on screen is that old until then, this set included.
+            IdentityKeyedState(path: "output.patched.contradicted", disposition: .replacedByTheNextPublish),
             IdentityKeyedState(path: "showMembers", disposition: .resolved { $0.showMembers.resolve($1) }),
             IdentityKeyedState(path: "contactMembers", disposition: .resolved { $0.contactMembers.resolve($1) }),
             IdentityKeyedState(path: "inquiryMembers", disposition: .resolved { $0.inquiryMembers.resolve($1) }),
