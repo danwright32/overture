@@ -302,9 +302,13 @@ extension QueueEnginePassInput {
 /// recorded as `patchMismatch`), and the heal is a cold build.
 struct QueueEnginePatches: Sendable {
     typealias ShowLinkTerm = PatchableShowLink<PersistentIdentifier>
+    typealias ProducerTablesTerm = PatchableProducerTables<PersistentIdentifier>
 
     /// T1 ShowLink, or nil until the first bring-up builds it cold.
     private(set) var showLink: ShowLinkTerm?
+    /// #4362 (plan v7 Phase 4b(c)): T4 the producer tables, with witness sets, or nil until the first bring-up. Built
+    /// and dropped together with every other term, so one pending set serves them all.
+    private(set) var producerTables: ProducerTablesTerm?
     /// #4363: T7 the per show entries, or nil until the first pass's bring-up builds it cold at that pass's instant.
     private(set) var rowEntries: PatchableRowEntries?
     /// Shows whose stored value changed since the last bring-up.
@@ -314,7 +318,7 @@ struct QueueEnginePatches: Sendable {
 
     /// A show's stored value changed. Nothing is noted before the first build, which reads every show anyway.
     mutating func noteChanged(_ id: PersistentIdentifier) {
-        guard showLink != nil || rowEntries != nil else { return }
+        guard showLink != nil || producerTables != nil || rowEntries != nil else { return }
         pending.insert(id)
     }
 
@@ -322,6 +326,7 @@ struct QueueEnginePatches: Sendable {
     /// built cold at the next bring-up.
     mutating func invalidate() {
         showLink = nil
+        producerTables = nil
         rowEntries = nil
         pending = []
     }
@@ -335,6 +340,11 @@ struct QueueEnginePatches: Sendable {
         guard !touched.isEmpty else { return }
         pending.subtract(touched)
         showLink?.apply(touched.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) })
+        // A resolution moves shows and never the overrides, so T4 keeps the overrides it was last brought up to.
+        if let overrides = producerTables?.overrides {
+            producerTables?.apply(touched.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
+                                  overrides: overrides)
+        }
         if var entries = rowEntries {
             rowEntries = nil
             entries.bringUp(changed: touched, shows: shows, now: entries.now, context: entries.context)
@@ -342,35 +352,43 @@ struct QueueEnginePatches: Sendable {
         }
     }
 
-    /// Every term brought up to `shows` alone: built cold when it has never been built, else patched from the pending
-    /// shows. T7 is patched at the instant and context it already holds, and never built here, because building it
-    /// needs a pass's instant. Returns what T1's patch changed, or nil for a cold build of T1.
-    @discardableResult
-    mutating func bringUp(to shows: [PersistentIdentifier: RowFacts]) -> ShowLinkTerm.Changed? {
-        let changed = pending
+    /// Every term brought up to `facts`: built cold when it has never been built, else patched from the pending shows.
+    /// T4 also reads the overrides (`FactStore.producerOverrides`) and compares them with the ones it holds on every
+    /// bring-up, because a promotion or a demotion changes no show and so is never pending. #4363: T7 is patched here
+    /// at the instant and context it already holds, and never built here, because building it needs a pass's instant
+    /// (the verifier's snapshot brings the terms up this way, to the facts alone).
+    mutating func bringUp(to facts: FactStore) {
+        let shows = facts.shows
+        let overrides = facts.producerOverrides
+        let ids = pending
         pending = []
-        if var entries = rowEntries, !changed.isEmpty {
+        if var entries = rowEntries, !ids.isEmpty {
             // Taken out and put back, so the patch mutates the one copy rather than a copy the optional still shares.
             rowEntries = nil
-            entries.bringUp(changed: changed, shows: shows, now: entries.now, context: entries.context)
+            entries.bringUp(changed: ids, shows: shows, now: entries.now, context: entries.context)
             rowEntries = entries
         }
-        guard var term = showLink else {
+        guard var link = showLink, var producers = producerTables else {
             showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
-            return nil
+            producerTables = ProducerTablesTerm(
+                rows: shows.map { (key: $0.key, facts: ProducerTablesTerm.Facts(of: $0.value)) }, overrides: overrides)
+            return
         }
-        guard !changed.isEmpty else { return ShowLinkTerm.Changed() }
-        let changes = changed.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }
+        guard !ids.isEmpty || producers.overrides != overrides else { return }
+        // Taken out and put back, so each patch mutates the one copy rather than a copy the optional still shares.
         showLink = nil
-        let result = term.apply(changes)
-        showLink = term
-        return result
+        producerTables = nil
+        if !ids.isEmpty { link.apply(ids.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }) }
+        producers.apply(ids.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
+                        overrides: overrides)
+        showLink = link
+        producerTables = producers
     }
 
     /// #4363: every term brought up for a pass at `now` with the signals `context`: the facts first, then T7 to the
     /// pass's instant and context (built cold the first time).
     mutating func bringUp(to facts: FactStore, now: Date, context: QueueEngineContextInputs) {
-        bringUp(to: facts.shows)
+        bringUp(to: facts)
         let rowContext = RowEntryContext(facts: facts, signals: context)
         guard var entries = rowEntries else {
             rowEntries = PatchableRowEntries(shows: facts.shows, context: rowContext, now: now)
@@ -384,19 +402,38 @@ struct QueueEnginePatches: Sendable {
     /// The verifier's comparison (plan v7 D7, one per term): each term held to its oracle over `fresh`, by the name of
     /// what differs, `term.table` (C7: names only, never a value). Empty when every term agrees, or none is built.
     func mismatches(against fresh: FactStore) -> [String] {
+        let shows = Array(fresh.shows.values)
         var out: [String] = []
         if let held = showLink?.tables {
-            let shows = Array(fresh.shows.values)
             let oracle = ShowLink.tables(among: shows, drawn: Set(QueueModel.queueScope(shows).map(\.naturalKey)))
             if held.group != oracle.group { out.append("showLink.group") }
             if held.fronts != oracle.fronts { out.append("showLink.fronts") }
             if held.hidden != oracle.hidden { out.append("showLink.hidden") }
+        }
+        // #4362: plan v7 D7's comparison (ii), T4 held to the two tables built cold from the same shows and overrides.
+        if let held = producerTables?.tables {
+            let oracle = QueueModel.ProducerTables(rows: shows, overrides: fresh.producerOverrides)
+            if held.corpus.venues != oracle.corpus.venues { out.append("producerTables.venues") }
+            if held.corpus.venuesByPresenter != oracle.corpus.venuesByPresenter {
+                out.append("producerTables.venuesByPresenter")
+            }
+            if held.venueBrands != oracle.venueBrands { out.append("producerTables.venueBrands") }
         }
         // #4363: T7 at its own instant and context, which the pass it last served was derived at.
         if let entries = rowEntries {
             out += entries.mismatches(against: fresh.shows, inquiries: Array(fresh.inquiries.values))
         }
         return out
+    }
+}
+
+extension FactStore {
+    /// #4362: Dan's producer corrections as the pass reads them, from the two small tables. One derivation, read by
+    /// the engine's pass (`QueueEngineQueue.passInputs`), the patched producer tables and the verifier's comparison,
+    /// so the three cannot disagree about which keys are promoted (L370).
+    var producerOverrides: ProducerOverrides {
+        ProducerOverrides(promoted: Set(promotedProducers.values.map(\.orgKey)),
+                          demoted: Set(demotedHouses.values.map(\.orgKey)))
     }
 }
 

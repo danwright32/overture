@@ -82,10 +82,19 @@ enum ProducerGate {
     // key (the ledger), so it pays one fold per name rather than one per question.
     static func qualifies(presenterKey: String, in corpus: Corpus,
                           overrides: ProducerOverrides = .none) -> Bool {
-        guard !isVenueBrand(presenterKey, venues: corpus.venues, overrides: overrides)
-        else { return false }
+        qualifies(presenterKey: presenterKey,
+                  isVenueBrand: isVenueBrand(presenterKey, venues: corpus.venues, overrides: overrides),
+                  distinctVenueCount: corpus.distinctVenueCount(presenterKey), overrides: overrides)
+    }
+
+    // #4362 (plan v7 Phase 4b(c)): the rule's last two arms over a brand verdict and a venue count already in
+    // hand, so the patched producer tables (`PatchableProducerTables`) report a changed verdict by the same rule
+    // rather than a second copy of it (L370).
+    static func qualifies(presenterKey: String, isVenueBrand: Bool, distinctVenueCount: Int,
+                          overrides: ProducerOverrides) -> Bool {
+        guard !isVenueBrand else { return false }
         if overrides.promoted.contains(presenterKey) { return true }
-        return corpus.distinctVenueCount(presenterKey) >= 2
+        return distinctVenueCount >= 2
     }
 
     // #1965: the two facts about a corpus that deciding "is this a producer" needs, each computed in one
@@ -102,7 +111,8 @@ enum ProducerGate {
         // shows name no readable venue is present with an empty set rather than absent, because "plays
         // no room anyone can read" and "is not in this corpus" are the same answer here (no rooms) and
         // conflating them would be a rule this type has no business inventing.
-        private let venuesByPresenter: [String: Set<String>]
+        // #4362: readable, so the verifier names this table apart from `venues` when the patched copy differs.
+        let venuesByPresenter: [String: Set<String>]
 
         init(_ shows: [Show]) {
             // #3743: counted here, at the one place the index is built, so "once per pass" is a number a
@@ -139,6 +149,14 @@ enum ProducerGate {
             }
             venues = VenueKeyIndex(venueKeys)
             venuesByPresenter = byPresenter
+        }
+
+        // #4362 (plan v7 Phase 4b(c)): the corpus as the queue engine's patched producer tables already hold it
+        // (`PatchableProducerTables.tables`), so handing it to a pass costs nothing. Built nowhere else: every
+        // other caller derives it from shows above, and the verifier holds the patched one equal to that.
+        init(venues: VenueKeyIndex, venuesByPresenter: [String: Set<String>]) {
+            self.venues = venues
+            self.venuesByPresenter = venuesByPresenter
         }
 
         // How many distinct rooms this presenter plays. Zero for a name the corpus never saw, which is
@@ -178,18 +196,27 @@ enum ProducerGate {
     // whole-store pass uses, because it asks about every presenter in the store against the same rooms.
     static func isVenueBrand(_ presenterKey: String, venues: VenueKeyIndex,
                              overrides: ProducerOverrides = .none) -> Bool {
-        let venueKeys = venues.keys
-        if venueKeys.contains(presenterKey) { return true }
+        isVenueBrand(presenterKey, isAVenueKey: venues.keys.contains(presenterKey), overrides: overrides) {
+            // #1963: only the rooms that share a WORD with this name. Containment in either direction requires
+            // it (a run of whole words inside another run of whole words), so a room sharing none can never
+            // match and the scan that used to visit all 114 of them per presenter visits a handful.
+            venues.postings.keys(sharingAWordWith: presenterKey).contains { namesTheSameRoom(presenterKey, $0) }
+        }
+    }
+
+    // #4362 (plan v7 Phase 4b(c)): the arms in their order, over whether the key IS a venue key and whether some
+    // venue key names the same room, so the patched producer tables (`PatchableProducerTables`), which keep the
+    // second answer as a witness set rather than searching for it, decide by these lines and no copy of them.
+    static func isVenueBrand(_ presenterKey: String, isAVenueKey: Bool, overrides: ProducerOverrides,
+                             namesARoom: () -> Bool) -> Bool {
+        if isAVenueKey { return true }
         // #1719: the other direction, and it is tested BEFORE promotion on purpose. A key in both lists
         // should never reach here (ProducerOverrideEditing keeps them mutually exclusive), but if one
         // ever does, the refusing answer is the safe one: this gate's standing rule is to fail toward
         // "no key, pay again" and never toward a shared answer.
         if overrides.demoted.contains(presenterKey) { return true }
         if overrides.promoted.contains(presenterKey) { return false }
-        // #1963: only the rooms that share a WORD with this name. Containment in either direction requires
-        // it (a run of whole words inside another run of whole words), so a room sharing none can never
-        // match and the scan that used to visit all 114 of them per presenter visits a handful.
-        return venues.postings.keys(sharingAWordWith: presenterKey).contains { namesTheSameRoom(presenterKey, $0) }
+        return namesARoom()
     }
 
     // #1963: the venue keys, plus which of them holds each word.
@@ -209,6 +236,12 @@ enum ProducerGate {
         init(_ venueKeys: Set<String>) {
             keys = venueKeys
             postings = WordPostings(venueKeys)
+        }
+
+        // #4362: the keys and their postings as the patched producer tables keep them, grown and shrunk in step.
+        init(keys: Set<String>, postings: WordPostings) {
+            self.keys = keys
+            self.postings = postings
         }
     }
 
@@ -449,7 +482,9 @@ enum ProducerGate {
         // an importer), so this can never silently start suppressing matches somewhere that never opted in.
         static let none = VenueBrands(brandKeys: [], roomNameKeys: [])
 
-        private init(brandKeys: Set<String>, roomNameKeys: Set<String>) {
+        // #4362: no longer private, because the patched producer tables (`PatchableProducerTables.tables`) hand
+        // over the two sets they keep in step. Every other caller derives them from a corpus below.
+        init(brandKeys: Set<String>, roomNameKeys: Set<String>) {
             self.brandKeys = brandKeys
             self.roomNameKeys = roomNameKeys
         }
@@ -524,7 +559,8 @@ enum ProducerGate {
     // the building inside a venue string that names the room ("Weill Recital Hall at Carnegie Hall").
     // Measured on the live store: it refuses The 52nd Street Project, Spit&Vigor and the Royal
     // Concertgebouw, each of which runs the room it is named after, and nothing else.
-    private static func namesTheSameRoom(_ presenterKey: String, _ venueKey: String) -> Bool {
+    // #4362: internal, so the patched producer tables test a witness by this one predicate (L370).
+    static func namesTheSameRoom(_ presenterKey: String, _ venueKey: String) -> Bool {
         containsAsWords(presenterKey, venueKey) || containsAsWords(venueKey, presenterKey)
     }
 

@@ -44,16 +44,17 @@ struct PatchHarnessOutcome {
     var failures: [String] = []
     var coldChecks = 0
     var permutationChecks = 0
-    /// Rows whose hidden state flipped, as ChangedKeys or the engine's patched tables reported it: the hand-off the
-    /// op mix must actually produce for the harness to be about it (L159).
-    var hiddenFlips = 0
+    /// The hand-offs into the next term, as ChangedKeys or the engine's patched tables reported them: for T1 rows whose
+    /// hidden state flipped, for T4 (#4362) presenter keys whose verdict moved. The op mix must actually produce them
+    /// for the harness to be about them (L159).
+    var handOffs = 0
 
     func report(_ name: String, settings: String, ms: Double) -> String {
         let ops = applied.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.rawValue) \($0.value)" }
         return """
             patch-4360 \(name) [\(settings)] \(String(format: "%.1f", ms / 1000)) s: \(checks) oracle comparisons, \
             \(coldChecks) cold builds held to the oracle, \(permutationChecks) permutation checks, \(skipped) ops skipped, \
-            \(hiddenFlips) hidden flips, mismatches \(failures.count)
+            \(handOffs) hand-offs, mismatches \(failures.count)
               ops applied: \(ops.joined(separator: "; "))
             """ + (failures.isEmpty ? "" : "\n  FAILURES\n  " + failures.prefix(30).joined(separator: "\n  "))
     }
@@ -78,6 +79,13 @@ protocol PatchHarnessTerm {
     static func coldMismatch(rows: [Prospect], world: Phase0cWorld) -> String?
     /// Whether the oracle gave a different answer over `rows` reversed.
     static func oracleMovesWithOrder(rows: [Prospect], world: Phase0cWorld) -> Bool
+    /// #4362: the fixture the term is driven over. Every term's rows by default; a term reading a field the default
+    /// fixture leaves empty (T4's presenter) builds its own.
+    static func world(size: Int, seed: UInt64) throws -> Phase0cWorld
+}
+
+extension PatchHarnessTerm {
+    static func world(size: Int, seed: UInt64) throws -> Phase0cWorld { try Phase0cWorld(size: size, seed: seed) }
 }
 
 @MainActor
@@ -85,7 +93,7 @@ enum PatchPropertyHarness {
     /// One seed: the world, the term built cold, then `steps` operations, checked after each and after each undo.
     static func run<Term: PatchHarnessTerm>(_: Term.Type, size: Int, seed: UInt64, steps: Int,
                                            outcome: inout PatchHarnessOutcome) throws {
-        let world = try Phase0cWorld(size: size, seed: seed)
+        let world = try Term.world(size: size, seed: seed)
         var rows = try PatchPropertyHarness.rows(world)
         var term = Term(rows: rows, world: world)
         let sampled = Set((0..<10).map { steps * $0 / 10 })
@@ -97,7 +105,7 @@ enum PatchPropertyHarness {
         }
         func feed(_ changed: Set<PersistentIdentifier>, _ step: Int, _ op: String) {
             let result = term.apply(changed, rows: rows, world: world)
-            outcome.hiddenFlips += result.flips
+            outcome.handOffs += result.flips
             outcome.failures += result.failures.map { "seed \(seed) size \(size) step \(step) op \(op): \($0)" }
         }
         func sampledChecks(_ step: Int) {
@@ -260,8 +268,10 @@ enum EnginePropertyHarness {
                     contextInputs: { EngineHarness.noSignals })
     }
 
-    static func run(size: Int, seed: UInt64, steps: Int, outcome: inout PatchHarnessOutcome) async throws {
-        let world = try Phase0cWorld(size: size, seed: seed, models: AppSchema.models)
+    /// One seed. `ops` is the term's op mix (T1's by default) and `presenters` gives every row a presenter (#4362, T4).
+    static func run(size: Int, seed: UInt64, steps: Int, ops: [Phase0cOp] = ShowLinkHarnessTerm.ops,
+                    presenters: Bool = false, outcome: inout PatchHarnessOutcome) async throws {
+        let world = try Phase0cWorld(size: size, seed: seed, models: AppSchema.models, presenters: presenters)
         let turns = EngineTurns()
         let engine = engine(world, turns)
         var rows = try PatchPropertyHarness.rows(world)
@@ -274,6 +284,7 @@ enum EnginePropertyHarness {
         engine.start()
         turns.run()
         var hidden = engine.patches.showLink?.tables.hidden ?? []
+        var brands = engine.patches.producerTables?.tables.venueBrands
         func check(_ step: Int, _ op: String) throws {
             outcome.checks += 1
             let place = "seed \(seed) size \(size) step \(step) op \(op)"
@@ -294,12 +305,16 @@ enum EnginePropertyHarness {
             let terms = engine.patches.mismatches(against: fresh)
             if !terms.isEmpty { outcome.failures.append("\(place): the patched terms differ in \(terms)") }
             let now = engine.patches.showLink?.tables.hidden ?? []
-            outcome.hiddenFlips += now.symmetricDifference(hidden).count
+            outcome.handOffs += now.symmetricDifference(hidden).count
             hidden = now
+            // #4362: T4's hand-off, the brand verdicts the cards and the ledger read, moved through the engine.
+            let nowBrands = engine.patches.producerTables?.tables.venueBrands
+            if nowBrands != brands { outcome.handOffs += 1 }
+            brands = nowBrands
         }
         try check(-1, "start")
         for step in 0..<steps {
-            let op = ShowLinkHarnessTerm.ops[world.roll(ShowLinkHarnessTerm.ops.count)]
+            let op = ops[world.roll(ops.count)]
             guard let edit = world.perform(op, rows: rows, fronts: PatchPropertyHarness.frontsOf(rows)) else {
                 outcome.skipped += 1
                 continue
@@ -330,15 +345,16 @@ enum EnginePropertyHarness {
         }
     }
 
-    static func runAll(ci: [(size: Int, seeds: Int, steps: Int)]) async throws
+    static func runAll(ci: [(size: Int, seeds: Int, steps: Int)], ops: [Phase0cOp] = ShowLinkHarnessTerm.ops,
+                       presenters: Bool = false, seedBase: UInt64 = 4360_5000) async throws
         -> (outcome: PatchHarnessOutcome, settings: String, ms: Double) {
         let plan = PatchHarnessSettings.plan(ci: ci)
         var outcome = PatchHarnessOutcome()
         let start = Phase0.now()
         for leg in plan {
             for s in 0..<leg.seeds {
-                try await run(size: leg.size, seed: 4360_5000 + UInt64(leg.size * 100 + s), steps: leg.steps,
-                              outcome: &outcome)
+                try await run(size: leg.size, seed: seedBase + UInt64(leg.size * 100 + s), steps: leg.steps, ops: ops,
+                              presenters: presenters, outcome: &outcome)
             }
         }
         let settings = (PatchHarnessSettings.deep ? "DEEP " : "CI ")
@@ -360,7 +376,7 @@ struct PatchableShowLinkTests {
         // Positive controls (L159): the harness compared enough to mean something, and the op mix reached the
         // hand-off into T7's membership at all.
         #expect(result.outcome.checks > 100, "T1: the harness compared too little to mean anything")
-        #expect(result.outcome.hiddenFlips > 0, "T1: no hidden state ever flipped, so ChangedKeys' hand-off was never judged")
+        #expect(result.outcome.handOffs > 0, "T1: no hidden state ever flipped, so ChangedKeys' hand-off was never judged")
         #expect(Set(result.outcome.applied.keys) == Set(Phase0cOp.t1),
                 "T1: an op in the mix never ran: \(Set(Phase0cOp.t1).subtracting(result.outcome.applied.keys).map(\.rawValue))")
     }
@@ -370,7 +386,7 @@ struct PatchableShowLinkTests {
         print(result.outcome.report("whole pass", settings: result.settings, ms: result.ms))
         #expect(result.outcome.failures.isEmpty, "the engine's pass with T1 patched disagreed with the pass without it")
         #expect(result.outcome.checks > 40, "the whole pass harness compared too little to mean anything")
-        #expect(result.outcome.hiddenFlips > 0, "no hidden state flipped through the engine, so no hand-off was judged")
+        #expect(result.outcome.handOffs > 0, "no hidden state flipped through the engine, so no hand-off was judged")
     }
 
     // The patch answers an empty store, a single row and a deletion of the last member as the oracle does: no group,
@@ -393,7 +409,7 @@ struct PatchableShowLinkTests {
         let world = try Phase0cWorld(size: 60, seed: 4360_0002, models: AppSchema.models)
         var stale = QueueEnginePatches()
         let before = try FactStore.extractAll(from: ModelContext(world.container))
-        stale.bringUp(to: before.shows)
+        stale.bringUp(to: before)
         #expect(stale.mismatches(against: before).isEmpty, "a patch built from these facts disagreed with them")
         // A front with a hidden sibling dismissed: the sibling becomes the front and is no longer hidden, so the
         // collapse moves both ways and the grouping does not move at all.
@@ -415,7 +431,7 @@ struct PatchableShowLinkTests {
         // Brought up to the same facts, the same patch agrees, so the verdict was about the patch and nothing else.
         var current = stale
         current.noteChanged(front.persistentModelID)
-        current.bringUp(to: fresh.shows)
+        current.bringUp(to: fresh)
         #expect(current.mismatches(against: fresh).isEmpty)
         let healed = QueueEngineSnapshot(saveCount: 1, generation: 8, facts: fresh, viewInputs: QueueEngineViewInputs(),
                                          context: EngineHarness.noSignals, now: EngineStore.baseNow,
@@ -431,7 +447,7 @@ struct PatchableShowLinkTests {
         let world = try Phase0cWorld(size: 60, seed: 4360_0003, models: AppSchema.models)
         var patches = QueueEnginePatches()
         let facts = try FactStore.extractAll(from: ModelContext(world.container))
-        patches.bringUp(to: facts.shows)
+        patches.bringUp(to: facts)
         let rows = try world.rows()
         let grouped = try #require(rows.first { patches.showLink?.tables.group[$0.naturalKey] != nil })
         var resolution = QueueEngineResolution()
@@ -524,7 +540,7 @@ final class PatchableShowLinkCostProbeTests {
         // The engine's whole pass over the same facts, with no patch and with the patch brought up, the first screen's
         // cards requested as the queue requests them. Alternated, so neither arm carries the order effect.
         var patches = QueueEnginePatches()
-        patches.bringUp(to: facts.shows)
+        patches.bringUp(to: facts)
         let now = Date()
         let firstView = QueueEngineViewInputs(focusedStage: .scout, focusedKeys: nil, requestedCardKeys: [])
         let probeView = QueueEngineQueue.derive(QueueEnginePassInput(facts: facts, viewInputs: firstView, now: now,

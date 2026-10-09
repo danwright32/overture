@@ -505,7 +505,7 @@ struct PatchableRowEntriesTests {
         #expect(!fields.contains { $0.hasPrefix("showLink.") }, "a status move inside the scope moved ShowLink: \(fields)")
         var current = stale
         current.noteChanged(row.persistentModelID)
-        current.bringUp(to: fresh.shows)
+        current.bringUp(to: fresh)
         #expect(current.mismatches(against: fresh).isEmpty, "brought up to the same facts, T7 still disagreed")
     }
 }

@@ -3331,6 +3331,14 @@ enum QueueModel {
             venueBrands = ProducerGate.VenueBrands(corpus: corpus, overrides: overrides)
         }
 
+        /// #4362 (plan v7 Phase 4b(c)): the two tables as the queue engine's patched value keeps them
+        /// (`PatchableProducerTables.tables`), already brought up to date from the shows that changed. The
+        /// verifier holds them equal to the two initialisers above over the same store.
+        init(corpus: ProducerGate.Corpus, venueBrands: ProducerGate.VenueBrands) {
+            self.corpus = corpus
+            self.venueBrands = venueBrands
+        }
+
         /// #4357 slice C: over the rows themselves, which is what `scope` calls, so the pass hands it live
         /// models and the engine (Phase 4) retained `RowFacts`. A forwarder through `ProducerGate.Show`'s one
         /// projection, never a second derivation. The memo in `QueueView` keeps the `shows:` form, because it
