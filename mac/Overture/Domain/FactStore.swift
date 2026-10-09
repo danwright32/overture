@@ -273,9 +273,10 @@ struct QueueEnginePassInput: Sendable {
 /// Phase 4b PR, riskiest first; T1 ShowLink (#4360) is the first.
 ///
 /// HOW A CHANGE REACHES A TERM. The engine notes every show whose stored value changed (`noteChanged`, from the one
-/// place it records a show), applies each resolution at once (`resolve`, from `QueueEngine.identityKeyedState`, so a
-/// deleted or re-keyed identity outlives no resolution here), and drops everything when its facts are replaced whole
-/// (`invalidate`). A pass then brings the terms up (`bringUp(to:now:)`), which builds a term cold the first time.
+/// place it records a show), applies each resolution at once (`resolveShows` and `resolveAnswers`, from
+/// `QueueEngine.identityKeyedState`, so a deleted or re-keyed identity outlives no resolution here), and drops
+/// everything when its facts are replaced whole (`invalidate`). A pass then brings the terms up
+/// (`bringUp(to:now:asOf:)`), which builds a term cold the first time.
 ///
 /// HOW A WRONG TERM IS FOUND. A route that changed a show without noting it would leave a term stale with nothing on
 /// screen saying so. The verifier compares every term with its oracle over a fresh read (`mismatches(against:)`,
@@ -327,20 +328,16 @@ struct QueueEnginePatches: Sendable {
         pending = []
     }
 
-    /// One resolution, applied at once: a deleted show leaves every term, and a show whose temporary identifier its
-    /// first save replaced moves to the new one; #4364: so does a deleted or re-keyed answer, in T5. `facts` is AFTER
-    /// the resolution (the engine resolves its facts first), so a re-keyed row is read under its new identifier. The
-    /// engine's registry applies the two halves as two entries (`patches.pending`, `patches.ledgerAnswers`).
-    mutating func resolve(_ resolution: QueueEngineResolution, facts: FactStore) {
-        resolveShows(resolution, facts: facts)
-        resolveAnswers(resolution, facts: facts)
-    }
-
     private static func touched(by resolution: QueueEngineResolution, in table: FactStore.Table) -> Set<PersistentIdentifier> {
         resolution.deletedIDs.union(resolution.rekeyedIDs.keys).union(resolution.rekeyedIDs.values)
             .filter { FactStore.Table.holding($0.entityName) == table }
     }
 
+    /// One resolution, applied at once, in two halves the engine's registry applies as two entries (`patches.pending`,
+    /// `patches.ledgerAnswers`): a deleted show leaves every term, and a show whose temporary identifier its first save
+    /// replaced moves to the new one; #4364: so does a deleted or re-keyed answer, in T5. `facts` is AFTER the
+    /// resolution (the engine resolves its facts first), so a re-keyed row is read under its new identifier.
+    ///
     /// The shows a resolution deleted or re-keyed, out of the pending set and into every term.
     mutating func resolveShows(_ resolution: QueueEngineResolution, facts: FactStore) {
         let shows = facts.shows

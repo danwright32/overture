@@ -448,7 +448,7 @@ struct PatchableAnswerLedgerTests {
         resolution.deletedIDs = [id]
         var resolved = facts
         resolved.orgAnswers[id] = nil
-        patches.resolve(resolution, facts: resolved)
+        patches.resolveAnswers(resolution, facts: resolved)
         #expect(patches.ledger?.inherited[key] == nil, "the deleted answer is still lent")
         #expect(patches.mismatches(against: resolved).isEmpty, "T5 after the resolution is not the oracle's")
     }

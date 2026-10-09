@@ -476,7 +476,7 @@ struct PatchableShowLinkTests {
         remaining[grouped.persistentModelID] = nil
         var resolved = facts
         resolved.shows = remaining
-        patches.resolve(resolution, facts: resolved)
+        patches.resolveShows(resolution, facts: resolved)
         #expect(patches.showLink?.tables.group[grouped.naturalKey] == nil, "the deleted show still has a group")
         #expect(patches.showLink?.tables.group.values.contains { $0.contains(grouped.naturalKey) } == false,
                 "the deleted show is still named as another row's sibling")

@@ -280,7 +280,7 @@ struct PatchableProducerTablesTests {
         remaining[lone.persistentModelID] = nil
         var resolved = facts
         resolved.shows = remaining
-        patches.resolve(resolution, facts: resolved)
+        patches.resolveShows(resolution, facts: resolved)
         #expect(patches.pending.isEmpty)
         var pruned = facts
         pruned.shows = remaining
