@@ -18,15 +18,15 @@ import SwiftData
 //
 // WHAT IT DOES NOT COMPARE YET, named so nobody reads a match as more than it is. Plan v7 D7 lists four
 // comparisons. (i) facts by identity and (iii) the output from fresh facts are here. (ii) ProducerTables built
-// cold against the retained copy waits for there to BE a retained copy, which is Phase 4b's T4 (#4362); today the
-// pass builds them cold every time, so (iii) covers them. (iv) the card term on background models against cards
+// cold against the retained copy is here since Phase 4b's T4 (#4362), as one of the per term comparisons below
+// (`producerTables.venues`, `.venuesByPresenter`, `.venueBrands`). (iv) the card term on background models against cards
 // from extracted facts is here since #4358 slice E4b, through the derivation's `compareCards`, made only once (i)
 // and (iii) have agreed and only while no save has landed since the read (a later save would make the models
 // newer than the facts they are compared with).
 //
 // #4360 (plan v7 Phase 4b): and one comparison per term the engine keeps PATCHED between passes, each held to its
 // oracle over the same fresh facts once (i) agrees and before (iii), so a term that missed a change is named as the
-// term (`patchMismatch`, fields `showLink.group` and so on). T1 ShowLink is the first; (ii) is T4's, when it lands.
+// term (`patchMismatch`, fields `showLink.group` and so on). T1 ShowLink was the first; T4 is (ii) above.
 
 /// One fresh read of the SAVED store, made through a context of its own, and what a count said beside it.
 struct QueueEngineFreshRead: Sendable {
