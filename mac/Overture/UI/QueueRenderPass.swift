@@ -412,6 +412,10 @@ enum QueueRenderPass {
         // does. Nil means "build them in the pass", which is what every test call site does, so the
         // cost tests keep measuring the whole derivation.
         var producerTables: QueueModel.ProducerTables? = nil
+        // #4360 (plan v7 Phase 4b(a)): T1's tables from the queue engine's patched value (`PatchableShowLink`),
+        // brought up to date from the shows that changed, or nil to build them in the pass, which every caller but
+        // the engine does. Over `allProspects` and the queue's own scope of it, which is what the pass draws.
+        var showLink: ShowLink.Tables? = nil
         // #4361 (plan v7 Phase 4b(b)): T2's contradicted set and T3's feed breaks, when the caller keeps them patched
         // (the queue engine, `QueueEnginePatches`) rather than having the pass recompute both over every show. Nil
         // means "derive them in the pass", which every caller but the engine's own turn does, so the cost tests and
@@ -459,7 +463,7 @@ enum QueueRenderPass {
                                      // #3742: the producer tables, when the caller has them in hand.
                                      // Nil everywhere but the app, which is the same rule every other
                                      // prebuilt value on `Inputs` follows.
-                                     producerTables: i.producerTables, today: context.today,
+                                     producerTables: i.producerTables, showLink: i.showLink, today: context.today,
                                      checksACard: i.checksACardInThePass,
                                      // #4361: T2's set, when the caller keeps it patched.
                                      contradicted: i.contradictedCancellations)

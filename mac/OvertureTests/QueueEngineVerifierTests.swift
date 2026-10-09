@@ -632,8 +632,8 @@ final class QueueEngineVerifierTriggerTests {
     }
 
     @Test func everyVerifierKindHasTheCooldown() {
-        for kind in [CardDivergenceRecord.Kind.factMismatch, .outputMismatch, .cardMismatch, .contradictionMismatch,
-                     .feedBreakMismatch, .foreignSave, .healed,
+        for kind in [CardDivergenceRecord.Kind.factMismatch, .outputMismatch, .cardMismatch, .patchMismatch, .foreignSave,
+                     .healed,
                      .healDidNotConverge,
                      .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped] {
             #expect(kind.cooldown == 600, "\(kind)")

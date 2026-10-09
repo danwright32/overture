@@ -105,12 +105,29 @@ enum QueueEngineQueue {
     // MARK: - The pass
 
     /// The shows in the declared order: natural key in byte order, then identifier.
+    ///
+    /// #4623: decided over the two keys, never by sorting the rows themselves. A `RowFacts` carries every stored
+    /// field of a show, so each move a sort makes copies all of them; sorting the rows cost 46.9 ms of a 269.4 ms
+    /// pass at 1x and 229.8 ms at 4x in an optimised build (2026-10-08, `PassCostByTermProbeTests`), the one thing
+    /// the engine's pass paid that the pass over models did not. Here each row is copied into its place once.
     static func shows(_ facts: FactStore) -> [RowFacts] {
-        facts.shows.values.sorted { a, b in
-            a.naturalKey.utf8.elementsEqual(b.naturalKey.utf8)
-                ? a.persistentModelID < b.persistentModelID
-                : a.naturalKey.utf8.lexicographicallyPrecedes(b.naturalKey.utf8)
+        let rows = Array(facts.shows.values)
+        let keys = rows.map { (bytes: Array($0.naturalKey.utf8), id: $0.persistentModelID) }
+        let order = keys.indices.sorted { i, j in
+            let byBytes = byteOrder(keys[i].bytes, keys[j].bytes)
+            return byBytes == 0 ? keys[i].id < keys[j].id : byBytes < 0
         }
+        return order.map { rows[$0] }
+    }
+
+    /// Two encodings compared byte by byte as unsigned values, shorter first on a shared prefix: negative, zero or
+    /// positive, the order `utf8.lexicographicallyPrecedes` gives, in one native comparison.
+    static func byteOrder(_ a: [UInt8], _ b: [UInt8]) -> Int {
+        let shared = min(a.count, b.count)
+        let prefix = shared == 0 ? 0 : a.withUnsafeBufferPointer { x in
+            b.withUnsafeBufferPointer { y in Int(memcmp(x.baseAddress!, y.baseAddress!, shared)) }
+        }
+        return prefix != 0 ? prefix : a.count - b.count
     }
 
     /// What `QueueRenderPass.make` is handed for one engine pass.
@@ -149,12 +166,16 @@ enum QueueEngineQueue {
         inputs.requestedCardKeys = input.viewInputs.requestedCardKeys
         // The engine checks a card at publish, over the main context's model, rather than inside the pass.
         inputs.checksACardInThePass = false
-        // #4361: T2 and T3 as the engine keeps them patched, taken only when they were judged at this pass's own
-        // Eastern day. A value judged at another day would describe another day's breaks, so the pass derives both
-        // itself rather than draw it (the engine advances the patches to the pass's day before every pass it runs).
-        if let patched = input.patched, patched.asOf == EasternDate.today(input.now) {
-            inputs.contradictedCancellations = patched.contradicted
-            inputs.feedBreakEvents = patched.feedBreaks
+        // #4360 (plan v7 Phase 4b(a)): T1 from the engine's patched value when it handed one in; the verifier's rebuild
+        // hands none, so its pass derives T1 over the facts, which is the oracle the patch is held to.
+        inputs.showLink = input.patches?.showLink?.tables
+        // #4361: T2 and T3 as the engine keeps them patched, T3 taken only when it was judged at this pass's own Eastern
+        // day: a value judged at another day would describe that day's breaks, so the pass derives both itself instead
+        // (the engine brings T3 to the pass's day before every pass it runs, so this is a net, not a path).
+        if let t2 = input.patches?.contradictions, let t3 = input.patches?.feedBreaks,
+           t3.asOf == EasternDate.today(input.now) {
+            inputs.contradictedCancellations = t2.contradictedKeys
+            inputs.feedBreakEvents = t3.output
         }
         return inputs
     }

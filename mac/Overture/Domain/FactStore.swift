@@ -263,9 +263,134 @@ struct QueueEnginePassInput: Sendable {
     let now: Date
     /// #4358 slice E4b: the inputs that arrive by a signal, as the engine read them for this pass.
     let context: QueueEngineContextInputs
-    /// #4361 (plan v7 Phase 4b(b)): T2 and T3 as the engine keeps them patched (`QueueEnginePatches`), or nil for a
-    /// pass that derives both itself, which is what the verifier's rebuild over a fresh read is.
-    var patched: QueueEnginePatchedValues? = nil
+    /// #4360 (plan v7 Phase 4b): the terms the engine keeps patched, brought up to `facts`, or nil to derive every term
+    /// over the facts, which is what the verifier's rebuild does (it is the patches' oracle, L70).
+    var patches: QueueEnginePatches? = nil
+}
+
+/// #4360 (plan v7 Phase 4b, discussion #4267 section 4): the queue terms the engine keeps PATCHED between passes, each
+/// brought up to date from the shows that changed rather than recomputed over every show on every pass. One term per
+/// Phase 4b PR, riskiest first; T1 ShowLink (#4360) is the first.
+///
+/// HOW A CHANGE REACHES A TERM. The engine notes every show whose stored value changed (`noteChanged`, from the one
+/// place it records a show), applies each resolution at once (`resolve`, from `QueueEngine.identityKeyedState`, so a
+/// deleted or re-keyed identity outlives no resolution here), and drops everything when its facts are replaced whole
+/// (`invalidate`). A pass then brings the terms up (`bringUp(to:)`), which builds a term cold the first time.
+///
+/// HOW A WRONG TERM IS FOUND. A route that changed a show without noting it would leave a term stale with nothing on
+/// screen saying so. The verifier compares every term with its oracle over a fresh read (`mismatches(against:)`,
+/// recorded as `patchMismatch`), and the heal is a cold build.
+struct QueueEnginePatches: Sendable {
+    typealias ShowLinkTerm = PatchableShowLink<PersistentIdentifier>
+
+    /// T1 ShowLink, or nil until the first bring-up builds it cold.
+    private(set) var showLink: ShowLinkTerm?
+    /// #4361: T2 ContradictedCancellation and T3 feed breaks (Domain/CancellationPatches.swift), built and dropped with
+    /// T1, so all three are cold or all three are patched. T3 is judged at a day, which a bring-up moves.
+    private(set) var contradictions: PatchableContradictions?
+    private(set) var feedBreaks: PatchableFeedBreaks?
+    /// Shows whose stored value changed since the last bring-up.
+    private(set) var pending: Set<PersistentIdentifier> = []
+
+    init() {}
+
+    /// A show's stored value changed. Nothing is noted before the first build, which reads every show anyway.
+    mutating func noteChanged(_ id: PersistentIdentifier) {
+        guard showLink != nil else { return }
+        pending.insert(id)
+    }
+
+    /// The held facts were replaced whole (the launch's first read, a read of everything, a heal), so every term is
+    /// built cold at the next bring-up.
+    mutating func invalidate() {
+        showLink = nil
+        contradictions = nil
+        feedBreaks = nil
+        pending = []
+    }
+
+    /// One resolution, applied at once: a deleted show leaves every term, and a show whose temporary identifier its
+    /// first save replaced moves to the new one. `shows` is the facts AFTER the resolution (the engine resolves its
+    /// facts first), so a re-keyed show is read under its new identifier.
+    mutating func resolve(_ resolution: QueueEngineResolution, shows: [PersistentIdentifier: RowFacts]) {
+        let moved = Set(resolution.rekeyedIDs.keys).union(resolution.rekeyedIDs.values)
+        let touched = resolution.deletedIDs.union(moved).filter { FactStore.Table.holding($0.entityName) == .shows }
+        guard !touched.isEmpty else { return }
+        pending.subtract(touched)
+        showLink?.apply(touched.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) })
+        applyCancellations(Array(touched), shows: shows) // patch-resolve-cancellations
+    }
+
+    /// Every term brought up to `shows`: built cold when it has never been built, else patched from the pending shows.
+    /// Returns what T1's patch changed, or nil for a cold build. #4361: `asOf` is the Eastern day T3 is judged at, which
+    /// the engine's pass hands in (its own day); nil keeps the day T3 was last brought to, which is what the verifier's
+    /// snapshot wants, since it holds the terms to the day the output on screen was derived at.
+    @discardableResult
+    mutating func bringUp(to shows: [PersistentIdentifier: RowFacts], asOf: String? = nil) -> ShowLinkTerm.Changed? {
+        guard var term = showLink else {
+            showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
+            contradictions = PatchableContradictions()
+            feedBreaks = PatchableFeedBreaks(asOf: asOf ?? "")
+            applyCancellations(Array(shows.keys), shows: shows)
+            pending = []
+            return nil
+        }
+        defer { if let asOf { advanceFeedBreaks(to: asOf) } }
+        guard !pending.isEmpty else { return ShowLinkTerm.Changed() }
+        let ids = Array(pending)
+        let changes = ids.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }
+        pending = []
+        // Taken out and put back, so the patch mutates the one copy rather than a copy the optional still shares.
+        showLink = nil
+        let changed = term.apply(changes)
+        showLink = term
+        applyCancellations(ids, shows: shows) // patch-bringup-cancellations
+        return changed
+    }
+
+    /// #4361: the shows `ids` name, as `shows` holds them now (nil for one gone), taken into T2 and then into T3 with the
+    /// identities whose contradicted state T2 flipped (section 5: T3 reads T2). Nothing before the first build.
+    private mutating func applyCancellations(_ ids: [PersistentIdentifier], shows: [PersistentIdentifier: RowFacts]) {
+        guard var t2 = contradictions, var t3 = feedBreaks, !ids.isEmpty else { return }
+        // Taken out and put back, for the reason T1's are.
+        contradictions = nil
+        feedBreaks = nil
+        let flips = t2.apply(ids.map { ($0, shows[$0].map(PatchableContradictions.Slice.init)) })
+        t3.apply(ids.map { ($0, shows[$0].flatMap(PatchableFeedBreaks.Slice.init)) }, flips: flips,
+                 covered: t2.contradictedKeys)
+        contradictions = t2
+        feedBreaks = t3
+    }
+
+    private mutating func advanceFeedBreaks(to day: String) {
+        guard var t3 = feedBreaks, t3.asOf != day else { return }
+        feedBreaks = nil
+        t3.advance(to: day, covered: contradictions?.contradictedKeys ?? [])
+        feedBreaks = t3
+    }
+
+    /// The verifier's comparison (plan v7 D7, one per term): each term held to its oracle over `fresh`, by the name of
+    /// what differs, `term.table` (C7: names only, never a value). Empty when every term agrees, or none is built.
+    func mismatches(against fresh: FactStore) -> [String] {
+        guard let held = showLink?.tables else { return [] }
+        let shows = Array(fresh.shows.values)
+        let oracle = ShowLink.tables(among: shows, drawn: Set(QueueModel.queueScope(shows).map(\.naturalKey)))
+        var out: [String] = []
+        if held.group != oracle.group { out.append("showLink.group") }
+        if held.fronts != oracle.fronts { out.append("showLink.fronts") }
+        if held.hidden != oracle.hidden { out.append("showLink.hidden") }
+        // #4361: T2 against `contradictedKeys` and T3 against `events` with `contradicted` nil (so it stays independent
+        // of T2), at the day T3 was brought to. Both answer the same whatever order the rows come in.
+        if let t2 = contradictions,
+           t2.contradictedKeys != ContradictedCancellation.contradictedKeys(among: shows) { // patch-verifier-t2
+            out.append("contradictions.contradicted")
+        }
+        if let t3 = feedBreaks,
+           t3.output != FeedBreakEvent.events(among: shows, asOf: t3.asOf, contradicted: nil) {
+            out.append("feedBreaks.events")
+        }
+        return out
+    }
 }
 
 /// #4358 slice E4b: every input of the queue's pass that is neither a store row, the clock nor the surface's view,

@@ -117,10 +117,8 @@ enum EngineDivergenceGate {
     static func refuses(_ kind: CardDivergenceRecord.Kind) -> Bool {
         switch kind {
         // The engine and the store disagreed, a card disagreed with a fresh build, or another context saved.
-        case .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave:
-            return true
-        // #4361: a term the engine keeps patched disagreed with the term itself over the store.
-        case .contradictionMismatch, .feedBreakMismatch:
+        // #4360: a patched term disagreeing with its oracle is the engine disagreeing with the store too.
+        case .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave, .patchMismatch:
             return true
         // A row was faulted: whether it came back or not, a fault happened in this run.
         case .healed, .healDidNotConverge:
@@ -149,7 +147,6 @@ enum EngineDivergenceGate {
             // build from the saved show.
             ("cardDivergences", counts.cardDivergences),
             ("cardMismatches", counts.cardMismatches),
-            // #4361: a patched term (T2, T3) disagreeing with the term itself over a fresh read.
             ("patchMismatches", counts.patchMismatches),
             ("healed", counts.healed),
             ("healDidNotConverge", counts.healDidNotConverge),
@@ -282,9 +279,9 @@ struct EngineDivergenceGateRuleTests {
 
     @Test func everyKindTheGateRefusesRefusesAndNoOtherDoes() {
         let named: Set<CardDivergenceRecord.Kind> = [
-            .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
+            .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave, .patchMismatch, .healed,
+            .healDidNotConverge,
             .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped,
-            .contradictionMismatch, .feedBreakMismatch,
         ]
         for kind in CardDivergenceRecord.Kind.allCases where kind != .unrecognised {
             let refusals = Self.refusals(Self.run([Self.record(1, kind: kind)]))

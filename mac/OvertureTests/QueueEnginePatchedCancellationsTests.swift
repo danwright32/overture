@@ -14,8 +14,9 @@ import Testing
 //   * the WHOLE-PASS harness: the engine itself, with the queue's own derivation, taking the same operations in
 //     through saves and turns, and after each one its published pass equals the pass over a fresh read with nothing
 //     patched (the verifier's comparison (iii)), so a hand-off between the patches and the pass is seen (L220, L14);
-//   * the per-term VERIFIER kind: a patched value that disagrees with the unpatched terms over a fresh read is
-//     `patchMismatch`, recorded under the term's own kind and healed by a cold rebuild and a pass;
+//   * the per-term VERIFIER comparison: a patched value that disagrees with the unpatched term over a fresh read is
+//     named in `QueueEnginePatches.mismatches(against:)`, which the verifier reports as `patchMismatch` (#4360's
+//     verdict, record kind and heal, which every patched term shares);
 //   * rows re-evaluated per change bounded by the ROOM, never the corpus (plan section 15).
 // Each names the mutation that must turn it red (L1); the PR records each as seen.
 //
@@ -46,12 +47,13 @@ enum PatchedCancellationsHarness {
     static func run(size: Int, seed: UInt64, steps: Int, outcome: inout Outcome) throws {
         let world = try Phase0cWorld(size: size, seed: seed)
         var rows = try world.rows()
-        var patches = QueueEnginePatches(shows: facts(rows), asOf: world.asOf)
+        // The engine's own value and its own route: shows noted changed, then brought up to the facts at the day.
+        var patches = QueueEnginePatches()
+        patches.bringUp(to: facts(rows), asOf: world.asOf)
 
         func feed(_ changed: Set<PersistentIdentifier>) {
-            let byPID = Dictionary(rows.map { ($0.persistentModelID, $0) }, uniquingKeysWith: { first, _ in first })
-            patches.take(changed.sorted().map { ($0, byPID[$0].map(RowFacts.extract)) })
-            patches.advance(to: world.asOf)
+            for id in changed.sorted() { patches.noteChanged(id) }
+            patches.bringUp(to: facts(rows), asOf: world.asOf)
         }
 
         let sampled = Set((0..<10).map { steps * $0 / 10 })
@@ -60,7 +62,7 @@ enum PatchedCancellationsHarness {
             let place = "seed \(seed) size \(size) step \(step) op \(op)"
             let canonical = rows.sorted(by: CanonicalOracle.byNaturalKey)
             let oracle = ContradictedCancellation.contradictedKeys(among: canonical)
-            let mine = patches.contradictions.contradictedKeys
+            let mine = patches.contradictions?.contradictedKeys ?? []
             let byRow = brute
                 ? Set(rows.filter { ContradictedCancellation.liveTwin(of: $0, among: rows) != nil }.map(\.naturalKey))
                 : oracle
@@ -70,7 +72,7 @@ enum PatchedCancellationsHarness {
                                         + "(\(oracle.count)) brute \(hash(byRow)) (\(byRow.count))")
             }
             let want = OracleRendering.feedBreaks(CanonicalOracle.feedBreakEvents(rows, asOf: world.asOf))
-            let got = OracleRendering.feedBreaks(patches.values.feedBreaks)
+            let got = OracleRendering.feedBreaks(patches.feedBreaks?.output ?? [])
             if want != got {
                 outcome.failures.append("\(place): T3 patched \(Phase0b.hash8(got)) oracle \(Phase0b.hash8(want))")
             }
@@ -110,9 +112,13 @@ enum PatchedCancellationsHarness {
         }
         check(steps, "end", brute: true)
         // The cold build is the patched type's own, and is compared against the oracle, never used as it (L70).
-        let cold = QueueEnginePatches(shows: facts(rows), asOf: world.asOf).values
-        let oracle = QueueEnginePatchedValues.unpatched(rows.sorted(by: CanonicalOracle.byNaturalKey), asOf: world.asOf)
-        if !cold.differingTerms(from: oracle).isEmpty || cold != patches.values {
+        var cold = QueueEnginePatches()
+        cold.bringUp(to: facts(rows), asOf: world.asOf)
+        let canonical = rows.sorted(by: CanonicalOracle.byNaturalKey)
+        if cold.contradictions?.contradictedKeys != ContradictedCancellation.contradictedKeys(among: canonical)
+            || cold.feedBreaks?.output != FeedBreakEvent.events(among: canonical, asOf: world.asOf)
+            || cold.contradictions?.contradictedKeys != patches.contradictions?.contradictedKeys
+            || cold.feedBreaks?.output != patches.feedBreaks?.output {
             outcome.failures.append("seed \(seed) size \(size): the cold build, the patched values and the oracle disagree")
         }
     }
@@ -164,7 +170,8 @@ struct PatchedCancellationsHarnessTests {
         for size in [60, 300] {
             let world = try Phase0cWorld(size: size, seed: 4361_0700 + UInt64(size))
             let rows = try world.rows()
-            var patches = QueueEnginePatches(shows: PatchedCancellationsHarness.facts(rows), asOf: world.asOf)
+            var t2 = PatchableContradictions()
+            t2.apply(PatchedCancellationsHarness.facts(rows).map { ($0.key, PatchableContradictions.Slice($0.value)) })
             let rooms = Dictionary(rows.map { ($0.persistentModelID, RowFacts.extract($0).foldedKeys.contradictionRoom) },
                                    uniquingKeysWith: { first, _ in first })
             func room(_ p: Prospect) -> String { rooms[p.persistentModelID] ?? "" }
@@ -172,13 +179,13 @@ struct PatchedCancellationsHarnessTests {
                 let mates = rows.filter { room($0) == room(row) && $0.persistentModelID != row.persistentModelID }
                 let bound = row.missedScoutCount == 0
                     ? mates.filter(\.disappearedFromFeed).count : mates.filter { $0.missedScoutCount == 0 }.count
-                let before = patches.contradictions.tests
+                let before = t2.tests
                 let title = row.groupName
                 row.groupName = title + " Encore Evening"
-                patches.take([(row.persistentModelID, RowFacts.extract(row))])
+                t2.apply([(row.persistentModelID, PatchableContradictions.Slice(RowFacts.extract(row)))])
                 row.groupName = title
-                patches.take([(row.persistentModelID, RowFacts.extract(row))])
-                let spent = patches.contradictions.tests - before
+                t2.apply([(row.persistentModelID, PatchableContradictions.Slice(RowFacts.extract(row)))])
+                let spent = t2.tests - before
                 #expect(spent <= 2 * bound, "size \(size): a change and its undo made \(spent) twin tests, room \(bound)")
             }
             // Positive control: the corpus is several rooms, so a room bound is smaller than the corpus.
@@ -281,13 +288,14 @@ enum PatchedCancellationsEngineHarness {
                 outcome.failures.append("\(place): the published pass differs from the unpatched one in "
                                         + fields.joined(separator: ", "))
             }
-            let want = QueueEnginePatchedValues.unpatched(QueueEngineQueue.shows(fresh), asOf: EasternDate.today(output.now))
-            let terms = engine.patches.values.differingTerms(from: want)
+            let terms = engine.patches.mismatches(against: fresh)
             if !terms.isEmpty {
-                outcome.failures.append("\(place): patched \(terms.map(\.rawValue).joined(separator: ", ")) differ")
+                outcome.failures.append("\(place): patched \(terms.joined(separator: ", ")) differ")
             }
-            // Positive control: the pass was handed the patched values, so the comparison above is about them.
-            if output.patched == nil { outcome.failures.append("\(place): the pass was handed nothing patched") }
+            // Positive control: the pass was handed T2 and T3 at its own day, so the comparisons above are about them.
+            if engine.patches.feedBreaks?.asOf != EasternDate.today(output.now) || engine.patches.contradictions == nil {
+                outcome.failures.append("\(place): the pass was handed nothing patched for its day")
+            }
         }
 
         check(-1, "start")
@@ -312,8 +320,8 @@ enum PatchedCancellationsEngineHarness {
 @MainActor
 final class PatchedCancellationsEngineHarnessTests {
 
-    // Mutation that must turn this red while the per-term harness stays green: drop the patches from the resolve step
-    // (`patch-engine-resolve`), so a deleted or re-keyed row stays in them.
+    // Mutation that must turn this red while the per-term harness stays green: leave T2 and T3 out of the resolve step
+    // (`patch-resolve-cancellations`), so a deleted or re-keyed row stays in them.
     @Test func thePublishedPassEqualsTheUnpatchedPassAfterEveryOperationAndTheVerifierMatches() async throws {
         var outcome = PatchedCancellationsEngineHarness.Outcome()
         var last: PatchedCancellationsEngineHarness.Engine?
@@ -339,14 +347,14 @@ final class PatchedCancellationsEngineHarnessTests {
 
 // MARK: - The verifier's per-term kind
 
-@Suite("#4361 a patched value the unpatched terms disagree with is a patch mismatch, recorded and healed")
+@Suite("#4361 a patched T2 or T3 the unpatched term disagrees with is named, and the verifier reports it")
 @MainActor
 final class PatchedCancellationsVerifierTests {
 
-    /// A store with a contradicted row and a three member feed break, so both patched values hold something.
-    private func store() throws -> EngineStore {
+    /// A store with a contradicted row and a three member feed break, so both patched values hold something, and the
+    /// live twin that makes the contradiction, which the tests delete behind the patches' back.
+    private func store() throws -> (EngineStore, Prospect) {
         let store = try EngineStore(shows: 4, inquiries: 0, smallRows: 0, seed: 4361)
-        let day = store.day(20)
         for (i, title) in ["Lantern Hour", "Glass Lantern", "Harbor Lights"].enumerated() {
             let gone = store.addShow(contacts: 0)
             gone.groupName = title
@@ -357,65 +365,56 @@ final class PatchedCancellationsVerifierTests {
         let twin = store.addShow(contacts: 0)
         twin.groupName = "Lantern Hour"
         twin.venue = "Willow Barn"
-        twin.performanceDate = day
+        twin.performanceDate = store.day(20)
         twin.missedScoutCount = 0
         try store.context.save()
-        return store
+        return (store, twin)
     }
 
-    @Test func theComparisonNamesEachTermThatDisagreesAndPassesOneThatAgrees() throws {
-        let store = try store()
+    private var asOf: String { EasternDate.today(EngineStore.baseNow) }
+
+    // Mutation that must turn this red: drop T2's comparison from `mismatches(against:)` (`patch-verifier-t2`).
+    @Test func aChangeThePatchesNeverHeardOfIsNamedByTermAndAgreementIsNot() throws {
+        let (store, twin) = try store()
+        let before = try store.freshFacts()
+        var patches = QueueEnginePatches()
+        patches.bringUp(to: before.shows, asOf: asOf)
+        // The premise: the fixture holds a contradiction and a break covering it, so losing the twin moves both.
+        #expect(patches.contradictions?.contradictedKeys.isEmpty == false, "the fixture contradicts nothing")
+        #expect(patches.feedBreaks?.output.first?.coveredByAnotherCard == 1, "the fixture's break covers nothing")
+        #expect(patches.mismatches(against: before).isEmpty, "the patches disagree with the facts they were built from")
+        store.context.delete(twin)
+        try store.context.save()
+        let after = try store.freshFacts()
+        let named = patches.mismatches(against: after)
+        #expect(named.contains("contradictions.contradicted"), "\(named)")
+        #expect(named.contains("feedBreaks.events"), "\(named)")
+        // Once told, the patches agree again.
+        patches.noteChanged(twin.persistentModelID)
+        patches.bringUp(to: after.shows, asOf: asOf)
+        #expect(patches.mismatches(against: after).isEmpty, "\(patches.mismatches(against: after))")
+    }
+
+    // The verifier reports the stale terms as `patchMismatch` once the facts agree (#4360's verdict).
+    @Test func theVerifierReportsAStaleTermAsAPatchMismatch() throws {
+        let (store, twin) = try store()
+        var patches = QueueEnginePatches()
+        patches.bringUp(to: try store.freshFacts().shows, asOf: asOf)
+        store.context.delete(twin)
+        try store.context.save()
         let fresh = try store.freshFacts()
-        let asOf = EasternDate.today(EngineStore.baseNow)
-        let right = QueueEnginePatchedValues.unpatched(QueueEngineQueue.shows(fresh), asOf: asOf)
-        // The premise: the fixture holds a contradiction and a break, so a wrong value below is wrong about something.
-        #expect(!right.contradicted.isEmpty && !right.feedBreaks.isEmpty, "the fixture has nothing to patch")
         let derivation = EngineDerivations.counts()
-        func verdict(_ patched: QueueEnginePatchedValues?) -> QueueEngineVerification {
-            let value = derivation.derive(QueueEnginePassInput(facts: fresh, viewInputs: QueueEngineViewInputs(),
-                                                               now: EngineStore.baseNow, context: EngineHarness.noSignals))
-            let snapshot = QueueEngineSnapshot(saveCount: 0, generation: 7, facts: fresh, viewInputs: QueueEngineViewInputs(),
-                                               context: EngineHarness.noSignals, now: EngineStore.baseNow, value: value,
-                                               clean: true, patched: patched)
-            return QueueEngineVerifier.compare(snapshot, with: fresh, derivation: derivation)
+        let value = derivation.derive(QueueEnginePassInput(facts: fresh, viewInputs: QueueEngineViewInputs(),
+                                                           now: EngineStore.baseNow, context: EngineHarness.noSignals))
+        let snapshot = QueueEngineSnapshot(saveCount: 0, generation: 7, facts: fresh, viewInputs: QueueEngineViewInputs(),
+                                           context: EngineHarness.noSignals, now: EngineStore.baseNow, value: value,
+                                           clean: true, patches: patches)
+        guard case .patchMismatch(let fields, 7) = QueueEngineVerifier.compare(snapshot, with: fresh,
+                                                                                derivation: derivation) else {
+            Issue.record("a stale T2 and T3 were not a patch mismatch")
+            return
         }
-        #expect(verdict(right) == .match(generation: 7))
-        #expect(verdict(nil) == .match(generation: 7), "an output with nothing patched has no term to compare")
-        let wrongSet = QueueEnginePatchedValues(contradicted: [], feedBreaks: right.feedBreaks, asOf: asOf)
-        #expect(verdict(wrongSet) == .patchMismatch(terms: [.contradictions], generation: 7))
-        let wrongBreaks = QueueEnginePatchedValues(contradicted: right.contradicted, feedBreaks: [], asOf: asOf)
-        #expect(verdict(wrongBreaks) == .patchMismatch(terms: [.feedBreaks], generation: 7))
-    }
-
-    // Mutation that must turn this red: skip the per-term comparison in `QueueEngineVerifier.compare`
-    // (`patch-verifier-kind`).
-    @Test func theEngineRecordsTheTermsKindRebuildsThePatchesAndHealsWithAPass() async throws {
-        let store = try store()
-        let turns = EngineTurns()
-        let engine = VerifierRig.engine(store, turns)
-        let current = try #require(engine.output)
-        let held = try #require(current.patched, "the engine handed its pass nothing patched")
-        #expect(held == engine.patches.values)
-        var wrong = held.contradicted
-        wrong.insert("not-a-show")
-        engine.publish(QueueEngineOutput(value: current.value, saveCount: current.saveCount,
-                                         generation: engine.mintGeneration(), now: current.now, reasons: [.first],
-                                         context: current.context,
-                                         patched: QueueEnginePatchedValues(contradicted: wrong,
-                                                                           feedBreaks: held.feedBreaks,
-                                                                           asOf: held.asOf)))
-        engine.verifyNow()
-        await VerifierRig.finished(engine, beyond: 0, "the verification of a wrong patched value")
-        #expect(engine.verifierCounts.patchMismatches == 1, "\(engine.verifierCounts)")
-        #expect(engine.verifierFindings.map(\.kind) == [.contradictionMismatch])
-        #expect(engine.verifierFindings.first?.fields == ["contradictions"])
-        turns.run()
-        #expect(engine.output?.reasons == [.recovery], "the mismatch asked for no healing pass")
-        #expect(engine.output?.patched == held, "the healing pass was not handed the rebuilt patches")
-        #expect(engine.verifierFindings.map(\.kind) == [.contradictionMismatch, .healed])
-        engine.verifyNow()
-        await VerifierRig.finished(engine, beyond: 1, "the verification after the heal")
-        #expect(engine.verifierCounts.matches == 1, "\(engine.verifierCounts)")
+        #expect(fields.contains("contradictions.contradicted") && fields.contains("feedBreaks.events"), "\(fields)")
     }
 }
 
@@ -455,28 +454,37 @@ final class QueueEnginePatchedCancellationsCostProbeTests {
             let now = Date()
             let asOf = EasternDate.today(now)
             let set = ContradictedCancellation.contradictedKeys(among: shows)
-            let t2 = Phase0.median5("patched4361-t2Cold-\(label)") {
+            let t2Reading = Phase0.median5("patched4361-t2Cold-\(label)") {
                 _ = ContradictedCancellation.contradictedKeys(among: shows)
             }
-            let t3 = Phase0.median5("patched4361-t3Cold-\(label)") {
+            let t3Reading = Phase0.median5("patched4361-t3Cold-\(label)") {
                 _ = FeedBreakEvent.events(among: shows, asOf: asOf, contradicted: set)
             }
-            func input(_ keys: Set<String>, patched: QueueEnginePatchedValues?) -> QueueEnginePassInput {
+            func input(_ keys: Set<String>, patches: QueueEnginePatches?) -> QueueEnginePassInput {
                 QueueEnginePassInput(facts: facts,
                                      viewInputs: QueueEngineViewInputs(focusedStage: .scout, focusedKeys: nil,
                                                                        requestedCardKeys: keys),
-                                     now: now, context: EngineHarness.noSignals, patched: patched)
+                                     now: now, context: EngineHarness.noSignals, patches: patches)
             }
-            let viewport = Set(QueueEngineQueue.derive(input([], patched: nil)).data.focusedRows
+            let viewport = Set(QueueEngineQueue.derive(input([], patches: nil)).data.focusedRows
                 .prefix(QueueViewportAssumption.rows).map(\.id))
-            var patches = QueueEnginePatches()
+            // T2 and T3 alone, built cold from every show (T1 beside them is #4360's to measure).
+            var t2 = PatchableContradictions(), t3 = PatchableFeedBreaks(asOf: asOf)
             let cold = Phase0.median5("patched4361-patchesCold-\(label)") {
-                patches = QueueEnginePatches(shows: facts.shows, asOf: asOf)
+                t2 = PatchableContradictions()
+                t3 = PatchableFeedBreaks(asOf: asOf)
+                let flips = t2.apply(facts.shows.map { ($0.key, PatchableContradictions.Slice($0.value)) })
+                t3.apply(facts.shows.map { ($0.key, PatchableFeedBreaks.Slice($0.value)) }, flips: flips,
+                         covered: t2.contradictedKeys)
             }
-            let patched = patches.values
-            #expect(patched == QueueEnginePatchedValues.unpatched(shows, asOf: asOf), "the patched values disagree")
-            let unpatchedPass = input(viewport, patched: nil)
-            let patchedPass = input(viewport, patched: patched)
+            #expect(t2.contradictedKeys == set && t3.output == FeedBreakEvent.events(among: shows, asOf: asOf),
+                    "the patched values disagree with the terms")
+            // The pass handed every patched term (T1 too, as the engine hands it) against the pass handed none: the
+            // terms' share of today's pass. T1's own share is #4360's reading.
+            var all = QueueEnginePatches()
+            all.bringUp(to: facts.shows, asOf: asOf)
+            let unpatchedPass = input(viewport, patches: nil)
+            let patchedPass = input(viewport, patches: all)
             // Alternated, so neither arm always runs second (#4617).
             var whole: [Double] = [], lean: [Double] = []
             for round in 0..<10 {
@@ -500,8 +508,10 @@ final class QueueEnginePatchedCancellationsCostProbeTests {
                 let moved = RowFacts.extract(model)
                 model.groupName = title
                 let ms = Phase0.time {
-                    patches.take([(id, moved)])
-                    patches.take([(id, row)])
+                    for value in [moved, row] {
+                        let flips = t2.apply([(id, PatchableContradictions.Slice(value))])
+                        t3.apply([(id, PatchableFeedBreaks.Slice(value))], flips: flips, covered: t2.contradictedKeys)
+                    }
                 }
                 if row.missedScoutCount == 0 { live.add(ms / 2) } else if row.disappearedFromFeed {
                     flagged.add(ms / 2)
@@ -509,12 +519,12 @@ final class QueueEnginePatchedCancellationsCostProbeTests {
             }
             print("""
                 patched-4361 [\(label)] \(Phase0.load())
-                  shows \(shows.count), contradicted \(set.count), breaks \(patched.feedBreaks.count)
-                  T2 contradictedKeys over facts, whole corpus   \(t2.text)  (plan census 143.2 ms at 5,376, over models)
-                  T3 feed break events over facts, set given     \(t3.text)  (plan census 149.9 ms at 5,376, before Step C)
+                  shows \(shows.count), contradicted \(set.count), breaks \(t3.output.count)
+                  T2 contradictedKeys over facts, whole corpus   \(t2Reading.text)  (plan census 143.2 ms at 5,376, over models)
+                  T3 feed break events over facts, set given     \(t3Reading.text)  (plan census 149.9 ms at 5,376, before Step C)
                   the patches built cold, both terms             \(cold.text)
-                  the engine's pass, terms recomputed            \(Phase0.reading("patched4361-passUnpatched-\(label)", runs: whole).text)
-                  the engine's pass, terms patched               \(Phase0.reading("patched4361-passPatched-\(label)", runs: lean).text)
+                  the engine's pass, nothing patched             \(Phase0.reading("patched4361-passUnpatched-\(label)", runs: whole).text)
+                  the engine's pass, T1, T2 and T3 patched       \(Phase0.reading("patched4361-passPatched-\(label)", runs: lean).text)
                   one change through the patches, live row       \(live.text("patched4361-changeLive-\(label)"))
                   one change through the patches, flagged row    \(flagged.text("patched4361-changeFlagged-\(label)"))
                   one change through the patches, other row      \(other.text("patched4361-changeOther-\(label)"))

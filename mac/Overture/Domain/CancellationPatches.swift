@@ -17,15 +17,20 @@ import SwiftData
 // `RowKeys` took through each term's own `canonicalVenue`; and an event is built, labelled and ordered by
 // `FeedBreakEvent.event(of:covered:)` and `FeedBreakEvent.ordered`, which `FeedBreakEvent.events` builds through too.
 // What the patches own is only WHICH rooms and buckets to ask again, which is where a fault can hide, and what the
-// engine's whole-pass comparison (the verifier's (iii)), the per-term verifier kind (`QueueEngineVerifier.compare`)
-// and the property harnesses (`QueueEnginePatchedCancellationsTests`) each check against the unpatched terms.
+// engine's whole-pass comparison (the verifier's (iii)), the per-term comparison (`QueueEnginePatches.mismatches`,
+// recorded as `patchMismatch`) and the property harnesses (`QueueEnginePatchedCancellationsTests`) each check against
+// the unpatched terms.
+//
+// WHERE THEY LIVE. Inside `QueueEnginePatches` (Domain/FactStore.swift, #4360), beside T1 `PatchableShowLink`, which
+// owns how a change reaches every patched term: the shows noted changed since the last pass, each resolution applied
+// at once, a wholesale replacement of the facts dropping every term to be built cold.
 //
 // KEYED BY IDENTITY (plan section 4): every index is keyed by `persistentModelID`, never by natural key, which a
 // merge or a rename reassigns. Natural keys appear only in what the pass is handed, read off each row's slice at
 // that moment, so a rename is one slice change and never a stale key.
 
 /// T2: `room -> (live, flagged)`, `twins[flagged] -> live`, and contradicted = flagged with a nonempty twin set.
-struct QueueEnginePatchedContradictions: Equatable, Sendable {
+struct PatchableContradictions: Equatable, Sendable {
 
     /// What T2 reads of one row: the key it answers in, the room, whether the feed lists it or has flagged it, and the
     /// three facts the twin test compares. Nothing else of the row can change T2's answer.
@@ -152,7 +157,7 @@ struct QueueEnginePatchedContradictions: Equatable, Sendable {
 
 /// T3: `bucket -> flagged rows` (every date; the clock filters at build), the events of each bucket, and a
 /// `lastNight -> rows` index so the clock moving rebuilds only the buckets holding a row it crossed.
-struct QueueEnginePatchedFeedBreaks: Equatable, Sendable {
+struct PatchableFeedBreaks: Equatable, Sendable {
 
     /// What T3 reads of one FLAGGED row; an unflagged row has no slice and is in no bucket.
     struct Slice: Equatable, Sendable {
@@ -237,89 +242,5 @@ struct QueueEnginePatchedFeedBreaks: Equatable, Sendable {
                                at key: String) {
         guard index[key]?.remove(id) != nil, index[key]?.isEmpty == true else { return }
         index[key] = nil
-    }
-}
-
-/// What the engine hands its pass for T2 and T3, and the day it was judged at, so the pass can refuse a value
-/// judged at a day that is not its own (`QueueEngineQueue.passInputs`).
-struct QueueEnginePatchedValues: Equatable, Sendable {
-    let contradicted: Set<String>
-    let feedBreaks: [FeedBreakEvent.Event]
-    let asOf: String
-
-    /// The same two answers from the unpatched terms over every show, which is what each patched value must equal.
-    /// The verifier's per-term comparison and every harness ask this, never the patches (L70).
-    static func unpatched(_ shows: [some ProspectFacts], asOf: String) -> QueueEnginePatchedValues {
-        let contradicted = ContradictedCancellation.contradictedKeys(among: shows)
-        return QueueEnginePatchedValues(contradicted: contradicted,
-                                        feedBreaks: FeedBreakEvent.events(among: shows, asOf: asOf, contradicted: nil),
-                                        asOf: asOf)
-    }
-
-    /// The terms whose value differs from `other`'s, by name (C7: names, never values).
-    func differingTerms(from other: QueueEnginePatchedValues) -> [QueueEnginePatchedTerm] {
-        var out: [QueueEnginePatchedTerm] = []
-        if contradicted != other.contradicted { out.append(.contradictions) }
-        if feedBreaks != other.feedBreaks || asOf != other.asOf { out.append(.feedBreaks) }
-        return out
-    }
-}
-
-/// The terms the engine keeps patched, each with the verifier's record kind for it (plan section 4: one kind per term).
-enum QueueEnginePatchedTerm: String, CaseIterable, Sendable {
-    case contradictions
-    case feedBreaks
-
-    var mismatchKind: CardDivergenceRecord.Kind {
-        switch self {
-        case .contradictions: return .contradictionMismatch
-        case .feedBreaks: return .feedBreakMismatch
-        }
-    }
-}
-
-/// T2 and T3 together, in the plan's dependency order (section 5: T3 reads T2): what the engine keeps beside its facts.
-struct QueueEnginePatches: Equatable, Sendable {
-    private(set) var contradictions = QueueEnginePatchedContradictions()
-    private(set) var feedBreaks = QueueEnginePatchedFeedBreaks(asOf: "")
-
-    init() {}
-
-    /// Built cold from every show, judged at `asOf`.
-    init(shows: [PersistentIdentifier: RowFacts], asOf: String) {
-        feedBreaks = QueueEnginePatchedFeedBreaks(asOf: asOf)
-        take(shows.map { ($0.key, $0.value) })
-    }
-
-    /// Each row's new value, or nil for a row gone, taken into T2 and then into T3 with T2's flips.
-    mutating func take(_ rows: [(id: PersistentIdentifier, row: RowFacts?)]) {
-        guard !rows.isEmpty else { return }
-        let flips = contradictions.apply(rows.map { ($0.id, $0.row.map(QueueEnginePatchedContradictions.Slice.init)) })
-        feedBreaks.apply(rows.map { ($0.id, $0.row.flatMap(QueueEnginePatchedFeedBreaks.Slice.init)) }, flips: flips,
-                         covered: contradictions.contradictedKeys)
-    }
-
-    /// The resolve step (`QueueEngine.identityKeyedState`): a deleted row taken out, and a row whose temporary
-    /// identifier a first save replaced moved to its permanent one, read from `shows` as it stands after the facts
-    /// resolved.
-    mutating func resolve(_ resolution: QueueEngineResolution, shows: [PersistentIdentifier: RowFacts]) {
-        var rows: [(id: PersistentIdentifier, row: RowFacts?)] = []
-        for id in resolution.deletedIDs where contradictions.slices[id] != nil { rows.append((id, nil)) }
-        for (old, new) in resolution.rekeyedIDs where contradictions.slices[old] != nil {
-            rows.append((old, nil))
-            rows.append((new, shows[new]))
-        }
-        take(rows)
-    }
-
-    /// The day T3 is judged at, moved to `asOf`.
-    mutating func advance(to asOf: String) {
-        feedBreaks.advance(to: asOf, covered: contradictions.contradictedKeys)
-    }
-
-    /// What the pass is handed.
-    var values: QueueEnginePatchedValues {
-        QueueEnginePatchedValues(contradicted: contradictions.contradictedKeys, feedBreaks: feedBreaks.output,
-                                 asOf: feedBreaks.asOf)
     }
 }

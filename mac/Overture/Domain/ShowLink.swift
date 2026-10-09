@@ -230,8 +230,12 @@ enum ShowLink {
             self.venue = foldedVenue(row.venue)
         }
 
-        var bucketKey: String { title + "|" + venue }
+        var bucketKey: String { ShowLink.bucketKey(title: title, venue: venue) }
     }
+
+    // #4360: the bucket a folded title and folded venue fall in, apart, so the patched value
+    // (`PatchableShowLink`) buckets exactly as this does rather than restating the key (L370).
+    static func bucketKey(title: String, venue: String) -> String { title + "|" + venue }
 
     // Rows sharing a folded title and a folded venue, in no particular order.
     private static func buckets(_ folded: [Folded]) -> [[Folded]] {
@@ -501,6 +505,24 @@ extension ShowLink {
     static func collapse(among rows: [some ProspectFacts],
                          drawn: Set<String>? = nil) -> (fronts: [String: [String]], hidden: Set<String>) {
         collapse(rows.map(Row.init), drawn: drawn)
+    }
+
+    // #4360 (plan v7 Phase 4b(a)): the three tables a queue build reads from this term, as ONE value, so the pass
+    // takes them either from the two calls above (every caller but the engine) or from the engine's patched value
+    // (`PatchableShowLink.tables`), which is proven equal to exactly this.
+    struct Tables: Equatable, Sendable {
+        /// For each row id, the OTHER ids that are the same show (`group`).
+        var group: [String: [String]] = [:]
+        /// Each front's id, to every member its card stands for (`collapse`).
+        var fronts: [String: [String]] = [:]
+        /// The ids hidden behind a front (`collapse`).
+        var hidden: Set<String> = []
+    }
+
+    /// The grouping over `rows` and the collapse over what `drawn` names, through the two entry points above.
+    static func tables(among rows: [some ProspectFacts], drawn: Set<String>?) -> Tables {
+        let collapsed = collapse(among: rows, drawn: drawn)
+        return Tables(group: group(among: rows), fronts: collapsed.fronts, hidden: collapsed.hidden)
     }
 }
 

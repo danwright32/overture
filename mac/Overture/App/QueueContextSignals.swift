@@ -71,6 +71,10 @@ enum QueueInputSource: Equatable, Sendable {
             A patched copy of the feed breaks the pass derives from its own store inputs and the day (plan v7 \
             T3). The engine keeps it from the shows a change touched; it is never an input in its own right.
             """),
+        "showLink": .notAnInput(reason: """
+            The engine's patched copy of the ShowLink grouping and collapse the pass otherwise derives from its own \
+            store inputs (plan v7 T1, #4360); it is never an input in its own right.
+            """),
     ]
 }
 
