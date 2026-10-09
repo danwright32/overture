@@ -57,6 +57,36 @@ enum Phase0cLedgerFixture {
             }
         }
         for row in rows where roll(6) == 0 { row.reachabilityProbedAt = now.addingTimeInterval(-Double(roll(30)) * day) }
+        // Every arm of the rule, whatever the seed rolled (L159): the first two organisations whose producer qualifies
+        // and that hold two rows or more get, the first, a fresh two address answer with one row carrying its own answer
+        // (which blocks that row only), and the second, a stale answer its other rows would take before its expiry.
+        let tables = QueueModel.ProducerTables(rows: rows, overrides: .none)
+        var rowsOf: [String: [Prospect]] = [:]
+        for row in rows { if let orgKey = OrgKey.stored(for: row.presenter) { rowsOf[orgKey, default: []].append(row) } }
+        let qualifying = rowsOf.keys.sorted().filter { orgKey in
+            guard let members = rowsOf[orgKey], members.count >= 2, let key = ProducerGate.key(members[0].presenter)
+            else { return false }
+            return ProducerGate.qualifies(presenterKey: key, in: tables.corpus)
+        }
+        let answers = try context.fetch(FetchDescriptor<OrgReachabilityAnswer>())
+        for (index, orgKey) in qualifying.prefix(2).enumerated() {
+            let fresh = index == 0
+            let probedAt = now.addingTimeInterval((fresh ? -10 : -120) * day)
+            let emails = fresh ? ["first\(index)@invented.test", "second\(index)@invented.test"] : ["only\(index)@invented.test"]
+            if let answer = answers.first(where: { $0.orgKey == orgKey }) {
+                answer.resultRaw = Reachability.ProbeResult.emailFound.rawValue
+                answer.probedAt = probedAt
+                answer.foundEmailsRaw = emails.joined(separator: "\n")
+            } else {
+                context.insert(OrgReachabilityAnswer(orgKey: orgKey, result: .emailFound, probedAt: probedAt,
+                                                     sourceNaturalKey: "src-arm-\(index)", sourceGroupName: "Invented Source Bill",
+                                                     presenterName: "Invented Asked Name Arm \(index)", foundEmails: emails))
+            }
+            let members = (rowsOf[orgKey] ?? []).sorted { $0.naturalKey < $1.naturalKey }
+            for (i, row) in members.enumerated() {
+                row.reachabilityProbedAt = fresh && i == 0 ? now.addingTimeInterval(-day) : nil
+            }
+        }
     }
 
     /// One invented answer for `orgKey`, checked up to 150 days before `now`.
@@ -442,7 +472,12 @@ struct PatchableAnswerLedgerTests {
                           generation: Int) -> QueueEngineSnapshot<EngineDerivations.Counts> {
         QueueEngineSnapshot(saveCount: 1, generation: generation, facts: facts, viewInputs: QueueEngineViewInputs(),
                             context: EngineHarness.noSignals, now: Phase0cLedgerFixture.now,
-                            value: EngineDerivations.Counts(shows: facts.shows.count), clean: true, patches: patches)
+                            // The counts as the derivation makes them over these facts: this store has answers and
+                            // refusals, so a value counting only the shows would be an output mismatch of its own.
+                            value: EngineDerivations.counts().derive(QueueEnginePassInput(
+                                facts: facts, viewInputs: QueueEngineViewInputs(), now: Phase0cLedgerFixture.now,
+                                context: EngineHarness.noSignals)),
+                            clean: true, patches: patches)
     }
 }
 
