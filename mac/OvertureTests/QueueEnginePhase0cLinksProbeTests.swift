@@ -138,13 +138,17 @@ struct Phase0cSnapshot {
     var scoutVenue: String?
     /// #4362: the presenter, which T4 reads. Nil in every fixture but T4's (`Phase0cWorld(presenters: true)`).
     var presenter: String?
+    /// #4364: when the show's own contact check ran, which T5 reads as "carries its own answer". Nil in every fixture
+    /// but T5's (`Phase0cWorld(ledger: true)`).
+    var reachabilityProbedAt: Date?
 
     init(naturalKey: String, groupName: String, venue: String?, performanceDate: String?,
          runEndDate: String? = nil, runNights: [String] = [], droppedRunNights: [String] = [],
          sourceListingURL: String? = nil, runSourceURLs: [String] = [], missedScoutCount: Int = 0,
          statusRaw: String = ReviewStatus.approved.rawValue, scoutGroupName: String? = nil,
-         scoutVenue: String? = nil, presenter: String? = nil) {
+         scoutVenue: String? = nil, presenter: String? = nil, reachabilityProbedAt: Date? = nil) {
         self.presenter = presenter
+        self.reachabilityProbedAt = reachabilityProbedAt
         self.naturalKey = naturalKey
         self.groupName = groupName
         self.venue = venue
@@ -166,7 +170,7 @@ struct Phase0cSnapshot {
                   droppedRunNights: p.droppedRunNights, sourceListingURL: p.sourceListingURL,
                   runSourceURLs: p.runSourceURLs, missedScoutCount: p.missedScoutCount,
                   statusRaw: p.statusRaw, scoutGroupName: p.scoutGroupName, scoutVenue: p.scoutVenue,
-                  presenter: p.presenter)
+                  presenter: p.presenter, reachabilityProbedAt: p.reachabilityProbedAt)
     }
 
     func apply(to p: Prospect) {
@@ -184,6 +188,7 @@ struct Phase0cSnapshot {
         p.scoutGroupName = scoutGroupName
         p.scoutVenue = scoutVenue
         if p.presenter != presenter { p.presenter = presenter }
+        if p.reachabilityProbedAt != reachabilityProbedAt { p.reachabilityProbedAt = reachabilityProbedAt }
     }
 
     func makeProspect() -> Prospect {
@@ -335,6 +340,16 @@ enum Phase0cOp: String, CaseIterable {
     case venueAddRemove = "one venue key added and removed (the same key every time)"
     case presenterIsVenue = "presenter key that is also a venue key"
     case venueOneToTwo = "venue-only edit taking a presenter from one venue to two"
+    // T5's (plan section 7, #4364), beside T4's presenter, venue and override ops above.
+    case presenterRespellWithin = "presenter respelled within its org key"
+    case answerArrives = "an organisation answer arriving"
+    case answerReplacedEqualProbe = "an organisation answer replaced at an equal probedAt"
+    case answerDeleted = "an organisation answer deleted"
+    case ownAnswer = "a row gaining (or losing) its own answer"
+    case heldKey = "a held key added or released"
+    case refusalStrike = "a refusal striking one more of an answer's addresses"
+    case refusalLift = "a refusal lifted"
+    case clockShift = "the clock moved across an answer's expiry, forward or back"
 
     static let t4: [Phase0cOp] = [.insertNewPresenter, .insertNewVenue, .insertExistingPair, .deleteRow,
                                   .presenterEdit, .venueToPresenterTheatre, .venueToTheatre, .mergeMovingVenue,
@@ -344,6 +359,9 @@ enum Phase0cOp: String, CaseIterable {
     static let t1: [Phase0cOp] = [.scoutRenameInto, .scoutRenameOut, .venueRespellSame, .venueRespellOther,
                                   .bridgeNight, .dropNight, .poisonToken, .feedMiss, .dismissFront,
                                   .deleteFront, .merge, .insertNoDate, .rekey]
+    static let t5: [Phase0cOp] = [.presenterRespellWithin, .presenterEdit, .venueOneToTwo, .promote, .demote,
+                                  .insertExistingPair, .deleteRow, .rekey, .answerArrives, .answerReplacedEqualProbe,
+                                  .answerDeleted, .ownAnswer, .heldKey, .refusalStrike, .refusalLift, .clockShift]
     static let t2t3: [Phase0cOp] = [.flagAcross, .roomRespell, .dateMove, .titleChange, .deleteTwin, .venueless,
                                     .thirdMemberJoin, .accrualAll, .accrualDown, .flaggedEdit, .twinAppear, .rollover, .rekey,
                                     .merge]
@@ -360,6 +378,10 @@ struct Phase0cEdit {
     /// #4362: Dan's producer corrections an override op added and removed, by direction and folded key.
     var overridesAdded: [(promoted: Bool, key: String)] = []
     var overridesRemoved: [(promoted: Bool, key: String)] = []
+    /// #4364: T5's own reversals (an answer or a refusal restored, the clock or the held keys put back), run last
+    /// first by `undo`, and the answers an edit inserted, which `undo` deletes.
+    var ledgerUndo: [() -> Void] = []
+    var answersInserted: [OrgReachabilityAnswer] = []
 }
 
 /// One synthetic store: an in-memory container, the rows, the clock, and the seeded generator.
@@ -375,13 +397,19 @@ final class Phase0cWorld {
     /// every other op left the title field unvisited for a whole CI run (#4106 0c.2 re-probe, measured
     /// 2026-09-28: the skip with its title condition removed SURVIVED).
     private var flaggedEdits: Int
+    /// #4364: the instant T5 is judged at, and the natural keys a live run holds, both moved by T5's ops.
+    var ledgerNow = Phase0cLedgerFixture.now
+    var held: Set<String> = []
 
     // #4360: `models` is every table for the queue engine's whole pass harness (`PatchableShowLinkTests`), whose
     // engine reads the small tables beside the shows; the 0c probes keep the two they need.
     // #4362: `presenters` gives every row a presenter, which T4 reads; T4's override ops also need the two override
     // tables among `models`.
+    // #4364: `ledger` seeds T5's inputs over the rows (organisation answers, rows with their own answer, organisation
+    // scoped refusals), from a generator of its own so every other fixture stays exactly what it was. It needs the
+    // answer and refusal tables among `models`, and presenters.
     init(size: Int, seed: UInt64, models: [any PersistentModel.Type] = [Prospect.self, Recipient.self],
-         presenters: Bool = false) throws {
+         presenters: Bool = false, ledger: Bool = false) throws {
         flaggedEdits = Int(seed % 3)
         container = try TestModelContainer.inMemory(models)
         context = container.mainContext
@@ -389,8 +417,16 @@ final class Phase0cWorld {
         for s in Phase0cFixture.snapshots(size: size, seed: seed, presenters: presenters) {
             context.insert(s.makeProspect())
         }
+        if ledger {
+            try context.save()
+            try Phase0cLedgerFixture.seed(context, seed: seed)
+        }
         try context.save()
     }
+
+    /// #4364: the organisation answers and struck addresses as the store holds them now.
+    func answers() throws -> [OrgReachabilityAnswer] { try context.fetch(FetchDescriptor<OrgReachabilityAnswer>()) }
+    func refusals() throws -> [RefusedContactAddress] { try context.fetch(FetchDescriptor<RefusedContactAddress>()) }
 
     func rows() throws -> [Prospect] { try context.fetch(FetchDescriptor<Prospect>()) }
 
@@ -760,8 +796,123 @@ final class Phase0cWorld {
             let room = ProducerGate.key(r.venue)
             let other = Phase0cFixture.venues.compactMap { $0 }.first { ProducerGate.key($0) != nil && ProducerGate.key($0) != room }
             modify(r, &edit) { $0.venue = other }
+        case .presenterRespellWithin, .answerArrives, .answerReplacedEqualProbe, .answerDeleted, .ownAnswer, .heldKey,
+             .refusalStrike, .refusalLift, .clockShift:
+            guard performLedger(op, rows: rows, &edit) else { return nil }
         }
         return edit
+    }
+
+    /// #4364: T5's ops. Each aims, half the time, at the case that moves an answer (L159): a row that inherits, an
+    /// organisation whose answer is usable, an expiry the clock actually crosses.
+    private func performLedger(_ op: Phase0cOp, rows: [Prospect], _ edit: inout Phase0cEdit) -> Bool {
+        guard let answers = try? answers(), let refusals = try? refusals() else { return false }
+        let orgKeys = Set(rows.compactMap { OrgKey.stored(for: $0.presenter) })
+        func answerFor(_ row: Prospect) -> OrgReachabilityAnswer? {
+            guard let orgKey = OrgKey.stored(for: row.presenter) else { return nil }
+            return answers.first { $0.orgKey == orgKey }
+        }
+        switch op {
+        case .presenterRespellWithin:
+            // A spelling of the same organisation: the fold must agree, and half the spellings also move the producer
+            // key (a qualifier the producer fold keeps, or an entity only one fold decodes).
+            guard let r = (roll(2) == 0 ? pick(rows, { answerFor($0) != nil }) : nil) ?? pick(rows, { $0.presenter != nil }),
+                  let presenter = r.presenter, let orgKey = OrgKey.stored(for: presenter) else { return false }
+            let spellings = [presenter.uppercased(), presenter.lowercased(), "The " + presenter, presenter + " (NYC)",
+                             presenter.replacingOccurrences(of: " ", with: " &amp; ", options: [], range: nil),
+                             presenter + "  "]
+            let same = spellings.filter { $0 != presenter && OrgKey.stored(for: $0) == orgKey }
+            guard !same.isEmpty else { return false }
+            let respelled = same[roll(same.count)]
+            modify(r, &edit) { $0.presenter = respelled }
+        case .answerArrives:
+            // An organisation with no answer yet, aimed at one whose rows qualify, fresh, with one or two addresses.
+            let unanswered = orgKeys.subtracting(answers.map(\.orgKey)).sorted()
+            guard !unanswered.isEmpty else { return false }
+            let orgKey = unanswered[roll(unanswered.count)]
+            let answer = Phase0cLedgerFixture.answer(orgKey: orgKey, serial: next(), now: ledgerNow, roll: roll)
+            context.insert(answer)
+            edit.answersInserted.append(answer)
+        case .answerReplacedEqualProbe:
+            // The organisation's answer replaced by a newer check that reports the same instant: the name it was asked
+            // under and the addresses change, `probedAt` does not, so only the tie break decides.
+            guard let a = (roll(2) == 0 ? answers.first { $0.foundEmailsRaw.contains("\n") } : nil)
+                    ?? (answers.isEmpty ? nil : answers[roll(answers.count)]) else { return false }
+            let before = (a.presenterName, a.foundEmailsRaw, a.resultRaw)
+            let n = next()
+            let choice = roll(3)
+            a.presenterName = "Invented Asked Name \(n)"
+            a.foundEmailsRaw = choice == 0 ? "" : (choice == 1 ? "box\(n)@invented.test" : "a\(n)@invented.test\nb\(n)@invented.test")
+            if choice == 0 { a.resultRaw = Reachability.ProbeResult.contactFormOnly.rawValue }
+            edit.ledgerUndo.append { a.presenterName = before.0; a.foundEmailsRaw = before.1; a.resultRaw = before.2 }
+        case .answerDeleted:
+            guard !answers.isEmpty else { return false }
+            let a = answers[roll(answers.count)]
+            let copy = (a.orgKey, a.resultRaw, a.probedAt, a.sourceNaturalKey, a.sourceGroupName, a.presenterName,
+                        a.foundEmailsRaw)
+            context.delete(a)
+            let context = self.context
+            edit.ledgerUndo.append {
+                let back = OrgReachabilityAnswer(orgKey: copy.0, result: .emailFound, probedAt: copy.2,
+                                                 sourceNaturalKey: copy.3, sourceGroupName: copy.4, presenterName: copy.5)
+                back.resultRaw = copy.1
+                back.foundEmailsRaw = copy.6
+                context.insert(back)
+            }
+        case .ownAnswer:
+            guard let r = (roll(2) == 0 ? pick(rows, { answerFor($0) != nil }) : nil) ?? pick(rows) else { return false }
+            let stamp: Date? = r.reachabilityProbedAt == nil ? ledgerNow.addingTimeInterval(-86_400) : nil
+            modify(r, &edit) { $0.reachabilityProbedAt = stamp }
+        case .heldKey:
+            guard let r = (roll(2) == 0 ? pick(rows, { answerFor($0) != nil }) : nil) ?? pick(rows) else { return false }
+            let before = held
+            if held.contains(r.naturalKey) { held.remove(r.naturalKey) } else { held.insert(r.naturalKey) }
+            edit.ledgerUndo.append { [weak self] in self?.held = before }
+        case .refusalStrike:
+            // One more of an organisation's addresses struck at the organisation, aimed at an answer with two, so the
+            // first strike leaves one and the next strikes the last.
+            let struck = Set(refusals.map { "\($0.scopeId)|\($0.handleKey)" })
+            let open = answers.flatMap { a in
+                a.foundEmails.compactMap { email -> (String, String)? in
+                    guard let handle = ContactRefusal.key(for: email), !struck.contains("\(a.orgKey)|\(handle)") else { return nil }
+                    return (a.orgKey, handle)
+                }
+            }
+            guard !open.isEmpty else { return false }
+            let (orgKey, handle) = open[roll(open.count)]
+            let row = RefusedContactAddress(
+                id: ContactRefusal.rowId(scopeRaw: ContactRefusal.Scope.organisationRaw, scopeId: orgKey, handleKey: handle),
+                scopeRaw: ContactRefusal.Scope.organisationRaw, scopeId: orgKey, handleKey: handle,
+                refusedAt: ledgerNow)
+            context.insert(row)
+            let context = self.context
+            edit.ledgerUndo.append { context.delete(row) }
+        case .refusalLift:
+            guard !refusals.isEmpty else { return false }
+            let row = refusals[roll(refusals.count)]
+            let copy = (row.id, row.scopeRaw, row.scopeId, row.handleKey, row.refusedAt)
+            context.delete(row)
+            let context = self.context
+            edit.ledgerUndo.append {
+                context.insert(RefusedContactAddress(id: copy.0, scopeRaw: copy.1, scopeId: copy.2, handleKey: copy.3,
+                                                     refusedAt: copy.4))
+            }
+        case .clockShift:
+            // To one second either side of an answer's expiry, in whichever direction crosses it from where the clock
+            // is: forward past a fresh answer's, or back before a stale one's (L497). Otherwise a day either way.
+            let before = ledgerNow
+            let expiries = answers.map { $0.probedAt.addingTimeInterval(Reachability.probeFreshness) }
+            if roll(4) != 0, !expiries.isEmpty {
+                let expiry = expiries[roll(expiries.count)]
+                ledgerNow = expiry > ledgerNow ? expiry.addingTimeInterval(1) : expiry.addingTimeInterval(-1)
+            } else {
+                ledgerNow = ledgerNow.addingTimeInterval(roll(2) == 0 ? 86_400 : -86_400)
+            }
+            edit.ledgerUndo.append { [weak self] in self?.ledgerNow = before }
+        default:
+            return false
+        }
+        return true
     }
 
     /// Saves the edit and returns every key it changed, inserted or deleted.
@@ -792,6 +943,8 @@ final class Phase0cWorld {
             restored.append(p)
         }
         if let before = edit.asOfBefore { asOf = before }
+        for model in edit.answersInserted { context.delete(model) }
+        for reverse in edit.ledgerUndo.reversed() { reverse() }
         for added in edit.overridesAdded.reversed() { removeOverride(promoted: added.promoted, key: added.key) }
         for removed in edit.overridesRemoved {
             if removed.promoted {

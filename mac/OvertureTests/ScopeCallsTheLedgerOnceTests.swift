@@ -33,22 +33,34 @@ struct ScopeCallsTheLedgerOnceTests {
         return out
     }
 
-    @Test("exactly one caller, and it is the render pass's own derivation")
+    // #4364 (plan v7 Phase 4b(e)): and ONE more, by reason rather than by name. The queue engine keeps the ledger
+    // patched (`PatchableAnswerLedger`), and the verifier must hold that patch to the ledger itself over a fresh read
+    // (`QueueEnginePatches.mismatches(against:)`), off the main actor and never inside a pass. That is the oracle's
+    // whole job, so it is the one caller that may derive the ledger a second time; any other is the defect below.
+    static let verifierFile = "FactStore.swift"
+
+    @Test("one caller in the render pass's own derivation, and one in the verifier's comparison")
     func onlyScopeCallsIt() {
         let sites = callSites()
+        let passSites = sites.filter { $0.file != Self.verifierFile }
+        let verifierSites = sites.filter { $0.file == Self.verifierFile }
 
-        #expect(sites.count == 1,
-                Comment(rawValue: "`inheritedAnswers` has \(sites.count) callers: "
-                        + "\(sites.map { "\($0.file):\($0.line)" }.joined(separator: ", ")). It walks the "
+        #expect(passSites.count == 1,
+                Comment(rawValue: "`inheritedAnswers` has \(passSites.count) callers outside the verifier: "
+                        + "\(passSites.map { "\($0.file):\($0.line)" }.joined(separator: ", ")). It walks the "
                         + "unfiltered store and reads the stored ledger, so a second caller is a second "
                         + "whole-corpus derivation per pass. It is internal only so the cost instrument "
                         + "can time it (#3743); if a second caller is wanted, hand it the answer the pass "
                         + "already derived rather than asking again."))
 
-        #expect(sites.first?.file == "QueueView+Model.swift",
-                Comment(rawValue: "the one caller is \(sites.first?.file ?? "nowhere"), not "
+        #expect(passSites.first?.file == "QueueView+Model.swift",
+                Comment(rawValue: "the one caller is \(passSites.first?.file ?? "nowhere"), not "
                         + "`QueueView+Model.swift`. The ledger is derived inside `QueueModel.scope` and "
                         + "handed down; a caller anywhere else is deriving it a second time."))
+
+        #expect(verifierSites.count == 1,
+                Comment(rawValue: "the verifier's comparison should hold the patched ledger to exactly one derivation, "
+                        + "and `\(Self.verifierFile)` has \(verifierSites.count)"))
     }
 
     // And the declaration is still reachable from a test at all, so the suite above cannot pass because

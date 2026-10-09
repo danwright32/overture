@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1841 sentences**.
+Every sentence Overture can say to Dan: **1842 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 695 of the 1841 below hold a
+  sentence carrying a VALUE: 695 of the 1842 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -2588,6 +2588,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "The email that will send, edit it here"
     `UI/SendConfirmSheet.swift`
 "The engine's patched copy of the ShowLink grouping and collapse the pass otherwise derives from its own \\nstore inputs (plan v7 T1, #4360); it is never an input in its own right."
+    `App/QueueContextSignals.swift`
+"The engine's patched copy of the inherited organisation answers the pass otherwise derives from its own \\nstore inputs and the clock (plan v7 T5, #4364); it is never an input in its own right."
     `App/QueueContextSignals.swift`
 "The file is there but Overture could not make sense of it, so nothing in the queue is known to be a free night and the scout cannot keep clear of your bookings. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`

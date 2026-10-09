@@ -56,11 +56,11 @@ enum PatchedCancellationsHarness {
         var rows = try world.rows()
         // The engine's own value and its own route: shows noted changed, then brought up to the facts at the day.
         var patches = QueueEnginePatches()
-        patches.bringUp(to: store(rows), asOf: world.asOf)
+        patches.bringUp(to: store(rows), now: EngineStore.baseNow, asOf: world.asOf)
 
         func feed(_ changed: Set<PersistentIdentifier>) {
             for id in changed.sorted() { patches.noteChanged(id) }
-            patches.bringUp(to: store(rows), asOf: world.asOf)
+            patches.bringUp(to: store(rows), now: EngineStore.baseNow, asOf: world.asOf)
         }
 
         let sampled = Set((0..<10).map { steps * $0 / 10 })
@@ -120,7 +120,7 @@ enum PatchedCancellationsHarness {
         check(steps, "end", brute: true)
         // The cold build is the patched type's own, and is compared against the oracle, never used as it (L70).
         var cold = QueueEnginePatches()
-        cold.bringUp(to: store(rows), asOf: world.asOf)
+        cold.bringUp(to: store(rows), now: EngineStore.baseNow, asOf: world.asOf)
         let canonical = rows.sorted(by: CanonicalOracle.byNaturalKey)
         if cold.contradictions?.contradictedKeys != ContradictedCancellation.contradictedKeys(among: canonical)
             || cold.feedBreaks?.output != FeedBreakEvent.events(among: canonical, asOf: world.asOf)
@@ -385,7 +385,7 @@ final class PatchedCancellationsVerifierTests {
         let (store, twin) = try store()
         let before = try store.freshFacts()
         var patches = QueueEnginePatches()
-        patches.bringUp(to: before, asOf: asOf)
+        patches.bringUp(to: before, now: EngineStore.baseNow, asOf: asOf)
         // The premise: the fixture holds a contradiction and a break covering it, so losing the twin moves both.
         #expect(patches.contradictions?.contradictedKeys.isEmpty == false, "the fixture contradicts nothing")
         #expect(patches.feedBreaks?.output.first?.coveredByAnotherCard == 1, "the fixture's break covers nothing")
@@ -398,7 +398,7 @@ final class PatchedCancellationsVerifierTests {
         #expect(named.contains("feedBreaks.events"), "\(named)")
         // Once told, the patches agree again.
         patches.noteChanged(twin.persistentModelID)
-        patches.bringUp(to: after, asOf: asOf)
+        patches.bringUp(to: after, now: EngineStore.baseNow, asOf: asOf)
         #expect(patches.mismatches(against: after).isEmpty, "\(patches.mismatches(against: after))")
     }
 
@@ -442,7 +442,7 @@ final class PatchedCancellationsVerifierTests {
     @Test func theVerifierReportsAStaleTermAsAPatchMismatch() throws {
         let (store, twin) = try store()
         var patches = QueueEnginePatches()
-        patches.bringUp(to: try store.freshFacts(), asOf: asOf)
+        patches.bringUp(to: try store.freshFacts(), now: EngineStore.baseNow, asOf: asOf)
         store.context.delete(twin)
         try store.context.save()
         let fresh = try store.freshFacts()
@@ -525,7 +525,7 @@ final class QueueEnginePatchedCancellationsCostProbeTests {
             // The pass handed every patched term (T1 too, as the engine hands it) against the pass handed none: the
             // terms' share of today's pass. T1's own share is #4360's reading.
             var all = QueueEnginePatches()
-            all.bringUp(to: facts, asOf: asOf)
+            all.bringUp(to: facts, now: now, asOf: asOf)
             let unpatchedPass = input(viewport, patches: nil)
             let patchedPass = input(viewport, patches: all)
             // Alternated, so neither arm always runs second (#4617).

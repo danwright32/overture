@@ -76,7 +76,7 @@ enum OrgAnswerLedger {
         // Only positives, only fresh, and only with an address behind them. A positive with nothing to
         // show cannot claim there is somebody to email.
         var usable: [String: Answer] = [:]
-        for answer in answers where answer.result == .emailFound && !answer.emails.isEmpty {
+        for answer in answers where carriesAnAddress(answer) {
             guard !Reachability.probeIsStale(probedAt: answer.probedAt, now: now) else { continue }
             // Newest wins if a store somehow holds two rows for one organisation; the unique constraint
             // makes that impossible, and a tie broken silently the wrong way would be worse than either.
@@ -125,10 +125,15 @@ enum OrgAnswerLedger {
                 ?? ProducerGate.qualifies(presenterKey: producerKey, in: corpus, overrides: overrides)
             verdictByProducerKey[producerKey] = qualifies
             guard qualifies else { continue }
-            out[show.key] = Inherited(result: answer.result, probedAt: answer.probedAt,
-                                      organisation: answer.presenterName, emails: answer.emails)
+            out[show.key] = Inherited(answer)
         }
         return out
+    }
+
+    // #4364 (plan v7 Phase 4b(e)): whether an answer can be inherited at all, one definition read here and by the
+    // queue engine's patched ledger (`PatchableAnswerLedger`), so the two cannot disagree about it (L370).
+    static func carriesAnAddress(_ answer: Answer) -> Bool {
+        answer.result == .emailFound && !answer.emails.isEmpty
     }
 
     // #4351: whether `candidate` replaces `existing` as one organisation's usable answer. The newer probe
@@ -138,5 +143,14 @@ enum OrgAnswerLedger {
         if candidate.probedAt != existing.probedAt { return candidate.probedAt > existing.probedAt }
         if candidate.presenterName != existing.presenterName { return candidate.presenterName < existing.presenterName }
         return candidate.emails.joined(separator: "\n") < existing.emails.joined(separator: "\n")
+    }
+}
+
+extension OrgAnswerLedger.Inherited {
+    // #4364: what a row shows for the answer it inherits, built here once for the ledger above and the queue engine's
+    // patched ledger (`PatchableAnswerLedger`). It carries the ORIGINAL check's date (see `Inherited`).
+    init(_ answer: OrgAnswerLedger.Answer) {
+        self.init(result: answer.result, probedAt: answer.probedAt, organisation: answer.presenterName,
+                  emails: answer.emails)
     }
 }

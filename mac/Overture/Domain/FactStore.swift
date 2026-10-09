@@ -273,9 +273,10 @@ struct QueueEnginePassInput: Sendable {
 /// Phase 4b PR, riskiest first; T1 ShowLink (#4360) is the first.
 ///
 /// HOW A CHANGE REACHES A TERM. The engine notes every show whose stored value changed (`noteChanged`, from the one
-/// place it records a show), applies each resolution at once (`resolve`, from `QueueEngine.identityKeyedState`, so a
-/// deleted or re-keyed identity outlives no resolution here), and drops everything when its facts are replaced whole
-/// (`invalidate`). A pass then brings the terms up (`bringUp(to:)`), which builds a term cold the first time.
+/// place it records a show), applies each resolution at once (`resolveShows` and `resolveAnswers`, from
+/// `QueueEngine.identityKeyedState`, so a deleted or re-keyed identity outlives no resolution here), and drops
+/// everything when its facts are replaced whole (`invalidate`). A pass then brings the terms up
+/// (`bringUp(to:now:asOf:)`), which builds a term cold the first time.
 ///
 /// HOW A WRONG TERM IS FOUND. A route that changed a show without noting it would leave a term stale with nothing on
 /// screen saying so. The verifier compares every term with its oracle over a fresh read (`mismatches(against:)`,
@@ -283,6 +284,7 @@ struct QueueEnginePassInput: Sendable {
 struct QueueEnginePatches: Sendable {
     typealias ShowLinkTerm = PatchableShowLink<PersistentIdentifier>
     typealias ProducerTablesTerm = PatchableProducerTables<PersistentIdentifier>
+    typealias LedgerTerm = PatchableAnswerLedger<PersistentIdentifier>
 
     /// T1 ShowLink, or nil until the first bring-up builds it cold.
     private(set) var showLink: ShowLinkTerm?
@@ -293,14 +295,24 @@ struct QueueEnginePatches: Sendable {
     /// every other term. T3 is judged at a day, which a bring-up moves.
     private(set) var contradictions: PatchableContradictions?
     private(set) var feedBreaks: PatchableFeedBreaks?
+    /// #4364 (plan v7 Phase 4b(e)): T5 the answer ledger, or nil until the first bring-up. It reads T4's verdicts, so it
+    /// is brought up after T4 and handed T4's ChangedKeys.
+    private(set) var ledger: LedgerTerm?
+    /// #4364: the answer records T5 was last brought up to. An answer changes no show, so nothing notes it: each
+    /// bring-up compares the facts' answers with these and hands T5 only the ones that moved.
+    private var ledgerAnswers: [PersistentIdentifier: OrgAnswerRecord] = [:]
     /// Shows whose stored value changed since the last bring-up.
     private(set) var pending: Set<PersistentIdentifier> = []
 
     init() {}
 
+    /// The held keys T5 is brought up to: none, because the queue's pass hands `QueueModel.scope` none
+    /// (`QueueRenderPass.make`), and the patched ledger must answer exactly what that pass would.
+    static let heldKeys: Set<String> = []
+
     /// A show's stored value changed. Nothing is noted before the first build, which reads every show anyway.
     mutating func noteChanged(_ id: PersistentIdentifier) {
-        guard showLink != nil || producerTables != nil else { return }
+        guard showLink != nil || producerTables != nil || ledger != nil else { return }
         pending.insert(id)
     }
 
@@ -311,57 +323,114 @@ struct QueueEnginePatches: Sendable {
         producerTables = nil
         contradictions = nil
         feedBreaks = nil
+        ledger = nil
+        ledgerAnswers = [:]
         pending = []
     }
 
-    /// One resolution, applied at once: a deleted show leaves every term, and a show whose temporary identifier its
-    /// first save replaced moves to the new one. `shows` is the facts AFTER the resolution (the engine resolves its
-    /// facts first), so a re-keyed show is read under its new identifier.
-    mutating func resolve(_ resolution: QueueEngineResolution, shows: [PersistentIdentifier: RowFacts]) {
-        let moved = Set(resolution.rekeyedIDs.keys).union(resolution.rekeyedIDs.values)
-        let touched = resolution.deletedIDs.union(moved).filter { FactStore.Table.holding($0.entityName) == .shows }
+    private static func touched(by resolution: QueueEngineResolution, in table: FactStore.Table) -> Set<PersistentIdentifier> {
+        resolution.deletedIDs.union(resolution.rekeyedIDs.keys).union(resolution.rekeyedIDs.values)
+            .filter { FactStore.Table.holding($0.entityName) == table }
+    }
+
+    /// One resolution, applied at once, in two halves the engine's registry applies as two entries (`patches.pending`,
+    /// `patches.ledgerAnswers`): a deleted show leaves every term, and a show whose temporary identifier its first save
+    /// replaced moves to the new one; #4364: so does a deleted or re-keyed answer, in T5. `facts` is AFTER the
+    /// resolution (the engine resolves its facts first), so a re-keyed row is read under its new identifier.
+    ///
+    /// The shows a resolution deleted or re-keyed, out of the pending set and into every term.
+    mutating func resolveShows(_ resolution: QueueEngineResolution, facts: FactStore) {
+        let shows = facts.shows
+        let touched = Self.touched(by: resolution, in: .shows)
         guard !touched.isEmpty else { return }
         pending.subtract(touched)
         showLink?.apply(touched.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) })
         // A resolution moves shows and never the overrides, so T4 keeps the overrides it was last brought up to.
+        var verdictsMoved: Set<String> = []
         if let overrides = producerTables?.overrides {
-            producerTables?.apply(touched.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
-                                  overrides: overrides)
+            verdictsMoved = producerTables?.apply(
+                touched.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
+                overrides: overrides).presenterKeys ?? []
         }
         applyCancellations(Array(touched), shows: shows) // patch-resolve-cancellations
+        // T5 keeps the instant, held keys and refusals it was last brought up to: a resolution moves none of them.
+        guard var held = ledger, let producers = producerTables else { return }
+        ledger = nil
+        held.apply(rows: touched.map { (key: $0, facts: shows[$0].map(LedgerTerm.Facts.init(of:))) }, answers: [],
+                   refusals: held.refusals, heldKeys: held.heldKeys, now: held.now, verdictsMoved: verdictsMoved,
+                   qualifies: { producers.verdict($0)?.qualifies ?? false })
+        ledger = held
     }
 
-    /// Every term brought up to `facts`: built cold when it has never been built, else patched from the pending shows.
-    /// T4 also reads the overrides (`FactStore.producerOverrides`) and compares them with the ones it holds on every
-    /// bring-up, because a promotion or a demotion changes no show and so is never pending.
+    /// #4364: the answers a resolution deleted or re-keyed, out of the records T5 was brought up to and into T5.
+    mutating func resolveAnswers(_ resolution: QueueEngineResolution, facts: FactStore) {
+        let touched = Self.touched(by: resolution, in: .orgAnswers)
+        guard !touched.isEmpty, var held = ledger, let producers = producerTables else { return }
+        ledger = nil
+        for id in touched { ledgerAnswers[id] = facts.orgAnswers[id] }
+        held.apply(rows: [], answers: touched.map { (key: $0, answer: facts.orgAnswers[$0].flatMap(OrgAnswerLedger.Answer.init)) },
+                   refusals: held.refusals, heldKeys: held.heldKeys, now: held.now, verdictsMoved: [],
+                   qualifies: { producers.verdict($0)?.qualifies ?? false })
+        ledger = held
+    }
+
+    /// Every term brought up to `facts` and the instant `now`: built cold when it has never been built, else patched
+    /// from the pending shows. T4 also reads the overrides (`FactStore.producerOverrides`) and compares them with the
+    /// ones it holds on every bring-up, because a promotion or a demotion changes no show and so is never pending.
+    /// #4364: T5 the same for the answers and the refusals, and it is brought up to `now` on every bring-up, because the
+    /// clock changes which answers are fresh (plan v7 section 7 T5 (f)).
     /// #4361: `asOf` is the Eastern day T3 is judged at, which the engine's pass hands in (its own day); nil keeps the
     /// day T3 was last brought to, which is what the verifier's snapshot wants, since it holds the terms to the day the
     /// output on screen was derived at.
-    mutating func bringUp(to facts: FactStore, asOf: String? = nil) {
+    mutating func bringUp(to facts: FactStore, now: Date, asOf: String? = nil) {
         let shows = facts.shows
         let overrides = facts.producerOverrides
-        guard var link = showLink, var producers = producerTables, contradictions != nil, feedBreaks != nil else {
-            showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
-            producerTables = ProducerTablesTerm(
+        let refusals = facts.refusalRows
+        guard var link = showLink, var producers = producerTables, var answerLedger = ledger,
+              contradictions != nil, feedBreaks != nil else {
+            let producers = ProducerTablesTerm(
                 rows: shows.map { (key: $0.key, facts: ProducerTablesTerm.Facts(of: $0.value)) }, overrides: overrides)
+            showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
+            producerTables = producers
             contradictions = PatchableContradictions()
             feedBreaks = PatchableFeedBreaks(asOf: asOf ?? "")
             applyCancellations(Array(shows.keys), shows: shows)
+            ledger = LedgerTerm(
+                rows: shows.map { (key: $0.key, facts: LedgerTerm.Facts(of: $0.value)) },
+                answers: facts.orgAnswers.map { (key: $0.key, answer: OrgAnswerLedger.Answer($0.value)) },
+                refusals: refusals, heldKeys: Self.heldKeys, now: now,
+                qualifies: { producers.verdict($0)?.qualifies ?? false })
+            ledgerAnswers = facts.orgAnswers
             pending = []
             return
         }
         defer { if let asOf { advanceFeedBreaks(to: asOf) } }
-        guard !pending.isEmpty || producers.overrides != overrides else { return }
+        let answersMoved = facts.orgAnswers != ledgerAnswers
+        guard !pending.isEmpty || producers.overrides != overrides || answersMoved || answerLedger.refusals != refusals
+                || answerLedger.now != now else { return }
         let ids = pending
         pending = []
         // Taken out and put back, so each patch mutates the one copy rather than a copy the optional still shares.
         showLink = nil
         producerTables = nil
+        ledger = nil
         if !ids.isEmpty { link.apply(ids.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }) }
-        producers.apply(ids.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
-                        overrides: overrides)
+        let verdicts = producers.apply(ids.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
+                                       overrides: overrides)
+        var answerChanges: [(key: PersistentIdentifier, answer: OrgAnswerLedger.Answer?)] = []
+        if answersMoved {
+            for id in Set(ledgerAnswers.keys).union(facts.orgAnswers.keys) where ledgerAnswers[id] != facts.orgAnswers[id] {
+                answerChanges.append((key: id, answer: facts.orgAnswers[id].flatMap(OrgAnswerLedger.Answer.init)))
+            }
+            ledgerAnswers = facts.orgAnswers
+        }
+        let tables = producers
+        answerLedger.apply(rows: ids.map { (key: $0, facts: shows[$0].map(LedgerTerm.Facts.init(of:))) },
+                           answers: answerChanges, refusals: refusals, heldKeys: Self.heldKeys, now: now,
+                           verdictsMoved: verdicts.presenterKeys, qualifies: { tables.verdict($0)?.qualifies ?? false })
         showLink = link
         producerTables = producers
+        ledger = answerLedger
         applyCancellations(Array(ids), shows: shows) // patch-bringup-cancellations
     }
 
@@ -416,6 +485,14 @@ struct QueueEnginePatches: Sendable {
            t3.output != FeedBreakEvent.events(among: shows, asOf: t3.asOf, contradicted: nil) {
             out.append("feedBreaks.events")
         }
+        // #4364: T5 held to the ledger derived from the same answers, shows, overrides and refusals, at the instant and
+        // with the held keys it was brought up to (the snapshot's own, `QueueEngine.snapshot(of:)`).
+        if let held = ledger {
+            let oracle = QueueModel.inheritedAnswers(Array(fresh.orgAnswers.values), corpus: shows,
+                                                     overrides: fresh.producerOverrides, refusals: fresh.refusalLedger,
+                                                     heldKeys: held.heldKeys, now: held.now)
+            if held.inherited != oracle { out.append("ledger.inherited") }
+        }
         return out
     }
 }
@@ -427,6 +504,20 @@ extension FactStore {
     var producerOverrides: ProducerOverrides {
         ProducerOverrides(promoted: Set(promotedProducers.values.map(\.orgKey)),
                           demoted: Set(demotedHouses.values.map(\.orgKey)))
+    }
+
+    /// #4364: Dan's struck addresses as the ledger's rows, and the ledger over them in a fixed order, read by the
+    /// engine's pass, the patched answer ledger and the verifier's comparison alike (L370).
+    var refusalRows: Set<ContactRefusal.Ledger.Row> {
+        Set(refusedAddresses.values.map {
+            ContactRefusal.Ledger.Row(scopeRaw: $0.scopeRaw, scopeId: $0.scopeId, handleKey: $0.handleKey)
+        })
+    }
+
+    var refusalLedger: ContactRefusal.Ledger {
+        ContactRefusal.Ledger(rows: refusalRows.sorted {
+            ($0.scopeRaw, $0.scopeId, $0.handleKey) < ($1.scopeRaw, $1.scopeId, $1.handleKey)
+        })
     }
 }
 

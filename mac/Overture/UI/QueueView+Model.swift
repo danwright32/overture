@@ -3424,6 +3424,11 @@ enum QueueModel {
                       // engine does. Handed in only where `prospects` is the queue's own scope of `corpus`, which
                       // is the drawn set the patched collapse keeps (`QueueModel.queueScopeHolds`).
                       showLink: ShowLink.Tables? = nil,
+                      // #4364 (plan v7 Phase 4b(e)): T5's inherited answers, already brought up to date by the queue
+                      // engine's patched ledger (`PatchableAnswerLedger`) over the same answers, refusals, held keys
+                      // (none, as this pass is handed none), producer tables and instant, or nil to derive them here,
+                      // which is what every caller but the engine does.
+                      inherited prebuiltInherited: [String: OrgAnswerLedger.Inherited]? = nil,
                       today: String? = nil,
                       // #4356: where every cross-row read of this build is recorded, or nil for none, which is
                       // what the app passes. A test hands one in to see what the rows and cards read.
@@ -3452,10 +3457,11 @@ enum QueueModel {
         // way, because the caller's key is derived from the same mapping.
         let tables = producerTables ?? ProducerTables(rows: corpus ?? prospects, overrides: overrides)
         let producerCorpus = tables.corpus
-        let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
-                                         overrides: overrides, refusals: refusals,
-                                         heldKeys: heldKeys, now: now,
-                                         producerCorpus: producerCorpus)
+        let inherited = prebuiltInherited
+            ?? inheritedAnswers(answers, corpus: corpus ?? prospects,
+                                overrides: overrides, refusals: refusals,
+                                heldKeys: heldKeys, now: now,
+                                producerCorpus: producerCorpus)
         // #1687: built ONCE here from the same whole-store corpus the gate above judges against, never per
         // row. Deciding whether a presenter is really its building's brand walks every presenter in the
         // store against every venue spelling in it (roughly 400 by 114 on Dan's), which is a cost a card
@@ -4138,11 +4144,7 @@ enum QueueModel {
                                          producerCorpus: ProducerGate.Corpus? = nil)
         -> [String: OrgAnswerLedger.Inherited] {
         guard !answers.isEmpty else { return [:] }
-        let flat = answers.compactMap { row -> OrgAnswerLedger.Answer? in
-            guard let result = row.result else { return nil }
-            return OrgAnswerLedger.Answer(orgKey: row.orgKey, result: result, probedAt: row.probedAt,
-                                          presenterName: row.presenterName, emails: row.foundEmails)
-        }
+        let flat = answers.compactMap { OrgAnswerLedger.Answer($0) }
         // #2392: struck addresses come out HERE, before the ledger decides anything, so the badge and the
         // addresses under it are answering from one list. An organisation whose every address Dan struck
         // is left with none, and `OrgAnswerLedger.inherited` already refuses to inherit a positive with

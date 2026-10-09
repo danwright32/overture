@@ -259,21 +259,33 @@ struct ShowLinkHarnessTerm: PatchHarnessTerm {
 enum EnginePropertyHarness {
     typealias Engine = QueueEngine<QueueEnginePass>
 
-    static func engine(_ world: Phase0cWorld, _ turns: EngineTurns) -> Engine {
+    /// #4364: `clock` and `system` are the harness's, so T5's clock op can move the engine's clock and announce it.
+    static func engine(_ world: Phase0cWorld, _ turns: EngineTurns, clock: EngineTestClock = EngineTestClock(),
+                       system: NotificationCenter = NotificationCenter()) -> Engine {
         QueueEngine(context: world.context, derivation: QueueEngineQueue.derivation(freezeWatch: { nil }),
-                    saves: StoreSaveCount(), clock: EngineTestClock().clock,
-                    events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: NotificationCenter()),
+                    saves: StoreSaveCount(), clock: clock.clock,
+                    events: QueueEngineSystemEvents(workspace: NotificationCenter(), system: system),
                     schedule: turns.schedule, refused: { Issue.record("a generation \($1) was refused over \($0)") },
                     verifier: QueueEngineVerifierSetup(triggers: .byHand), launch: QueueEngineLaunchSetup(reads: .inTurn),
                     contextInputs: { EngineHarness.noSignals })
     }
 
     /// One seed. `ops` is the term's op mix (T1's by default) and `presenters` gives every row a presenter (#4362, T4).
+    /// #4364: `ledger` seeds T5's answers and refusals, and the world's clock (`Phase0cWorld.ledgerNow`, which T5's
+    /// clock op moves both ways) drives the engine's: each move is announced as the system clock changing.
     static func run(size: Int, seed: UInt64, steps: Int, ops: [Phase0cOp] = ShowLinkHarnessTerm.ops,
-                    presenters: Bool = false, outcome: inout PatchHarnessOutcome) async throws {
-        let world = try Phase0cWorld(size: size, seed: seed, models: AppSchema.models, presenters: presenters)
+                    presenters: Bool = false, ledger: Bool = false, outcome: inout PatchHarnessOutcome) async throws {
+        let world = try Phase0cWorld(size: size, seed: seed, models: AppSchema.models, presenters: presenters,
+                                     ledger: ledger)
         let turns = EngineTurns()
-        let engine = engine(world, turns)
+        let clock = EngineTestClock(world.ledgerNow)
+        let system = NotificationCenter()
+        let engine = engine(world, turns, clock: clock, system: system)
+        func followTheWorldsClock() {
+            guard world.ledgerNow != clock.now else { return }
+            clock.advance(by: world.ledgerNow.timeIntervalSince(clock.now))
+            system.post(name: .NSSystemClockDidChange, object: nil)
+        }
         var rows = try PatchPropertyHarness.rows(world)
         func requestEveryCard() {
             engine.setViewInputs(QueueEngineViewInputs(focusedStage: nil, focusedKeys: nil,
@@ -285,6 +297,7 @@ enum EnginePropertyHarness {
         turns.run()
         var hidden = engine.patches.showLink?.tables.hidden ?? []
         var brands = engine.patches.producerTables?.tables.venueBrands
+        var inherited = engine.patches.ledger?.inherited
         func check(_ step: Int, _ op: String) throws {
             outcome.checks += 1
             let place = "seed \(seed) size \(size) step \(step) op \(op)"
@@ -311,6 +324,10 @@ enum EnginePropertyHarness {
             let nowBrands = engine.patches.producerTables?.tables.venueBrands
             if nowBrands != brands { outcome.handOffs += 1 }
             brands = nowBrands
+            // #4364: T5's published answers, which the cards and rows read, moved through the engine.
+            let nowInherited = engine.patches.ledger?.inherited
+            if nowInherited != inherited { outcome.handOffs += 1 }
+            inherited = nowInherited
         }
         try check(-1, "start")
         for step in 0..<steps {
@@ -321,11 +338,13 @@ enum EnginePropertyHarness {
             }
             outcome.applied[op, default: 0] += 1
             _ = try world.commit(edit)
+            followTheWorldsClock()
             turns.run()
             rows = try PatchPropertyHarness.rows(world)
             try check(step, op.rawValue)
             if op.alwaysUndone || world.roll(2) == 0 {
                 _ = try world.undo(edit)
+                followTheWorldsClock()
                 turns.run()
                 rows = try PatchPropertyHarness.rows(world)
                 try check(step, op.rawValue + " (undo)")
@@ -346,7 +365,7 @@ enum EnginePropertyHarness {
     }
 
     static func runAll(ci: [(size: Int, seeds: Int, steps: Int)], ops: [Phase0cOp] = ShowLinkHarnessTerm.ops,
-                       presenters: Bool = false, seedBase: UInt64 = 4360_5000) async throws
+                       presenters: Bool = false, ledger: Bool = false, seedBase: UInt64 = 4360_5000) async throws
         -> (outcome: PatchHarnessOutcome, settings: String, ms: Double) {
         let plan = PatchHarnessSettings.plan(ci: ci)
         var outcome = PatchHarnessOutcome()
@@ -354,7 +373,7 @@ enum EnginePropertyHarness {
         for leg in plan {
             for s in 0..<leg.seeds {
                 try await run(size: leg.size, seed: seedBase + UInt64(leg.size * 100 + s), steps: leg.steps, ops: ops,
-                              presenters: presenters, outcome: &outcome)
+                              presenters: presenters, ledger: ledger, outcome: &outcome)
             }
         }
         let settings = (PatchHarnessSettings.deep ? "DEEP " : "CI ")
@@ -409,7 +428,7 @@ struct PatchableShowLinkTests {
         let world = try Phase0cWorld(size: 60, seed: 4360_0002, models: AppSchema.models)
         var stale = QueueEnginePatches()
         let before = try FactStore.extractAll(from: ModelContext(world.container))
-        stale.bringUp(to: before)
+        stale.bringUp(to: before, now: EngineStore.baseNow)
         #expect(stale.mismatches(against: before).isEmpty, "a patch built from these facts disagreed with them")
         // A front with a hidden sibling dismissed: the sibling becomes the front and is no longer hidden, so the
         // collapse moves both ways and the grouping does not move at all.
@@ -431,7 +450,7 @@ struct PatchableShowLinkTests {
         // Brought up to the same facts, the same patch agrees, so the verdict was about the patch and nothing else.
         var current = stale
         current.noteChanged(front.persistentModelID)
-        current.bringUp(to: fresh)
+        current.bringUp(to: fresh, now: EngineStore.baseNow)
         #expect(current.mismatches(against: fresh).isEmpty)
         let healed = QueueEngineSnapshot(saveCount: 1, generation: 8, facts: fresh, viewInputs: QueueEngineViewInputs(),
                                          context: EngineHarness.noSignals, now: EngineStore.baseNow,
@@ -447,7 +466,7 @@ struct PatchableShowLinkTests {
         let world = try Phase0cWorld(size: 60, seed: 4360_0003, models: AppSchema.models)
         var patches = QueueEnginePatches()
         let facts = try FactStore.extractAll(from: ModelContext(world.container))
-        patches.bringUp(to: facts)
+        patches.bringUp(to: facts, now: EngineStore.baseNow)
         let rows = try world.rows()
         let grouped = try #require(rows.first { patches.showLink?.tables.group[$0.naturalKey] != nil })
         var resolution = QueueEngineResolution()
@@ -455,7 +474,9 @@ struct PatchableShowLinkTests {
         resolution.deletedKeys = [grouped.naturalKey]
         var remaining = facts.shows
         remaining[grouped.persistentModelID] = nil
-        patches.resolve(resolution, shows: remaining)
+        var resolved = facts
+        resolved.shows = remaining
+        patches.resolveShows(resolution, facts: resolved)
         #expect(patches.showLink?.tables.group[grouped.naturalKey] == nil, "the deleted show still has a group")
         #expect(patches.showLink?.tables.group.values.contains { $0.contains(grouped.naturalKey) } == false,
                 "the deleted show is still named as another row's sibling")
@@ -540,8 +561,8 @@ final class PatchableShowLinkCostProbeTests {
         // The engine's whole pass over the same facts, with no patch and with the patch brought up, the first screen's
         // cards requested as the queue requests them. Alternated, so neither arm carries the order effect.
         var patches = QueueEnginePatches()
-        patches.bringUp(to: facts)
         let now = Date()
+        patches.bringUp(to: facts, now: now)
         let firstView = QueueEngineViewInputs(focusedStage: .scout, focusedKeys: nil, requestedCardKeys: [])
         let probeView = QueueEngineQueue.derive(QueueEnginePassInput(facts: facts, viewInputs: firstView, now: now,
                                                                      context: EngineHarness.noSignals))

@@ -416,6 +416,9 @@ enum QueueRenderPass {
         // brought up to date from the shows that changed, or nil to build them in the pass, which every caller but
         // the engine does. Over `allProspects` and the queue's own scope of it, which is what the pass draws.
         var showLink: ShowLink.Tables? = nil
+        // #4364 (plan v7 Phase 4b(e)): T5's inherited answers from the queue engine's patched ledger
+        // (`PatchableAnswerLedger`), or nil to derive them in the pass, which every caller but the engine does.
+        var inherited: [String: OrgAnswerLedger.Inherited]? = nil
         // #4361 (plan v7 Phase 4b(b)): T2's contradicted set and T3's feed breaks, when the caller keeps them patched
         // (the queue engine, `QueueEnginePatches`) rather than having the pass recompute both over every show. Nil
         // means "derive them in the pass", which every caller but the engine's own turn does, so the cost tests and
@@ -463,7 +466,8 @@ enum QueueRenderPass {
                                      // #3742: the producer tables, when the caller has them in hand.
                                      // Nil everywhere but the app, which is the same rule every other
                                      // prebuilt value on `Inputs` follows.
-                                     producerTables: i.producerTables, showLink: i.showLink, today: context.today,
+                                     producerTables: i.producerTables, showLink: i.showLink,
+                                     inherited: i.inherited, today: context.today,
                                      checksACard: i.checksACardInThePass,
                                      // #4361: T2's set, when the caller keeps it patched.
                                      contradicted: i.contradictedCancellations)
