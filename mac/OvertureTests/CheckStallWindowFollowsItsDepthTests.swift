@@ -155,13 +155,15 @@ struct CheckStallWindowFollowsItsDepthTests {
     // a per-card read is a disk read per row per scroll frame, which is the #1770 defect exactly. And only
     // while a check is really in flight, so an idle queue pays nothing for a control it is offering.
     @Test func theRowIsHandedThoseFactsRatherThanReadingThemPerCard() {
+        // #4358 slice E4d: read once per PASS by the queue engine's live context reader, still gated on a check
+        // being in flight, and carried on the pass the cards are drawn from. The view reads neither marker.
+        let reader = SourceGuardHelper.source("Overture/App/QueueEngineHost.swift")
+        #expect(reader.contains("let checking = runStatus.inFlight == .reachabilityCheck")
+                && reader.contains("checkRunSince: checking ? PrepQueueService.lastRunStartedAt(slot: .check) : nil"))
+        #expect(reader.contains("checkLookups: checking ? PrepQueueService.liveCheckLookups() : nil"))
         let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
-        // #4106: read into a local once per evaluation, because the render memo keys on it before the
-        // pass runs, and then handed to the pass. Still gated on a check being in flight.
-        #expect(queue.contains("let checkRunSince = inFlight == .reachabilityCheck")
-                && queue.contains("checkRunSince: checkRunSince,"))
-        #expect(queue.contains("let checkLookups = inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil")
-                && queue.contains("checkLookups: checkLookups,"))
+        #expect(!queue.contains("PrepQueueService.liveCheckLookups()") && !queue.contains("PrepQueueService.lastRunStartedAt"),
+                "the queue's body reads a run marker itself, once per evaluation rather than once per pass")
         let row = SourceGuardHelper.source("Overture/UI/ProspectRowView.swift")
         #expect(!row.contains("PrepQueueService.liveCheckLookups()"),
                 "the row reads the marker itself, which is a disk read per card per scroll frame (#1770)")

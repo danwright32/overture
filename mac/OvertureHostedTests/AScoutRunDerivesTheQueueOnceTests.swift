@@ -71,20 +71,16 @@ struct AScoutRunDerivesTheQueueOnceTests {
 
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         let feedback: ActionFeedback
         let dayOffOffer: DayOffOfferRequest
         let undoStack: QueueUndoStack
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
-        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
-        // memo's two second window cannot be counted as a change the run caused (#4516's mechanism).
-        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, clock: clock, onConnectGmail: { })
-            }
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: { })
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
@@ -92,12 +88,13 @@ struct AScoutRunDerivesTheQueueOnceTests {
         }
     }
 
-    private func host(_ c: ModelContainer) -> (NSWindow, NSHostingView<AnyView>) {
+    private func host(_ c: ModelContainer) async throws -> (NSWindow, NSHostingView<AnyView>) {
+        let engine = try await HostedQueueEngine.started(context: c.mainContext)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 800),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         // AppKit's default releases the window while this scope still holds it (#3480).
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, feedback: ActionFeedback(),
+        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, engine: engine, feedback: ActionFeedback(),
                                                               dayOffOffer: DayOffOfferRequest(),
                                                               undoStack: QueueUndoStack())))
         hosting.frame = window.contentLayoutRect
@@ -181,7 +178,7 @@ struct AScoutRunDerivesTheQueueOnceTests {
     // a run Dan started reads at all (`SourceCheck.decide` hands back a page only at `.readChanged`).
     private func watchRun(native: Int, inline: Int) async throws -> Run {
         let c = try TestModelContainer.inMemory(AppSchema.models)
-        let (window, hosting) = host(c)
+        let (window, hosting) = try await host(c)
         defer { HostedPassCounting.unmountAndClose(hosting, replacingWith: AnyView(EmptyView()), in: window) }
         let ctx = c.mainContext
         seed(ctx)

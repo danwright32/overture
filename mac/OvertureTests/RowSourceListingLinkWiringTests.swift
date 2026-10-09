@@ -86,26 +86,30 @@ struct RowSourceListingLinkWiringTests {
     // #3814: the surface is now the VIEW PLUS ITS RENDER PASS, where it has one, and the two halves are
     // checked separately because they are two different claims.
     //
-    // The live query has to stay in the VIEW: a `@Query` is what makes the watchlist live, and a pass is a
-    // pure function that cannot hold one. Where the table is BUILT is the other question, and Follow-ups
-    // now builds it inside `FollowUpsRenderPass` rather than inside a `@ViewBuilder`, which is the point
-    // of that change: a derivation in the body is somewhere no counter and no test can reach.
+    // Each surface HOLDS a watchlist (since #4358 slice E4d, the queue's is the engine's facts and Follow-ups is
+    // handed the engine's rows as a `let`; neither holds a query of its own), and its render pass BUILDS the table
+    // from it. Follow-ups builds it inside `FollowUpsRenderPass` rather than inside a `@ViewBuilder`, which is the
+    // point of that change: a derivation in the body is somewhere no counter and no test can reach.
     //
     // So this follows the derivation instead of pinning it to a file (L103). What it must not become is a
     // check that either file mentions the call, which would pass on a view that kept the query and a pass
     // that never used it.
     private static let surfaces = [
         // #4311: the Reached out list's table is built by the render pass now, for Follow-ups' reason.
-        (view: "Overture/UI/QueueView.swift", buildsTheTableIn: "Overture/UI/QueueRenderPass.swift"),
-        (view: "Overture/UI/FollowUpsView.swift", buildsTheTableIn: "Overture/UI/FollowUpsRenderPass.swift"),
+        (view: "Overture/App/QueueEngineQueue.swift", watchlist: "facts.watchedSources.values",
+         buildsTheTableIn: "Overture/UI/QueueRenderPass.swift"),
+        (view: "Overture/UI/FollowUpsView.swift", watchlist: "let watchedSources: [WatchedSource]",
+         buildsTheTableIn: "Overture/UI/FollowUpsRenderPass.swift"),
     ]
 
     @Test func bothSurfacesResolveTheirLinksAgainstTheLiveWatchlist() {
         for surface in Self.surfaces {
             let view = SourceGuardHelper.source(surface.view)
             #expect(!view.isEmpty, "\(surface.view) could not be read, so nothing below was measured")
-            #expect(view.contains("@Query private var watchedSources: [WatchedSource]"),
-                    "\(surface.view) has no live watchlist to resolve a link's label against")
+            // #4358 slice E4d: the queue's watchlist is the engine's (its pass is handed `facts.watchedSources`), and
+            // Follow-ups is handed the engine's rows; neither holds a query of its own.
+            #expect(view.contains(surface.watchlist),
+                    "\(surface.view) has no watchlist to resolve a link's label against")
 
             let builder = SourceGuardHelper.source(surface.buildsTheTableIn)
             #expect(!builder.isEmpty,

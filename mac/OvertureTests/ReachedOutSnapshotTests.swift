@@ -200,9 +200,9 @@ struct ReachedOutSnapshotTests {
                 Comment(rawValue: "closing a show out no longer takes a snapshot, so it is reading a "
                         + "model captured in a button closure at press time (#3651)."))
         let body = try #require(SourceGuardHelper.bodyOfFunction(named: "closeOut", in: view))
-        #expect(body.contains("ReachedOutSnapshot.resolve(row, in: prospects)"),
+        #expect(body.contains("ReachedOutSnapshot.resolve(row, in: engine)"),
                 Comment(rawValue: "the press does not resolve, or resolves against something other than "
-                        + "the view's own live query. Resolving against the pass's captured scope walks "
+                        + "the queue engine (`ShowIdentity`). Resolving against the pass's captured scope walks "
                         + "model references the pass took minutes ago and faults a property on each, "
                         + "which is the same crash moved one level out."))
         #expect(body.contains("resolved.sentence(org: row.org)"),

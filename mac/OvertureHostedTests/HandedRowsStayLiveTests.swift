@@ -21,12 +21,16 @@ import SwiftData
 //
 // So this drives the real path: a real window, a real container, a real save, and it waits for the queue
 // to derive the store again rather than asserting anything about how fast it was.
+//
+// #4358 slice E4d: the queue engine is where the rows come from now, and the question is unchanged: a save must
+// still reach a queue that holds no query of its own.
 @MainActor
 @Suite("Rows handed down stay live (#3846)")
 struct HandedRowsStayLiveTests {
 
     private func container() throws -> ModelContainer {
-        try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
+        // #4358 slice E4d: the whole schema, because the queue engine the queue now draws reads every table it holds.
+        try TestModelContainer.inMemory(AppSchema.models)
     }
 
     private func insert(_ ctx: ModelContext, key: String, date: String) {
@@ -42,18 +46,16 @@ struct HandedRowsStayLiveTests {
         try? ctx.save()
     }
 
-    // The stand-in for RootView, spelled once in `mac/TestSupport/RowsFromStore.swift` and used
-    // here exactly as every converted harness uses it.
+    // The stand-in for RootView: the queue drawing the engine RootView builds (#4358 slice E4d).
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         @State private var feedback = ActionFeedback()
         @State private var dayOffOffer = DayOffOfferRequest()
 
         var body: some View {
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil),
-                          allProspects: rows)
-            }
+            QueueView(engine: engine, deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
@@ -78,19 +80,26 @@ struct HandedRowsStayLiveTests {
         return (window, hosting)
     }
 
-    @Test func aStoreChangeStillReachesAQueueThatNoLongerQueriesTheStore() throws {
+    @Test func aStoreChangeStillReachesAQueueThatNoLongerQueriesTheStore() async throws {
         let c = try container()
-        let ctx = ModelContext(c)
+        // #4358 slice E4d: the main context, which the engine RootView builds reads and every control writes through.
+        let ctx = c.mainContext
         let dates = LiveDateClustering.dates(forRows: 2)
+        let engine = HostedQueueEngine.make(context: ctx)
         insert(ctx, key: "first", date: dates[0])
 
         var window: NSWindow?
         // The positive control, and it is taken FIRST: a queue that never drew at all would satisfy the
         // claim below by never doing anything, which is the shape of false negative this suite refuses
         // (L159, L98).
-        let firstDraw = QueueRenderPass.WorkTally.measure {
-            window = host(Harness(container: c)).window
-            pumpUntilRowsDerived()
+        // #4358 slice E4d: the pass runs in the engine's own turn, a main actor task, which a nested run of the run
+        // loop never reaches; so the tally is bound across an AWAITED wait, and the engine's turns, started inside it,
+        // carry it with them.
+        let firstDraw = QueueRenderPass.WorkTally()
+        await QueueRenderPass.WorkTally.$current.withValue(firstDraw) {
+            engine.start()
+            window = host(Harness(container: c, engine: engine)).window
+            await waitUntilRowsDerived()
         }
         // #4444: closed, and its pending work run, while `c` is still alive. This test returns the moment
         // its rows are derived, so the queue screen still has work scheduled; left alone, that work ran in
@@ -99,16 +108,25 @@ struct HandedRowsStayLiveTests {
         #expect(firstDraw.queueRows > 0,
                 "the queue never derived anything, so nothing below measures the hand-down")
 
-        // THE claim. Nothing here touches the view: a row lands in the store, and the queue has to notice
-        // through RootView's stand-in re-evaluating and handing it a new array.
-        let afterSave = QueueRenderPass.WorkTally.measure {
-            insert(ctx, key: "second", date: dates[1])
-            pumpUntilRowsDerived()
+        // THE claim. Nothing here touches the view: a row lands in the store, and the queue has to notice.
+        // #4358 slice E4d: through the engine, so the claim is read where it lands, in two halves: the saved show is
+        // in the pass the engine published, and the queue's body ran again to draw it. Not by the tally, because
+        // the engine's turn that takes the save in can be one a SwiftUI callback scheduled before it (the view
+        // handing the engine its inputs), which carries no task-local, so a tally reads zero while the queue is live.
+        let bodies = QueueRenderCounter.renderCount(for: QueueRenderCounter.queueBodySurface)
+        insert(ctx, key: "second", date: dates[1])
+        let published = await waitUntil("the saved show is in the engine's published pass", timeout: .seconds(10)) {
+            engine.output?.value.data.rows.contains { $0.id == "second" } == true
         }
-        #expect(afterSave.queueRows > 0, Comment(rawValue:
-            "a prospect was saved and the queue derived \(afterSave.queueRows) rows, so taking its own "
-            + "@Query away has left it drawing a list that no longer follows the store. That is the "
-            + "silent half of #3846: every cost reading would keep improving while the screen went stale"))
+        let redrawn = await waitUntil("the queue draws the published pass", timeout: .seconds(10)) {
+            QueueRenderCounter.renderCount(for: QueueRenderCounter.queueBodySurface) > bodies
+        }
+        #expect(published && redrawn, Comment(rawValue:
+            "a prospect was saved and " + (published ? "the engine published it, but the queue never drew again"
+                                                 : "the engine never published it")
+            + ", so taking the queue's own @Query away has left it drawing a list that no longer follows the "
+            + "store. That is the silent half of #3846: every cost reading would keep improving while the screen "
+            + "went stale"))
     }
 
     // Close the window and turn the run loop a fixed number of times while `container` is held, so the
@@ -127,10 +145,9 @@ struct HandedRowsStayLiveTests {
     // reports the same zero whether the surface rebuilds or not. That was `ArchiveScrollDoesNotRebuild`'s
     // first form and it passed on the unfixed code (#3480). It stops the moment a row is derived, so the
     // passing case is fast and only the failing one runs out the deadline (L290).
-    private func pumpUntilRowsDerived(timeout: TimeInterval = 3) {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline && (QueueRenderPass.WorkTally.current?.queueRows ?? 0) == 0 {
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+    private func waitUntilRowsDerived() async {
+        _ = await waitUntil("a pass to derive rows", timeout: .seconds(10)) {
+            (QueueRenderPass.WorkTally.current?.queueRows ?? 0) > 0
         }
     }
 }

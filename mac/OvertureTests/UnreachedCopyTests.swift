@@ -34,29 +34,24 @@ struct UnreachedCopyTests {
     // Keyed on file AND name, so allowing one does not quietly allow a same-named declaration elsewhere,
     // and each carries its reason, because an allowlist entry with no reason is indistinguishable from
     // one somebody added to make a failure go away (L65). The measurement's own findings were all really dead
-    // and were deleted rather than allowed; the entries now here are #4358's unwired engine, each naming E4d.
+    // and were deleted rather than allowed.
     //
     // Both of the measurement's findings have now left this list, and by the two different routes that
     // are available. #3068 closed one by WIRING it: `closingNoteOnStoodDownShow` is on the post-event row
     // now, so it is reached rather than allowed. #3069 closed the other by DELETING it: `undoRefusalReason`
     // explained a refusal that no screen could produce, and Dan's call (2026-08-22) was that a recorded
-    // form pitch is final, so the sentence and the undo it belonged to went together (L29).
+    // form pitch is final, so the sentence and the undo it belonged to went together (L29). #4358's launch
+    // notice sentences left by the same first route, when slice E4d said them.
     //
-    // Empty is the state to keep it in. An entry here is a declaration holding copy that nothing reaches,
-    // kept on purpose, and each one has to name the issue that activates it, which is this repo's rule
-    // for a value nothing reads yet.
+    // One entry stays, and it is not copy at all. Each entry here is a declaration this guard reads as holding
+    // copy that nothing in the app reaches, kept on purpose with its reason.
     private static let unreachedOnPurpose: [String: [String: String]] = [
-        // #4358 slice E4b builds the launch notice's sentences as values, unwired like the rest of the engine;
-        // slice E4d (the cutover) draws them in the launch notice and deletes these two entries.
-        "Domain/CardDivergenceReport.swift": [
-            "verifierSentence": "the launch notice's verifier line, drawn by #4358 E4d",
-            "faultSentence": "the launch notice's out of step line, drawn by #4358 E4d",
-        ],
-        // Not copy: member names and the comparator's reasons for leaving one out, inside a
+        // Not copy: member names, and the comparator's reasons for leaving one out, inside a
         // copy-inventory:ignore block, so the inventory never lists them; this guard does not read that
-        // marker. Reached by the engine's verifier once #4358 E4d wires it.
+        // marker. It is the comparator's own accounting table, read by `RenderDataComparisonTests` to hold the
+        // comparator to the card store's real members, and no app code reads it or ever should.
         "UI/RenderDataComparison.swift": [
-            "cardStoreMembers": "member names inside copy-inventory:ignore, read by the verifier from #4358 E4d",
+            "cardStoreMembers": "member names inside copy-inventory:ignore, the guard table RenderDataComparisonTests reads",
         ],
     ]
 

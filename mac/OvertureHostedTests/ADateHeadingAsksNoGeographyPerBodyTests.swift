@@ -82,7 +82,7 @@ final class ADateHeadingAsksNoGeographyPerBodyTests {
         var bodies = 0
         let drawing = QueueRenderPass.WorkTally.measure {
             bodies += Phase0cView.settle(bodyMustRun: true) {
-                let w = Phase0cViewRig.host(c, rows: shows, feed: feed, size: NSSize(width: 1000, height: 800))
+                let w = Phase0cViewRig.host(c, feed: feed, size: NSSize(width: 1000, height: 800))
                 window = w
                 return w
             }.bodies

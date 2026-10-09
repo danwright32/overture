@@ -16,12 +16,15 @@ struct InquiryIntakeSheet: View {
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
     // #1504: nil logs a new inquiry, non-nil edits that one. The same sheet serves both so the fields
     // and their normalization cannot drift apart between logging and correcting.
-    var editing: Inquiry?
+    var editing: Inquiry? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
-    @Query private var existing: [Inquiry]
+    // #4358 slice E4d (#4370): the inquiries the queue engine held at its last publish, handed in, so a landing that
+    // writes one redraws this sheet once, at its end, rather than through a query of its own. No default: a sheet
+    // that cannot see the logged inquiries would say an already logged one is new (L168).
+    let existing: [Inquiry]
 
     @State private var source: InquirySource = .directEmail
     @State private var name = ""

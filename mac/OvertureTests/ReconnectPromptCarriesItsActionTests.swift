@@ -80,7 +80,9 @@ struct ReconnectPromptCarriesItsActionTests {
             Issue.record("FollowUpsView call site not found in RootView")
             return
         }
-        let wiring = source[callSite.lowerBound...].prefix(300)
+        // 400 rather than 300 since #4358 slice E4d handed the sheet the engine's watchlist too, still well short of
+        // the next call site.
+        let wiring = source[callSite.lowerBound...].prefix(400)
         #expect(wiring.contains("onConnectGmail: connectGmail"),
                 "RootView presents FollowUpsView without a connect action, so its Connect Gmail button is dead (#2967)")
     }

@@ -694,7 +694,7 @@ struct QueueEngineNoticeCopyTests {
 
 // MARK: - What the switch reads off the pass (#4358 slice E4d)
 
-@Suite("The engine's pass carries the shows the next Prep run would take (#4358 E4d)")
+@Suite("RootView's Prep gate and the verifier's session count read what the engine holds (#4358 E4d)")
 @MainActor
 final class QueueEngineSwitchReadsTests {
 
@@ -716,5 +716,22 @@ final class QueueEngineSwitchReadsTests {
             .filter { PrepQueueBuilder.needsPrepEligible($0, today: today) }.map(ShowIdentity.init)
         #expect(!expected.isEmpty, "the fixture holds no show to prep, so the comparison is about nothing")
         #expect(pass.toPrep == expected)
+    }
+
+    // The launch notice says the session BEFORE's matches, from the lifetime count, which only ever grows.
+    @Test func eachSessionCountsItsOwnMatchesAndTheFirstCountsNone() {
+        let defaults = ScratchDefaults.make("QueueEngineSession")
+        defaults.set(10, forKey: CardDivergenceLog.verifierMatchCountKey)
+        QueueEngineSession.begin(defaults: defaults)
+        #expect(QueueEngineSession.previousMatches(defaults: defaults) == 0, "a first launch has no session before it")
+        let matchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        defaults.set(17, forKey: CardDivergenceLog.verifierMatchCountKey)
+        defaults.set(matchedAt, forKey: CardDivergenceLog.verifierLastMatchedKey)
+        QueueEngineSession.begin(defaults: defaults)
+        #expect(QueueEngineSession.previousMatches(defaults: defaults) == 7)
+        #expect(QueueEngineSession.previousLastMatchedAt(defaults: defaults) == matchedAt)
+        QueueEngineSession.begin(defaults: defaults)
+        #expect(QueueEngineSession.previousMatches(defaults: defaults) == 0,
+                "a session that matched nothing must read as never checked, never as the one before it")
     }
 }

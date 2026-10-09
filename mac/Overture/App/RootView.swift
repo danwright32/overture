@@ -99,46 +99,48 @@ struct RootView: View {
     // to filter down to exactly them. Cleared by the queue once it has acted on it.
     @State private var deepLinkedKeys: LeadsDeepLink?
 
-    // Kept prospects with no draft yet: what a Prep run would work on.
-    // #367: shares PrepQueueBuilder.needsPrepPredicate rather than an inline #Predicate literal,
-    // so this gate for enabling "Prep kept" stays in lockstep with every other eligibility check
-    // (a #Predicate macro can't call the plain-Swift needsPrep function the other checks use, so
-    // this is the one place the SAME logic has to be expressed a second way; see
-    // PrepQueueEligibilityParityTests for the guard against the two drifting apart).
-    //
-    // #4136: the query fetches the STATUS half only, because a @Query's predicate is fixed when the view is
-    // built and cannot follow the calendar as it turns over. `toPrep` below applies the whole rule, date
-    // included, so a kept show whose last night has passed never enables the button or reaches the sheet.
-    @Query(filter: PrepQueueBuilder.needsPrepPredicate)
-    private var toPrepByStatus: [Prospect]
-    private var toPrep: [Prospect] {
-        PrepQueueBuilder.eligible(toPrepByStatus, today: QueueModel.easternToday())
+    // #4358 slice E4d (plan v7 Phases 4 and 5): THE QUEUE ENGINE, and every read this view used to make through a
+    // query of its own. It held six: the whole show table, the prep queue's status filter, the inquiries, the
+    // watchlist and the two town tables, each re-read on every store change, and each one redrew this window and
+    // every sheet over it mid-landing (#4370). The engine holds every one of those rows as a value, and what the
+    // sheets and the toolbar read is `rows`, the rows as the engine held them at its last publish
+    // (`QueueEngineHost`). Built on the first draw, from this window's own main context; started when it appears.
+    @State private var engineHost: QueueEngineHost
+    // #4358 slice E4d: whether this window has said what the verifier found in the session before (once per window).
+    @State private var saidTheLastSessionsVerifier = false
+    private var engine: QueueEngineHost.Engine {
+        engineHost.engine(context: context, freezeWatch: { [freezeWatch] in freezeWatch },
+                          roster: { [clientRoster] in clientRoster })
+    }
+    private var rows: QueueEngineRows { engineHost.rows(of: engine) }
+
+    // The app hands nothing and gets a host of its own. The landing acceptance rig (#4343) hands one in, because it
+    // drives each landing below this view, the way this view's own entry points do, and so must open and close the
+    // landing generation on this window's engine around it, as they do (L472).
+    init(engineHost: QueueEngineHost = QueueEngineHost()) {
+        _engineHost = State(initialValue: engineHost)
     }
 
-    // All prospects, for the time-based follow-up due count (#45).
-    @Query private var allProspects: [Prospect]
-    // #3890: hire inquiries, because a reply waiting on Dan's answer is due work whichever kind of
-    // conversation it is on, and the Due pill, its sheet and the Dock badge all state that count. Its own
-    // query rather than QueueView's handed up: the table holds a handful of rows, so the duplicate read
-    // #3846 measured for prospects costs nothing here, and QueueView's screen tests rely on its own.
-    @Query private var allInquiries: [Inquiry]
-    // #805: the live store, not a snapshot taken when the window opened. A source that degrades DURING a
-    // scout must light the badge on that scout, not on the next launch.
-    @Query private var watchedSources: [WatchedSource]
-    // #1570: Dan's town refusals and un-skipped seed towns, read here for the same reason QueueView
-    // reads them: the routing below decides whether a show opens the Queue, and it can only answer that
-    // correctly if it applies the same geography gate the Queue's own lists do.
-    @Query private var excludedTownRows: [ExcludedTown]
-    @Query private var allowedSeedTownRows: [AllowedSeedTown]
-    private var geo: GeoRefusals {
-        GeoRefusals(userExcludedTowns: Set(excludedTownRows.map(\.town)),
-                    allowedSeedTowns: Set(allowedSeedTownRows.map(\.town)))
+    // Kept prospects with no draft yet whose last night is still ahead: what a Prep run would work on. #4358 slice
+    // E4d: an output of the engine's pass (`QueueEnginePass.toPrep`, the whole `needsPrepEligible` rule on the pass's
+    // own day), resolved through the engine, rather than the status query #367 and #4136 held beside it, which could
+    // not follow the calendar. Empty until the first pass lands.
+    private var toPrep: [Prospect] {
+        guard let pass = engine.output?.value else { return [] }
+        return pass.toPrep.compactMap { $0.resolve(in: engine).show }
     }
-    // #2365: an absent roster answers "no client information", which holds every show to the ordinary 90
-    // days. That is the wrong answer rather than a safe one, so it can only arise from a missing
-    // injection, never from a call site forgetting to pass it: `StageContext` requires the argument.
+
+    // #1570: Dan's town refusals and un-skipped seed towns, as the engine holds them: the routing below decides
+    // whether a show opens the Queue, and it can only answer that correctly with the same geography gate the
+    // Queue's own lists apply.
+    private var geo: GeoRefusals {
+        GeoRefusals(userExcludedTowns: Set(engine.facts.excludedTowns.values.map(\.town)),
+                    allowedSeedTowns: Set(engine.facts.allowedSeedTowns.values.map(\.town)))
+    }
+    // #2365: the client window the engine's last pass was derived with. An absent roster answers "no client
+    // information", which holds every show to the ordinary 90 days; the engine's reader is where that is decided.
     private var clientWindow: ClientWindow {
-        clientRoster?.window(for: watchedSources) ?? .none
+        engine.output?.context.clients ?? .none
     }
     // #3435 Phase 2e: the app watches its own main thread and writes what it finds. Held here because
     // this is the view that outlives every sheet, so the watch spans a session rather than a screen.
@@ -199,69 +201,20 @@ struct RootView: View {
     // because both describe the same run.
     @State private var readingSourceCount = 0
 
-    // #885: one definition of "due", shared with the sheet this badge opens (DueWork). Summed here in
-    // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
-    // lands on stated the same rule twice, with nothing asserting they agreed.
-    // #3885: memoised, because this is a whole-store sweep on every evaluation of this body.
-    //
-    // `DueWork.counts` walks every prospect, and the toolbar pill reads this on every RootView draw
-    // whatever provoked it. The marker file read beside it (`ReplyClassifyService.isRunning`) is paid
-    // on every one too. Neither is proportional to what changed.
-    //
-    // The key carries the corpus's identity AND the marker, because the count genuinely depends on both
-    // and a memo keyed on only the first would keep showing the old number while a classify run started
-    // or died (L40). The marker read is cheap and is paid to BUILD the key, which is the trade: the
-    // sweep is what this removes, not the read.
-    @State private var followUpsMemo = ScopeMemo<DueWork.CountAndNextChange>()
-
+    // #885: one definition of "due", shared with the sheet this badge opens (DueWork). #4358 slice E4d (plan v7 D5):
+    // read off the engine's published pass, `agentInputs.followUpsDue`, which is `DueWork.counts` over the same rows
+    // (`AgentInputs.from`) and the number the queue's own pill and the Dock tile state, so the three cannot disagree
+    // (L16). When it can next change by the clock alone is the engine's deadline (`QueueEnginePass.nextChange` holds
+    // `DueWork.nextChange`), so the badge needs no memo and no window of its own. Zero, which draws as "Due" with no
+    // count, until the first pass lands.
     private var followUpsDue: Int {
-        let now = Date()
-        // #2878: the badge counts a stalled reply draft too, because the sheet it opens now lists one.
-        // The liveness is read here rather than defaulted, so a classify run still beating is not
-        // reported as a dead one (#471, L168).
-        let replyRunAlive = ReplyClassifyService.isRunning(now: now)
-        var fingerprint = ScopeFingerprint()
-        fingerprint.add(allProspects)
-        fingerprint.add(allInquiries)
-        fingerprint.add(value: replyRunAlive)
-        // #4110: the memo expires when the count COULD next change, not every two seconds.
-        //
-        // WHAT WAS MEASURED, because the issue's own write-up infers a different cause and the code says
-        // otherwise. Driving this exact shape (`DueCountHoldsUntilItCouldChangeTests`): a genre edit,
-        // which is what Dan did before the 6.81s and 6.45s freezes of 2026-09-21, does NOT invalidate
-        // this memo. Observation tracking is per property and `DueWork` never reads `discipline`. What
-        // did invalidate it was the two second TTL, on its own, on a store nothing had touched.
-        //
-        // So the window was the cost. The build is a whole-store sweep over every prospect and every
-        // recipient's conversation state, and it ran again on the first render pass more than two
-        // seconds after the last one, which during a burst of activity is most of them.
-        //
-        // `DueWork.nextChange` already answers the question a window was standing in for, and #3474 built
-        // it for this very number: "the earliest future moment at which a rule ALREADY IN PLAY comes
-        // due". It is worked out INSIDE the build, beside the count, because it is another whole-store
-        // sweep and asking it on the cheap path would cost exactly what the memo saves (L431).
-        //
-        // WHAT IT CLAIMS is what `nextChange` claims and no more: a lower bound on the next change,
-        // judged on the eligibility that holds now. Eligibility can itself move with the clock, which is
-        // why the periodic reconcile stays the backstop. A store change is caught by the fingerprint and
-        // by observation tracking, both unchanged, so this only ever governs the CLOCK's half.
-        let staleAfter: ScopeMemo<DueWork.CountAndNextChange>.Staleness =
-            followUpsMemo.held.flatMap(\.couldChangeAt).map { .at($0) } ?? .never
-        // #4106: and any save into this store, through any context (see `ScopeMemo.value`'s `savesIn`).
-        return followUpsMemo.value(fingerprint: fingerprint, cardKeys: [], now: now,
-                                   staleAfter: staleAfter, savesIn: context.container,
-                                   // #4252: 27 ms to derive on the live store (2026-09-25), cheaper than
-                                   // the 134 ms re-arming a served refetch would cost, so it derives again.
-                                   onRefetch: .rebuild) {
-            DueWork.countAndNextChange(prospects: allProspects, inquiries: allInquiries, now: now,
-                                       replyRunAlive: replyRunAlive)
-        }.total
+        engine.output?.value.data.agentInputs.followUpsDue ?? 0
     }
 
     // #805: how many watched sources need Dan's eyes. Counted by SourceAttention and never summed here, for
     // the same reason as the Due pill above: the number on the button and the rows in the sheet it opens
     // must be one rule, not two that happen to agree.
-    private var sourcesNeedingALook: Int { SourceAttention.count(watchedSources) }
+    private var sourcesNeedingALook: Int { SourceAttention.count(rows.everySource) }
 
     // #901: Overture knows of no upcoming shoot, so the only days it can keep clear of are the ones Dan
     // types in himself. Asked of DaysOffAttention, never decided here, so the toolbar and the sheet it
@@ -358,7 +311,7 @@ struct RootView: View {
         if current != unreadableFiles { unreadableFiles = current }
         let responses = ResponseDecodeFailures.shared.failing()
         if responses != failingResponses { failingResponses = responses }
-        let bounces = BounceDetection.unresolvedBounces(in: allProspects)
+        let bounces = BounceDetection.unresolvedBounces(in: rows.everyShow)
         if bounces != bouncedPitches { bouncedPitches = bounces }
     }
 
@@ -457,7 +410,7 @@ struct RootView: View {
         return .queue
     }
 
-    private var nonDismissedProspects: [Prospect] { allProspects.filter { $0.status != .dismissed } }
+    private var nonDismissedProspects: [Prospect] { rows.everyShow.filter { $0.status != .dismissed } }
 
     // #3493: TAKES the rows rather than reading `nonDismissedProspects` itself.
     //
@@ -479,7 +432,7 @@ struct RootView: View {
     // `hasUnclearedConflict` and `conflictNote`, and the note is card-derived. It is also not on a
     // keystroke path at all: it is read inside a `.sheet` content closure, so it evaluates when the sheet
     // opens and never during a render of the queue behind it.
-    private var allItems: [QueueItem] { allProspects.map(QueueItem.init) }
+    private var allItems: [QueueItem] { rows.everyShow.map(QueueItem.init) }
 
     // #3655 Phase 5: the same shows as ROWS, which is what both halves of the search bar run on.
     //
@@ -488,7 +441,7 @@ struct RootView: View {
     // link) needs anything a row does not carry, which `ShowSearchFacts` is what enforces rather than
     // states.
     private var allRows: [QueueScopeRow] {
-        allProspects.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }
+        rows.everyShow.map { QueueScopeRow($0, facts: RecipientFacts.of($0)) }
     }
 
     // #1580: what the persistent bar above the Queue can find, which is exactly the shows a stage will
@@ -561,11 +514,11 @@ struct RootView: View {
     // #367/#733: shares ProspectMutations.bulkReprepEligible with bulkReprep itself, so the
     // menu's disabled state always agrees with what a tap would actually do.
     private var eligibleForBulkReprep: [Prospect] {
-        ProspectMutations.bulkReprepEligible(allProspects, now: Date())
+        ProspectMutations.bulkReprepEligible(rows.everyShow, now: Date())
     }
 
     private func bulkReprep(_ mode: ReprepMode) {
-        ProspectMutations.bulkReprep(mode, shows: allProspects, context: context, feedback: feedback)
+        ProspectMutations.bulkReprep(mode, shows: engine, context: context, feedback: feedback)
     }
 
     // #355: glanceable freshness, reusing the same coarse relative-time formatter PrepStatus and
@@ -605,10 +558,10 @@ struct RootView: View {
     private var rootRenderInputs: [String: String] {
         [
             "toPrep": "\(toPrep.count)",
-            "allProspects": "\(allProspects.count)",
-            "watchedSources": "\(watchedSources.count)",
-            "excludedTowns": "\(excludedTownRows.count)",
-            "allowedSeedTowns": "\(allowedSeedTownRows.count)",
+            "generation": "\(engine.output?.generation ?? -1)",
+            "watchedSources": "\(engine.facts.watchedSources.count)",
+            "excludedTowns": "\(engine.facts.excludedTowns.count)",
+            "allowedSeedTowns": "\(engine.facts.allowedSeedTowns.count)",
             "gmail": "\(GmailConnection.shared.isConnected)",
             "isConnectingGmail": "\(isConnectingGmail)",
             "gmailConnectStarted": "\(gmailConnectStartedAt != nil)",
@@ -733,16 +686,7 @@ struct RootView: View {
     }
 
     private var queueSurface: some View {
-        QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                  // #3846: THIS view's whole-table read, handed down. QueueView held a bare @Query
-                  // over Prospect identical to the one above, and two identical bare descriptors in
-                  // two live views share nothing: the second cost 99.6% of the first, measured
-                  // 2026-09-12 over 1,238 rows. Both views are always on screen, so the app read the
-                  // whole prospect table twice on every store change.
-                  allProspects: allProspects,
-                  // #4106 Step V: the queue derives its own RenderData through the render memo. A served
-                  // one is a test seam only (`QueueRenderDataProviderWiringTests`, L718).
-                  renderDataProvider: QueueMemoRenderData(),
+        QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
                   onConnectGmail: connectGmail,
                   // #2204: out of the toolbar's status slot, which macOS hides in the overflow chevron at
                   // Dan's ordinary window width, and onto the masthead he reads.
@@ -855,7 +799,7 @@ struct RootView: View {
                 // follow-up (a late reply on a different contact) after it's left the Queue entirely.
                 if let key = OvertureDeepLink.leadKey(from: url) { routeDeepLink(toKey: key) }
             }
-            .sheet(isPresented: Bindable(addLead).isPresented) { AddLeadSheet() }
+            .sheet(isPresented: Bindable(addLead).isPresented) { AddLeadSheet(watched: rows.everySource) }
             .toolbar {
                 // #2204: there is no status slot here any more. macOS moved it into the overflow chevron
                 // at Dan's ordinary half-screen width, so every message it carried (the do-not-contact
@@ -1204,6 +1148,13 @@ struct RootView: View {
     // The attended launch work and the watchers that follow it.
     private func withLifecycle<Content: View>(_ content: Content) -> some View {
         content
+            // #4358 slice E4d: the queue engine starts when the window appears, and its launch (D6) reads the store off
+            // the main thread while the queue shows that it is loading. Built here if the first draw has not built it,
+            // so the order of the two can never leave it unstarted.
+            .onAppear {
+                _ = engine
+                engineHost.start(roster: clientRoster)
+            }
             .task {
                 // The ATTENDED launch work (window present). The SAFE reconciles (booking detection,
                 // reply detection, and the OmniFocus push) and the Downbeat-export watcher now live on
@@ -1411,6 +1362,9 @@ struct RootView: View {
             }
         }
         guard !actionable.isEmpty else { return }
+        // #4369 (#4358 slice E4d): a replay lands shows, so the queue engine holds every surface until it is done.
+        let landing = engine.openLanding()
+        defer { engine.closeLanding(landing) }
         // What only a replay reads (the client list, the match history, the blocked calendar), read only when
         // one is waiting, through `LandingInputs` as every other landing reads them (#4526), so the show table
         // is read off the main thread. A table that cannot be read is SAID and the replay waits with its copy
@@ -1599,7 +1553,7 @@ struct RootView: View {
             .sheet(isPresented: $scoutSheetShown, onDismiss: { scoutWarnings = nil }) {
                 if let scoutWarnings {
                     // Fires once, at the true end of a manual run; lets Dan fix or confirm a source inline.
-                    ScoutSummaryView(warnings: scoutWarnings,
+                    ScoutSummaryView(warnings: scoutWarnings, sources: rows.everySource,
                                      onReadFixed: { ids in runScout(only: ids) },
                                      // #1190: check the sources this run was over budget to reach. The
                                      // ordinary runScout() reads the next batch first (its fairness clock
@@ -1613,15 +1567,16 @@ struct RootView: View {
             .sheet(isPresented: $showArchive) {
                 // #3846: the sheet's rows come from here rather than from a second whole-table query
                 // of its own, which added 165.0 ms to every store change for as long as it was open.
-                ArchiveView(prospects: allProspects,
+                ArchiveView(rows: rows,
                             initialHighlightKey: archiveJumpKey,
                             initialHighlightRecipientId: archiveJumpRecipientId,
                             initialQuery: archiveOpeningQuery, onConnectGmail: connectGmail)
             }
-            .sheet(isPresented: $showPatterns) { OutcomePatternsView(prospects: allProspects) }
-            .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet() }
+            .sheet(isPresented: $showPatterns) { OutcomePatternsView(prospects: rows.everyShow) }
+            .sheet(isPresented: $showInquiryIntake) { InquiryIntakeSheet(existing: rows.everyInquiry) }
             .sheet(isPresented: $showFollowUps) {
-                FollowUpsView(prospects: allProspects, inquiries: allInquiries, onOpenInArchive: { key, recipientId in
+                FollowUpsView(prospects: rows.everyShow, inquiries: rows.everyInquiry, watchedSources: rows.everySource,
+                              onOpenInArchive: { key, recipientId in
                     showFollowUps = false
                     openArchive(key: key, recipientId: recipientId)
                 }, onConnectGmail: connectGmail)
@@ -1645,19 +1600,19 @@ struct RootView: View {
             // closes only that run's takeover.
             .sheet(isPresented: runTakeoverBinding) { prepProgressModal }
             .sheet(isPresented: $showSources) {
-                SourcesView(prospects: allProspects, readOne: { runScout(only: [$0.sourceId]) })
+                SourcesView(held: rows, readOne: { runScout(only: [$0.sourceId]) })
             }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
-            .sheet(isPresented: $showStruckAddresses) { StruckAddressesView(prospects: allProspects) }
+            .sheet(isPresented: $showStruckAddresses) { StruckAddressesView(prospects: rows.everyShow) }
             // #1794: tapping an entry closes the sheet and filters the queue to that organisation's
             // shows. Through the SAME channel the away-alert leads path uses (`deepLinkedKeys`), never a
             // second filter mechanism, which is what Dan's note asked for. The request carries its own
             // identity (#1927), so tapping one organisation, coming back and tapping it again works: a
             // channel carrying the destination would read the second tap as no change at all.
             .sheet(isPresented: $showOrganisations) {
-                OrganisationsView(prospects: allProspects, onShowShows: { entry in
+                OrganisationsView(prospects: rows.everyShow, onShowShows: { entry in
                     let keys = OrganisationListing.naturalKeys(forOrganisation: entry.key,
                                                                in: nonDismissedProspects)
                     // An entry covering nothing would close the sheet onto an empty focused list, which
@@ -1717,6 +1672,8 @@ struct RootView: View {
             // the surfaces so a missed injection is a pass nobody counted rather than a crash.
             .environment(freezeWatch)
             .environment(availability)   // #1421: the Days off sheet reads the calendar this view keeps
+            // #4358 slice E4d: the Add lead sheet's paste is a landing, held through this window's queue engine.
+            .environment(engineHost)
             // #1414: the Edit menu's Undo raises a token on the App; the reversal happens HERE, where
             // the context, the live rows and the feedback banner all exist.
             .onChange(of: undoRequest.token) { _, _ in performQueueUndo() }
@@ -1732,7 +1689,7 @@ struct RootView: View {
         guard let entry = undoStack.takeTop() else { return }
         // #4532: by each row's store identity, never its key, so an undo recorded on a show merged away
         // since is refused rather than applied to the survivor that adopted its key.
-        let outcome = QueueUndo.apply(entry, resolving: allProspects, in: context)
+        let outcome = QueueUndo.apply(entry, resolving: engine, in: context)
         guard outcome.didAnything else {
             // #1415: the row moved since (a scout re-scored it, a sweep took it, a send made it contacted)
             // or is gone, so there is nothing to put back. Since #1134 the store and the visible stage move
@@ -1828,7 +1785,7 @@ struct RootView: View {
     }
 
     private func debugStageFirstAsSent() {
-        guard let target = allProspects.first(where: { $0.sentAt == nil }) else {
+        guard let target = rows.everyShow.first(where: { $0.sentAt == nil }) else {
             status.set("DEBUG: no un-sent prospect to stage")
             return
         }
@@ -2502,6 +2459,10 @@ struct RootView: View {
         // can copy exactly what it decoded (`ScoutExtractLanding`), never whatever the file holds by then.
         // #4339 (A11): the read phase, in Integration, so the first hold probe measures the product's own.
         guard let file = LandingInputs.readResultsFile() else { return nil }
+        // #4369 (#4358 slice E4d): the queue engine holds every surface until this landing is done, so its shows
+        // arrive in one redraw rather than one per batch.
+        let landing = engine.openLanding()
+        defer { engine.closeLanding(landing) }
         // #4338 (A10): the landing line shows this landing from its read phase to its return.
         LandingMarker.shared.began(.calendarResults, at: Date())
         let inputs = await LandingInputs.read(into: context)
@@ -2540,6 +2501,9 @@ struct RootView: View {
             return
         }
         LandingMarker.shared.began(.keptResults, at: Date())
+        // #4369 (#4358 slice E4d): held, as every landing is, until the kept results have landed.
+        let landing = engine.openLanding()
+        defer { engine.closeLanding(landing) }
         let inputs = await LandingInputs.read(into: context)
         let offered = await ScoutExtractLanding.offerPending(
             clients: inputs.clients, history: inputs.history, blocked: inputs.blocked,
@@ -2791,8 +2755,41 @@ struct RootView: View {
     private func reportWhatWasRecorded() {
         Task {
             if await reportAnyFreezes() { return }
-            reportAnyCardDivergences()
+            if reportAnyCardDivergences() { return }
+            reportTheQueueEngine()
         }
+    }
+
+    // #4358 slice E4d (plan item 10): what the queue engine's verifier found, for Dan and for the log.
+    //
+    // THE LOG LINE, on every call: the verifier's matches, the faulted rows, the four full-read nets and the launch
+    // fill's cost, so #4343's real-use day can be read from the log (the E4 plan's section 1, point 1). Never shown.
+    //
+    // THE NOTICE, after the freeze and divergence notices and only when neither landed (the order and the early
+    // returns above, for their reason): once per window, the session before's verifier count, where zero is "never
+    // checked" and never "clean" (L557); and on any call, a show that is out of step, which names the button that
+    // fixes it. Nothing at all when no show is out of step and the count has been said (L36).
+    private func reportTheQueueEngine() {
+        let engine = self.engine
+        let defaults = UserDefaults.standard
+        AgentLog.note(QueueEngineNoticeCopy.verifierLogLine(
+            matches: engine.verifierCounts.matches, lastMatchedAt: engine.verifierCounts.lastMatchedAt,
+            faults: engine.faultSummary, counters: engine.counters))
+        let fill = engine.fillReport
+        // copy-inventory:ignore-start  developer diagnostic log, never shown to Dan (#4358)
+        AgentLog.note("Queue engine launch fill: \(fill.shows) shows in \(fill.batches) batches, slowest "
+                      + String(format: "%.1f ms", fill.slowestBatch * 1000) + ", \(fill.batchesOverBudget) over "
+                      + "the 16 ms budget.")
+        // copy-inventory:ignore-end
+        if let fault = QueueEngineNoticeCopy.faultSentence(engine.faultSummary) {
+            status.set(fault, priority: .warning)
+            return
+        }
+        guard !saidTheLastSessionsVerifier else { return }
+        saidTheLastSessionsVerifier = true
+        status.set(QueueEngineNoticeCopy.verifierSentence(
+            matches: QueueEngineSession.previousMatches(defaults: defaults),
+            lastMatchedAt: QueueEngineSession.previousLastMatchedAt(defaults: defaults)))
     }
 
     // #3435/#3763: bound the freeze log and prune the archive it fills. ONE method, called from the
@@ -2918,6 +2915,10 @@ struct RootView: View {
             scoutSheetShown = true
         }
         scoutTask = Task {
+            // #4369 (#4358 slice E4d): the sweep lands shows, so the queue engine holds every surface until the run
+            // ends, however it ends, and redraws once.
+            let landing = engine.openLanding()
+            defer { engine.closeLanding(landing) }
             do {
                 // #4330 (A13): a press Dan made waits its turn when a landing holds the store, says so in
                 // the acknowledgement, and starts the sweep once that landing has finished. The scheduled

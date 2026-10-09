@@ -685,7 +685,7 @@ struct QueueViewAttributionProbeTests {
         let out = try dir(label)
 
         // Warm the host once, untimed and unsampled, exactly as 0c.8 does.
-        let warm = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
+        let warm = Phase0cViewRig.host(container, feed: Phase0cServedFeed(a), size: size)
         _ = Phase0cView.settle(warm, bodyMustRun: true) {}
         HostedPassCounting.unmountAndClose(warm)
         _ = registry.takeKeys()
@@ -698,7 +698,7 @@ struct QueueViewAttributionProbeTests {
                 var w: NSWindow?
                 rs.append(rig.read(data: a) {
                     Phase0cView.settle(bodyMustRun: true) {
-                        let made = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: h)
+                        let made = Phase0cViewRig.host(container, feed: Phase0cServedFeed(a), size: h)
                         w = made
                         return made
                     }
@@ -722,7 +722,7 @@ struct QueueViewAttributionProbeTests {
             var w: NSWindow?
             let r = rig.read(data: a) {
                 Phase0cView.settle(bodyMustRun: true) {
-                    let made = Phase0cViewRig.host(container, rows: t.rows, feed: Phase0cServedFeed(a), size: size)
+                    let made = Phase0cViewRig.host(container, feed: Phase0cServedFeed(a), size: size)
                     w = made
                     return made
                 }
@@ -733,7 +733,7 @@ struct QueueViewAttributionProbeTests {
 
         // One window for the per-change kinds, drawn and settled before anything is sampled.
         let feed = Phase0cServedFeed(a)
-        let window = Phase0cViewRig.host(container, rows: t.rows, feed: feed, size: size)
+        let window = Phase0cViewRig.host(container, feed: feed, size: size)
         defer { HostedPassCounting.unmountAndClose(window) }
         _ = Phase0cView.settle(window, bodyMustRun: true) {}
         let drawnOnA = registry.takeKeys()
@@ -796,7 +796,7 @@ struct QueueViewAttributionProbeTests {
             closing.status = was
             let link = Phase0cViewRig.DeepLinkChannel()
             let reachedFeed = Phase0cServedFeed(reachedA)
-            let reachedWindow = Phase0cViewRig.host(container, rows: t.rows, feed: reachedFeed, size: size,
+            let reachedWindow = Phase0cViewRig.host(container, feed: reachedFeed, size: size,
                                                     link: link)
             defer { HostedPassCounting.unmountAndClose(reachedWindow) }
             _ = Phase0cView.settle(reachedWindow, bodyMustRun: true) {}

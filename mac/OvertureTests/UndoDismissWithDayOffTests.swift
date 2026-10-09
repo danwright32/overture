@@ -217,7 +217,7 @@ struct UndoDismissWithDayOffWiringTests {
     @Test func theWindowsUndoPassesTheStoreSoTheDayOffHalfCanRun() {
         let root = source("Overture/App/RootView.swift")
         // #4532: resolved through the live rows by identity, with the store passed in the same call.
-        #expect(root.contains("QueueUndo.apply(entry, resolving: allProspects, in: context)"))
+        #expect(root.contains("QueueUndo.apply(entry, resolving: engine, in: context)"))
     }
 
     // #1415: an undo restores a row into a stage Dan is usually not looking at, so a working Cmd+Z was

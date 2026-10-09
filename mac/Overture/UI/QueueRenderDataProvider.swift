@@ -1,24 +1,17 @@
 import Foundation
 
-// #4106 Step V: where `QueueView` gets the RenderData its body draws.
+// #4106 Step V: a RenderData `QueueView` draws INSTEAD of the queue engine's published pass.
 //
-// WHY A SEAM. Phase 0c.8 has to time the queue's body plus a forced layout and display pass over a
-// RenderData that is SERVED, so the whole-store derivation is not inside the measurement and the number
-// is the view's own cost (L472). The body could not be handed one: it derived its own, through the render
-// memo in `makeRenderData`, on every evaluation.
+// WHY A SEAM. Phase 0c.8 times the queue's body plus a forced layout and display pass over a RenderData that is
+// SERVED, so the derivation is not inside the measurement and the number is the view's own cost (L472).
 //
-// SO THE PRODUCTION PROVIDER SERVES NOTHING. `QueueMemoRenderData` answers nil, and `makeRenderData` then
-// runs exactly the path it always ran: the freeze stamp, the memo, its key and its `savesIn` invalidation,
-// none of which moved. A provider that serves a prebuilt RenderData belongs in a test target and nowhere
-// else, and `QueueRenderDataProviderWiringTests` holds both halves of that: `RootView` passes this one,
-// and no other type in the app conforms (L718).
+// #4358 slice E4d: the app's queue draws the engine's published pass (`QueueEngineHost`), and hands no provider.
+// The memo provider that served nothing, so the body derived through its own render memo, went with that memo:
+// there is no derivation in the body left to serve around. A provider belongs in a test target and nowhere else,
+// and `QueueRenderDataProviderWiringTests` holds both halves of that: `RootView` passes none, and no type in the
+// app conforms (L718).
 @MainActor
 protocol QueueRenderDataProvider {
-    // A RenderData to draw INSTEAD of deriving one, or nil to derive it through the render memo.
+    // A RenderData to draw instead of the engine's pass, or nil to draw the engine's.
     func servedRenderData() -> QueueView.RenderData?
-}
-
-// The only provider the app has: derive, as the queue always did.
-struct QueueMemoRenderData: QueueRenderDataProvider {
-    func servedRenderData() -> QueueView.RenderData? { nil }
 }

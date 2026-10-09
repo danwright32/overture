@@ -44,7 +44,9 @@ struct FeltWaitCostTests {
     private static let corpusSize = 1224
 
     private func container() throws -> ModelContainer {
-        let made = try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self, OrgReachabilityAnswer.self, WatchedSource.self, RefusedContactAddress.self, PromotedProducer.self, DemotedHouse.self])
+        // #4358 slice E4d: the whole schema, because the queue engine every test here starts reads every table it
+        // holds, the two town tables included (the chunk review of E4d2).
+        let made = try TestModelContainer.inMemory(AppSchema.models)
         // #3874 PROBE, not a fix yet. `.modelContainer(c)` hands SwiftUI this container's mainContext,
         // whose autosave is ON by default and schedules a run loop timer. The crash is that timer firing
         // into a `_SwiftData_SwiftUI` observer between tests, and nothing in this repository sets
@@ -133,8 +135,10 @@ struct FeltWaitCostTests {
     // and a hang is indistinguishable from a slow machine while holding the shared xcodebuild lock
     // (L110). It stops the MOMENT the condition holds, so the ordinary case is fast and only the failing
     // one runs out its deadline (L290).
+    // #4358 slice E4d: AWAITED between polls rather than turning the run loop. The pass runs in the queue engine's
+    // own turn, a main actor task, which a nested run of the run loop inside this one never reaches.
     private func pumpUntilCardsBuilt(_ expected: Int, from start: Int, in hosting: NSView,
-                                     seconds: TimeInterval = 20) -> Bool {
+                                     seconds: TimeInterval = 20) async -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
         while Date() < deadline {
             if (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - start >= expected { return true }
@@ -149,7 +153,7 @@ struct FeltWaitCostTests {
             // passes and one are the same number of milliseconds to anybody reading only the clock.
             hosting.layoutSubtreeIfNeeded()
             hosting.displayIfNeeded()
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+            try? await Task.sleep(for: .milliseconds(10))
         }
         return (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - start >= expected
     }
@@ -159,31 +163,26 @@ struct FeltWaitCostTests {
     // this harness quietly different from the app on the one path #1573 is about.
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         @State private var deepLinkedKey: LeadDeepLink?
         @State private var deepLinkedKeys: LeadsDeepLink?
         @State private var feedback = ActionFeedback()
         @State private var dayOffOffer = DayOffOfferRequest()
-        // #4534: frozen, pinned once when the harness is built, so a late evaluation past the render
-        // memo's two second window cannot add a whole-store pass the press never caused, and the
-        // passes-per-press ratio below stays about the press (#4516's mechanism).
-        var clock = HostedPassCounting.frozenClock()
 
         var body: some View {
-            // #3846: QueueView takes its rows rather than querying the table itself, because RootView
-            // already holds an identical bare query and two of them share nothing. This harness plays
-            // RootView's part, so what is measured below is still the store-to-screen path.
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, clock: clock)
-            }
+            // #4358 slice E4d: QueueView draws the engine RootView builds; this harness plays RootView's part.
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys)
             .modelContainer(container)
             .environment(feedback)
             .environment(dayOffOffer)
         }
     }
 
-    private func queueView(_ container: ModelContainer) -> some View {
-        Harness(container: container)
+    // #4358 slice E4d: the queue draws the engine RootView builds, over the same store's main context, which is the
+    // context every write below goes through, as the app's controls write.
+    private func queueView(_ container: ModelContainer) async throws -> some View {
+        Harness(container: container, engine: try await HostedQueueEngine.started(context: container.mainContext))
     }
 
     // Draw the list once, and wait for it to finish, BEFORE anything is timed.
@@ -198,11 +197,11 @@ struct FeltWaitCostTests {
     // Without it the first render lands inside the measurement: the reading was 1,331 ms and entirely
     // plausible, and the card count beside it said 2,282 over a corpus of 1,142, which is two whole-store
     // passes reported as the cost of one. That is the reason the count is printed at all (L98).
-    private func warmTheList(_ ctx: ModelContext, keys: [String], rows: Int, in hosting: NSView) -> Bool {
+    private func warmTheList(_ ctx: ModelContext, keys: [String], rows: Int, in hosting: NSView) async -> Bool {
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         ProspectMutations.dismissAll([keys[keys.count - 1]], reason: .notAFit, dateLabel: "1 Aug",
                                      shows: all, context: ctx, feedback: ActionFeedback())
-        return pumpUntilCardsBuilt(rows - 1, from: 0, in: hosting, seconds: 90)
+        return await pumpUntilCardsBuilt(rows - 1, from: 0, in: hosting, seconds: 90)
     }
 
     // The rig, proved before anything is concluded from it. A press that provoked no rebuild makes every
@@ -212,20 +211,21 @@ struct FeltWaitCostTests {
     // the queue, which is the claim every timing here rests on.
     @Test func aPressReallyRebuildsTheQueue() async throws {
         let c = try container()
-        let ctx = ModelContext(c)
+        let ctx = c.mainContext
         // A small corpus: this asserts the mechanism, not the cost, and the cost test below is the one
         // that needs the live shape.
         let keys = seed(ctx, rows: 40)
 
-        let (window, hosting) = host(queueView(c))
+        let (window, hosting) = host(try await queueView(c))
         defer { HostedPassCounting.unmountAndClose(window) }
 
         var rebuiltAfterThePress = false
         var warmed = false
         var cardsAfterThePress = 0
         var rowsAfterThePress = 0
-        let built = QueueRenderPass.WorkTally.measure {
-            warmed = warmTheList(ctx, keys: keys, rows: 40, in: hosting)
+        let built = QueueRenderPass.WorkTally()
+        await QueueRenderPass.WorkTally.$current.withValue(built) {
+            warmed = await warmTheList(ctx, keys: keys, rows: 40, in: hosting)
             // #3653 step 3a: TWO baselines, because these are two quantities now. The pump waits on ROWS
             // built, and what the test reports is CARDS built, and folding them would give a card delta
             // measured from a row baseline: the same number today, and silently wrong the moment #3654
@@ -237,14 +237,14 @@ struct FeltWaitCostTests {
                                          shows: rows, context: ctx, feedback: ActionFeedback())
             // Two fewer than the corpus: the warm-up dismissed one and this press dismisses another, and
             // both leave the queue's own scope.
-            rebuiltAfterThePress = pumpUntilCardsBuilt(38, from: settledRows, in: hosting, seconds: 20)
+            rebuiltAfterThePress = await pumpUntilCardsBuilt(38, from: settledRows, in: hosting, seconds: 20)
             // A moment longer AFTER the condition holds, so a SECOND pass provoked by the same press is
             // counted rather than being cut off by the wait ending at the first one.
             let settle = Date().addingTimeInterval(1)
             while Date() < settle {
                 hosting.layoutSubtreeIfNeeded()
                 hosting.displayIfNeeded()
-                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+                try? await Task.sleep(for: .milliseconds(10))
             }
             rowsAfterThePress = (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - settledRows
             cardsAfterThePress = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settledCards
@@ -321,15 +321,15 @@ struct FeltWaitCostTests {
     // (L63, L247).
     @Test func anyWriteAtAllCostsExactlyOnePass() async throws {
         let c = try container()
-        let ctx = ModelContext(c)
+        let ctx = c.mainContext
         let keys = seed(ctx, rows: 40)
-        let (window, hosting) = host(queueView(c))
+        let (window, hosting) = host(try await queueView(c))
         defer { HostedPassCounting.unmountAndClose(window) }
 
         var rowsAfterTheWrite = 0
         var warmed = false
-        _ = QueueRenderPass.WorkTally.measure {
-            warmed = warmTheList(ctx, keys: keys, rows: 40, in: hosting)
+        await QueueRenderPass.WorkTally.$current.withValue(QueueRenderPass.WorkTally()) {
+            warmed = await warmTheList(ctx, keys: keys, rows: 40, in: hosting)
             // #3653 step 3a: TWO baselines, because these are two quantities now. The pump waits on ROWS
             // built, and what the test reports is CARDS built, and folding them would give a card delta
             // measured from a row baseline: the same number today, and silently wrong the moment #3654
@@ -341,12 +341,12 @@ struct FeltWaitCostTests {
             rows.first { $0.naturalKey == keys[0] }?.fitScore = 9
             try? ctx.save()
 
-            _ = pumpUntilCardsBuilt(39, from: settledRows, in: hosting, seconds: 20)
+            _ = await pumpUntilCardsBuilt(39, from: settledRows, in: hosting, seconds: 20)
             let settle = Date().addingTimeInterval(1)
             while Date() < settle {
                 hosting.layoutSubtreeIfNeeded()
                 hosting.displayIfNeeded()
-                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+                try? await Task.sleep(for: .milliseconds(10))
             }
             rowsAfterTheWrite = (QueueRenderPass.WorkTally.current?.queueRows ?? 0) - settledRows
         }
@@ -367,7 +367,7 @@ struct FeltWaitCostTests {
                 + "one means something on the render path derives the store a second time (#2598)."))
     }
 
-    @Test func measureWhatAPressCosts() throws {
+    @Test func measureWhatAPressCosts() async throws {
         guard ProcessInfo.processInfo.environment["MEASURE_FELT_WAIT"] != nil else {
             // Not silently skipped: an instrument that says nothing is indistinguishable from one that
             // ran and found nothing (L98).
@@ -376,10 +376,10 @@ struct FeltWaitCostTests {
         }
 
         let c = try container()
-        let ctx = ModelContext(c)
+        let ctx = c.mainContext
         let keys = seed(ctx, rows: Self.corpusSize)
 
-        let (window, hosting) = host(queueView(c))
+        let (window, hosting) = host(try await queueView(c))
         defer { HostedPassCounting.unmountAndClose(window) }
 
         var writeSeconds = 0.0
@@ -388,10 +388,11 @@ struct FeltWaitCostTests {
         var cardsInTheRebuild = 0
         var firstRenderSettled = false
 
-        let work = QueueRenderPass.WorkTally.measure {
+        let work = QueueRenderPass.WorkTally()
+        await QueueRenderPass.WorkTally.$current.withValue(work) {
             // Draw the list once and let it settle, so what is timed below is a press on a DRAWN list
             // rather than the list appearing for the first time.
-            firstRenderSettled = warmTheList(ctx, keys: keys, rows: Self.corpusSize, in: hosting)
+            firstRenderSettled = await warmTheList(ctx, keys: keys, rows: Self.corpusSize, in: hosting)
             // #3653 step 3a: TWO baselines, because these are two quantities now. The pump waits on ROWS
             // built, and what the test reports is CARDS built, and folding them would give a card delta
             // measured from a row baseline: the same number today, and silently wrong the moment #3654
@@ -410,7 +411,7 @@ struct FeltWaitCostTests {
             // 2. EVERYTHING AFTER: the query invalidating, the rebuild, and SwiftUI rendering the result.
             //    This is the half no existing instrument could see.
             // Two fewer than the corpus: the warm-up dismissed one and this press dismisses another.
-            rebuilt = pumpUntilCardsBuilt(Self.corpusSize - 2, from: settledRows, in: hosting, seconds: 60)
+            rebuilt = await pumpUntilCardsBuilt(Self.corpusSize - 2, from: settledRows, in: hosting, seconds: 60)
             afterSeconds = Date().timeIntervalSince(pressed) - writeSeconds
             cardsInTheRebuild = (QueueRenderPass.WorkTally.current?.queueItems ?? 0) - settledCards
         }

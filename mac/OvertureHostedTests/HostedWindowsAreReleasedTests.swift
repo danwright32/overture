@@ -68,7 +68,7 @@ struct HostedWindowsAreReleasedTests {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
                                   styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
-            let view = AnyView(RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+            let view = AnyView(RowsFromStore { (rows: [Prospect]) in ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: [])) }
                 .modelContainer(c)
                 .environment(ActionFeedback())
                 .environment(DayOffOfferRequest()))
@@ -206,7 +206,7 @@ struct HostedWindowsAreReleasedTests {
             do {
                 let feedback = ActionFeedback()
                 leftover = feedback
-                hostThenUnmount(RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+                hostThenUnmount(RowsFromStore { (rows: [Prospect]) in ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: [])) }
                     .modelContainer(c)
                     .environment(feedback)
                     .environment(DayOffOfferRequest()))
@@ -237,7 +237,7 @@ struct HostedWindowsAreReleasedTests {
             // Required by `TestWindowsAreNotReleasedOnCloseGuardTests` and not negotiable here: AppKit's
             // default releases a window this scope still holds, which is #3480's crash.
             window.isReleasedWhenClosed = false
-            let view = AnyView(RowsFromStore { (rows: [Prospect]) in ArchiveView(prospects: rows) }
+            let view = AnyView(RowsFromStore { (rows: [Prospect]) in ArchiveView(rows: QueueEngineRows(everyShow: rows, everyInquiry: [], everySource: [])) }
                 .modelContainer(c)
                 .environment(ActionFeedback())
                 .environment(DayOffOfferRequest()))

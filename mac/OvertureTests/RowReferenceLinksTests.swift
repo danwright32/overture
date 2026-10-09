@@ -178,19 +178,22 @@ struct ListingLinkLabelWiringTests {
     // a narrowed card set; the queue's own `items` is unchanged. Written as a pair with the file, and a
     // marker that matches nothing is still a recorded issue rather than a silent skip (L100).
     @Test func bothCardSurfacesPassTheWatchlistIn() {
-        let markers = ["Overture/UI/QueueView.swift": "private var items: [QueueItem] {",
-                       "Overture/UI/ArchiveView.swift": "private func makeScope() -> QueueModel.Scope {"]
-        for (path, marker) in markers {
+        // #4358 slice E4d: the queue's cards are built by the engine's pass, handed the watchlist the engine holds;
+        // a press's whole queue card question reads the table at the press; the Archive takes the engine's rows.
+        let markers: [(path: String, marker: String, passes: String)] = [
+            ("Overture/App/QueueEngineQueue.swift", "static func passInputs(", "sources: sources, refusals:"),
+            ("Overture/UI/QueueView.swift", "private func actionItems() -> [QueueItem] {", "sources: table(WatchedSource.self),"),
+            ("Overture/UI/ArchiveView.swift", "private func makeScope() -> QueueModel.Scope {", "sources: rows.everySource,"),
+        ]
+        for (path, marker, passes) in markers {
             let source = SourceGuardHelper.source(path)
             guard let body = SourceGuardHelper.propertyBody(marker, in: source)
             else {
                 Issue.record("\(path) no longer builds its cards through `\(marker)`")
                 continue
             }
-            #expect(body.contains("sources: watchedSources"),
+            #expect(body.contains(passes),
                     "\(path) builds cards without the watchlist, so every link would read as a per-event page")
-            #expect(source.contains("@Query private var watchedSources: [WatchedSource]"),
-                    "\(path) has no live watchlist query to pass")
         }
     }
 }

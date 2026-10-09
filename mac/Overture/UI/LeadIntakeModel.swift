@@ -77,6 +77,9 @@ final class LeadIntakeModel {
     // #4339: bumped by `reset()`, so a landing that finishes after Dan closed or restarted the sheet does not
     // write its answer over the screen he moved on to.
     private var generation = 0
+    /// #4369 (#4358 slice E4d): the queue engine's landing hold, handed in by the sheet from the window that owns the
+    /// engine. Nil when no window has built one, which leaves no queue on screen to hold.
+    @ObservationIgnored var landingHold: (any QueueLandingHold)?
 
     init(defaults: UserDefaults = .standard,
          // #858: the lead path, and ONLY the lead path, reads four months of a calendar. It can afford to:
@@ -416,6 +419,10 @@ final class LeadIntakeModel {
         // The landing awaits its read phase and its turn for the store, so the sheet says it is working, with
         // its own clock, rather than holding the read's answer as though nothing were happening.
         phase = .working(startedAt: Date())
+        // #4369 (#4358 slice E4d): the queue engine holds every surface until this landing closes, so the paste's
+        // shows arrive in one redraw. Closed in a `defer`, so a landing that returns early or refuses still closes.
+        let landing = landingHold?.openLanding()
+        defer { if let landing { landingHold?.closeLanding(landing) } }
         let started = generation
         // Taken before the await: a reset while the paste lands clears the field, and the link must still be
         // recorded as handed over if its shows land.

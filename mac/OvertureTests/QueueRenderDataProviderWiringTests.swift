@@ -1,7 +1,11 @@
 import Testing
 import Foundation
 
-// #4106 Step V: the queue takes its RenderData from a provider, and production must use the memo one.
+// #4106 Step V: the queue can be handed a RenderData by a provider, and production must hand it none.
+//
+// #4358 slice E4d re-aimed this: the app's queue draws the queue engine's published pass, and the memo provider that
+// served nothing (so the body derived through its own memo) went with that memo. So production passes the ENGINE and
+// no provider, the queue's provider defaults to none, and the app declares no provider at all.
 //
 // WHY THIS EXISTS. Step V gives `QueueView` a seam so Phase 0c.8 can time the body and its layout over a
 // SERVED RenderData, with the derivation out of the measurement. A view given its state by a seam is
@@ -14,16 +18,14 @@ import Foundation
 // A SOURCE SCAN, deliberately. `RootView` cannot be constructed in a unit test without its whole
 // environment, and what is being asserted is which value one call site passes, which is a fact about the
 // source (the `ReachedOutRowArchiveJumpGuardTests` shape, over the same call site).
-@Suite("The queue's production call site derives its own RenderData (#4106 Step V)")
+@Suite("The queue's production call site draws the engine's pass (#4106 Step V, #4358)")
 struct QueueRenderDataProviderWiringTests {
-
     private static let protocolName = "QueueRenderDataProvider"
-    private static let memoProvider = "QueueMemoRenderData"
 
     // The argument list of RootView's QueueView call, balanced by parentheses from its opening one, so an
     // argument written anywhere in it is found and nothing after the call is.
     static func queueViewArguments(inRootView source: String) -> String? {
-        guard let call = source.range(of: "QueueView(deepLinkedKey:") else { return nil }
+        guard let call = source.range(of: "QueueView(engine:") else { return nil }
         var index = source.index(before: call.upperBound)
         while source[index] != "(" { index = source.index(before: index) }
         let open = index
@@ -64,48 +66,38 @@ struct QueueRenderDataProviderWiringTests {
         return found.sorted()
     }
 
-    @Test func rootViewHandsTheQueueTheMemoProvider() throws {
+    @Test func rootViewHandsTheQueueTheEngineAndNoProvider() throws {
         let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
         #expect(!rootView.isEmpty, "RootView.swift could not be read, so nothing below was measured")
         let arguments = try #require(Self.queueViewArguments(inRootView: rootView),
                                      "RootView's QueueView call site was not found")
         // Decided first, so a failure prints the reason rather than the whole argument list (L445).
-        let passesTheMemo = SourceGuardHelper.containsCode("renderDataProvider: \(Self.memoProvider)()",
-                                                           in: arguments)
-        #expect(passesTheMemo, Comment(rawValue:
-            "RootView no longer hands QueueView the memo provider, so the app may be drawing a RenderData "
-            + "nobody derived. The seam exists for tests to serve one; production must derive (L718)."))
+        // The arguments run from the call's opening parenthesis, so the type's name is not in them.
+        let passesTheEngine = SourceGuardHelper.containsCode("(engine: engine,", in: arguments)
+        let passesAProvider = arguments.contains("renderDataProvider")
+        #expect(passesTheEngine, "RootView no longer hands QueueView its queue engine (#4358 slice E4d)")
+        #expect(!passesAProvider, Comment(rawValue:
+            "RootView hands QueueView a RenderData provider, so the app may be drawing a pass the engine never "
+            + "published. The seam exists for tests to serve one; production draws the engine's (L718)."))
     }
 
-    // The default a caller that passes nothing gets is the memo one too, so every hosted test that builds
-    // a QueueView without naming a provider is still exercising the production path.
-    @Test func theQueueDefaultsToTheMemoProvider() {
+    // The default a caller that passes nothing gets is NO provider, so every queue that names none draws the engine's
+    // pass, as the app's does.
+    @Test func theQueueDefaultsToNoProvider() {
         let queueView = SourceGuardHelper.source("Overture/UI/QueueView.swift")
-        let defaultsToTheMemo = SourceGuardHelper.containsCode(
-            "var renderDataProvider: any \(Self.protocolName) = \(Self.memoProvider)()", in: queueView)
-        #expect(defaultsToTheMemo, "QueueView's provider no longer defaults to the memo one")
+        #expect(SourceGuardHelper.containsCode(
+            "var renderDataProvider: (any \(Self.protocolName))? = nil", in: queueView),
+            "QueueView's provider no longer defaults to none")
     }
 
-    // And the memo provider serves nothing, which is what makes it the memo PATH rather than a second
-    // source of a RenderData: it hands the whole decision back to `makeRenderData`.
-    @MainActor
-    @Test func theMemoProviderServesNothing() {
-        #expect(QueueMemoRenderData().servedRenderData() == nil)
-    }
-
-    @Test func theMemoProviderIsTheOnlyOneTheAppDeclares() {
+    @Test func theAppDeclaresNoProvider() {
         let files = AppSourceWalk.appFiles().map { (name: $0.name, text: $0.text) }
         let found = Self.conformingTypes(in: files)
-        // THE POSITIVE CONTROL. An empty list is also what a scan that matched nothing returns, and it
-        // would read as the cleanest possible app (L98).
-        #expect(found.contains { $0.hasPrefix("\(Self.memoProvider) ") }, Comment(rawValue:
-            "the scan did not find the memo provider's own conformance, so it measured nothing: "
-            + "\(found)"))
-        let others = found.filter { !$0.hasPrefix("\(Self.memoProvider) ") }
-        #expect(others.isEmpty, Comment(rawValue:
-            "the app declares another RenderData provider: \(others.joined(separator: ", ")). A served "
-            + "RenderData is a test seam, and one living in the app is one RootView can be switched to "
-            + "(L718). Put it in a test target."))
+        // THE POSITIVE CONTROL is `theScanFindsEveryShapeOfConformance` below: an empty list is also what a scan
+        // that matched nothing returns, and that suite proves this one matches (L98).
+        #expect(found.isEmpty, Comment(rawValue:
+            "the app declares a RenderData provider: \(found.joined(separator: ", ")). A served RenderData is a "
+            + "test seam, and one living in the app is one RootView can be switched to (L718). Put it in a test target."))
     }
 
     // The scanner itself, over fixtures, so a regex that stopped matching cannot pass the guard above by

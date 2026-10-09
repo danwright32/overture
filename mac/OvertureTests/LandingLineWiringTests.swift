@@ -12,7 +12,7 @@ struct LandingLineWiringTests {
     private let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
 
     @Test func rootViewHandsTheQueueRealHandlers() throws {
-        let call = try #require(root.range(of: "QueueView(deepLinkedKey:"), "the queue's construction moved")
+        let call = try #require(root.range(of: "QueueView(engine:"), "the queue's construction moved")
         let rest = root[call.upperBound...]
         let handed = try #require(rest.range(of: "landingLine: LandingLineHandlers(perform:"),
                                   "RootView no longer hands the landing line its handlers")

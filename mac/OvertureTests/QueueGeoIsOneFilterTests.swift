@@ -199,7 +199,9 @@ struct QueueGeoWiringGuardTests {
 
     @Test func theQueueBuildsItsRefusalsFromDansStoredTowns() {
         #expect(!queueView.isEmpty)
-        #expect(queueView.contains("GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)"))
+        // #4358 slice E4d: from the town refusals the queue engine holds, which are Dan's stored towns as values.
+        #expect(queueView.contains("GeoRefusals(userExcludedTowns: Set(engine.facts.excludedTowns.values.map(\\.town)),"))
+        #expect(queueView.contains("allowedSeedTowns: Set(engine.facts.allowedSeedTowns.values.map(\\.town)))"))
     }
 
     // #1913: the derivation moved into QueueRenderPass, so three of these calls live there now and the

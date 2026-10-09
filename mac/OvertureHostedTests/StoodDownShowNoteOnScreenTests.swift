@@ -49,7 +49,7 @@ struct StoodDownShowNoteOnScreenTests {
 
     private func drawn(_ p: Prospect, _ r: Recipient) -> some View {
         let prompt = PostEventPrompt.prompt(for: r, of: p, now: now)!
-        return FollowUpsView(prospects: [], inquiries: [])
+        return FollowUpsView(prospects: [], inquiries: [], watchedSources: [])
             .postEventRow(PostEventPrompt.DueRecipient(prospect: p, recipient: r, prompt: prompt),
                           since: nil, sourceCalendars: [:], now: now)
     }

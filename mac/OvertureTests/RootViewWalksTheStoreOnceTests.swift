@@ -122,10 +122,11 @@ struct RootViewWalksTheStoreOnceTests {
     @Test("every prospect is mapped to a card in exactly one place")
     func oneDefinitionOfEveryShowAsACard() {
         let code = SourceGuardHelper.normalizedCode(rootView)
-        let definitions = code.components(separatedBy: "allProspects.map(QueueItem.init)").count - 1
+        // #4358 slice E4d: the whole store is the queue engine's held shows, `rows.everyShow`, since the cutover.
+        let definitions = code.components(separatedBy: "rows.everyShow.map(QueueItem.init)").count - 1
         #expect(definitions == 1,
                 """
-                RootView writes `allProspects.map(QueueItem.init)` \(definitions) times. One of them is \
+                RootView writes `rows.everyShow.map(QueueItem.init)` \(definitions) times. One of them is \
                 `allItems`; any other is a second definition of the same question, which can be changed \
                 without the first (#3493).
                 """)

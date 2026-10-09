@@ -66,8 +66,11 @@ struct ScopeMemoInputsAreCompleteGuardTests {
     }
 
     /// Every derivation that runs a memo, and every model collection each one reads.
-    static func memoInputs(models: Set<String>) -> (derivations: [String], inputs: [MemoInput]) {
-        let files = AppSourceWalk.files(underAll: [appRoot], floor: fileFloor)
+    /// `files` is the app's sources unless a test hands planted ones (`TheSheetsTakeTheEnginesRowsTests`' neighbour,
+    /// `LandingWrittenTypesScanTests.theReadersFindAPlantedConsumer`).
+    static func memoInputs(models: Set<String>, files: [AppSourceWalk.File]? = nil)
+        -> (derivations: [String], inputs: [MemoInput]) {
+        let files = files ?? AppSourceWalk.files(underAll: [appRoot], floor: fileFloor)
         var derivations: [String] = []
         var inputs: [MemoInput] = []
         for file in files {

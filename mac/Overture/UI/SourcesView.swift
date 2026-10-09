@@ -19,7 +19,16 @@ struct SourcesView: View {
     //
     // NO DEFAULT, for the reason ArchiveView's carries: an empty default renders an empty sheet that
     // looks exactly like an empty store (L168, L67).
-    let prospects: [Prospect]
+    //
+    // #4358 slice E4d (#4370): handed down as the queue engine's rows, the shows and the watchlist as the engine held
+    // them at its last publish (`QueueEngineHost.rows(of:)`), so a scout landing redraws this sheet once, at its end,
+    // rather than through a query of its own. The watchlist is in name order there, which is the order this sheet's
+    // query used to ask for.
+    //
+    // Named `held`, and read as `held.everyShow` and `held.everySource` rather than through a property of a model
+    // array type, because what this sheet reads is the engine's held snapshot, which `LandingWrittenTypesScanTests`
+    // counts as held, and never a collection of its own.
+    let held: QueueEngineRows
     // #970: read ONE source now. Handed in rather than reached for, because starting a detached run is
     // RootView's job (it owns the live-run state and the one-at-a-time guard), and a view that launched
     // its own run would be a second place that could start one.
@@ -42,7 +51,6 @@ struct SourcesView: View {
     // test renders this view with no watch injected, and a sheet that could not be drawn at all without
     // one would be worse than an uncounted pass.
     @Environment(FreezeWatch.self) private var freezeWatch: FreezeWatch?
-    @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
     // #794: read to compute each source's lifetime yield (found/kept/sent/booked). The tally and its
     // sentence both live in SourceYield, a tested pure function, so this view has no counting of its own.
 
@@ -172,7 +180,7 @@ struct SourcesView: View {
     // #4516: a function of the pass's instant rather than a property reading the clock for itself, so the
     // room rule and the render memo's window are measured from ONE reading of `clock`, never two.
     private func roomContext(at now: Date) -> StageContext {
-        StageContext(now: now, geo: geo, clients: clientWindow ?? ClientWindow(sources: sources, clients: clients))
+        StageContext(now: now, geo: geo, clients: clientWindow ?? ClientWindow(sources: held.everySource, clients: clients))
     }
     // #2216: the sources the live extract run has been asked for and not yet come back with, read once
     // per sheet build rather than per row (a per-row file read would put two file reads on every one of
@@ -241,8 +249,8 @@ struct SourcesView: View {
         // the memo's window alike.
         let now = clock()
         let inputs = SourcesRenderPass.Inputs(
-            prospects: SourcesRenderPass.Corpus(prospects),
-            sources: sources,
+            prospects: SourcesRenderPass.Corpus(held.everyShow),
+            sources: held.everySource,
             searchQuery: searchQuery,
             context: roomContext(at: now))
         // The key names THIS view's own inputs, one `add` per input, so an input added here and not to
@@ -251,8 +259,9 @@ struct SourcesView: View {
         // sees an insert, a delete, a replacement and a reorder; a field edited in place is caught by
         // the observation tracking inside the memo instead.
         var key = ScopeFingerprint()
-        key.add(prospects)
-        key.add(sources)
+        // #4358 slice E4d: the engine's rows, by identity: a new array only when the engine published.
+        key.add(held.everyShow)
+        key.add(held.everySource)
         key.add(value: searchQuery)
         // The context carries the day, the instant and the client window, and the window is the
         // expensive half (#3645).
@@ -309,8 +318,8 @@ struct SourcesView: View {
     // question.
     private var renderTrace: [String: String] {
         [
-            "sources": "\(sources.count)",
-            "prospects": "\(prospects.count)",
+            "sources": "\(held.everySource.count)",
+            "prospects": "\(held.everyShow.count)",
             "dismissedCoverage": "\(dismissedCoverage.count)",
             "excludedTowns": "\(excludedTownRows.count)",
             "allowedSeedTowns": "\(allowedSeedTownRows.count)",
@@ -358,7 +367,7 @@ struct SourcesView: View {
 
             if showAdd { addForm; Divider().overlay(OVColor.line) }
 
-            if sources.isEmpty {
+            if held.everySource.isEmpty {
                 empty
             } else {
                 // #1432: pinned above the scroll rather than inside it, so it cannot scroll away from Dan
@@ -477,16 +486,16 @@ struct SourcesView: View {
         // matches behind it run only when the signature differs, so a keystroke or scroll no longer drags
         // either through the main thread. The flags depend on the same inputs the signature captures (each
         // source's name and tag, and the client list), so they ride the same gate.
-        .onChange(of: ClientCoverage.signature(sources: sources, clients: clients,
+        .onChange(of: ClientCoverage.signature(sources: held.everySource, clients: clients,
                                                dismissedIds: Set(dismissedCoverage.map(\.clientId))),
                   initial: true) {
-            coverageResult = ClientCoverage.result(sources: sources, clients: clients,
+            coverageResult = ClientCoverage.result(sources: held.everySource, clients: clients,
                                                    dismissedIds: Set(dismissedCoverage.map(\.clientId)))
             recomputeCalendarClients()
             // #3645: the flags and the window are ONE verdict, so they are decided by ONE fuzzy match and
             // the window is folded out of the map. Asking `ClientHorizon.clientSourceIds` here as well
             // would run the whole O(clients x sources) match a second time for an answer already in hand.
-            let flags = ClientHorizon.clientFlags(sources: sources, clients: clients)
+            let flags = ClientHorizon.clientFlags(sources: held.everySource, clients: clients)
             clientFlags = flags
             clientWindow = ClientWindow(clientFlags: flags)
         }
@@ -545,7 +554,7 @@ struct SourcesView: View {
 
     private func recomputeCalendarClients() {
         calendarResult = CalendarClientCoverage.result(shoots: calendarShoots, clients: clients,
-                                                       sources: sources,
+                                                       sources: held.everySource,
                                                        setAsideIds: Set(dismissedCoverage.map(\.clientId)))
     }
 

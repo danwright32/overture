@@ -248,12 +248,16 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ReachabilityCopy.unconfirmedProfileNote  "Name matches, nothing ties it to this show"
     ReachabilityCopy.unverifiedEmailFoundBadge  "Unverified email found"
 `UI/QueueView.swift`
+    OutOfStepCopy.button  "Reload this show"
+    OutOfStepCopy.line  "Overture's copy of this show is out of step with the saved one. Reload it before changing anything."
     PrepLaunchCopy.proceedLabel  "Prep anyway"
     ProposedConversationCopy.confirm  "Yes, link it"
     ProposedConversationCopy.decline  "Not them"
     ProposedConversationCopy.linked  "Linked. Overture is watching that conversation now."
     ProposedConversationCopy.manualLink  "Link their reply"
     ProposedConversationCopy.question  "Is this their reply?"
+    QueueLaunchCopy.loading  "Loading your queue"
+    QueueLaunchCopy.retry  "Try again"
     ReachabilityProbeCopy.controlLabel  "Check reachability"
     ReachabilityProbeCopy.dateCheckedMarker  "Reachability checked"
 `UI/ReplyConversationView.swift`

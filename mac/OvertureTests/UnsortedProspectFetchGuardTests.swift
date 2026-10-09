@@ -63,16 +63,8 @@ enum UnsortedProspectFetchAudit {
 
     static let classified: [Entry] = [
         // The window.
-        Entry(file: "RootView.swift", scope: "allProspects", reads: 1, kind: .notYetAudited, why: """
-            The whole table every window surface derives from (the queue, the archive, follow ups, sources, \
-            organisations). The reads checked here take a first match only by natural key, which is unique, but \
-            the derivations below it were not each audited, and sorting this query changes the hottest read in \
-            the app without a measured price. Named rather than passed (#4406).
-            """),
-        Entry(file: "RootView.swift", scope: "toPrepByStatus", reads: 1, kind: .orderFree, why: """
-            Counted by the start gate, keyed by natural key in `PrepNightPlan`, and sorted for display by \
-            `PrepQueueBuilder.prepSelectionOrder` (#3375) before the sheet draws a row.
-            """),
+        // #4358 slice E4d deleted RootView's two queries over the shows (`allProspects`, `toPrepByStatus`): every
+        // window surface reads the queue engine's rows, in key order (`QueueEngine.everyShow`, `Prospect.inKeyOrder`).
         Entry(file: "RootView.swift", scope: "syncOmniFocus", reads: 1, kind: .orderFree, why: """
             Every show earns its own tasks, collapsed per send group inside that show, and completions are \
             found by natural key, which is unique.

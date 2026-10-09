@@ -49,6 +49,9 @@ struct NoWholeStoreWalkInAnArgumentTests {
         for line in lines where line.contains("@Query") && line.contains("[Prospect]") {
             if let name = declaredName(line) { names.append(name) }
         }
+        // #4358 slice E4d: the whole show table, since the cutover, is the queue engine's held shows, which RootView
+        // reads as `rows.everyShow` (`QueueEngineRows`); there is no query left to follow.
+        if lines.contains(where: { $0.contains("rows.everyShow") }) { names.append("rows.everyShow") }
         for line in lines where line.contains("private var ") && line.contains("{") {
             guard names.contains(where: { line.contains($0) }), let name = declaredName(line) else { continue }
             if !names.contains(name) { names.append(name) }
@@ -153,9 +156,9 @@ struct NoWholeStoreWalkInAnArgumentTests {
         let storeWide = Self.storeWideNames(in: source)
         // The derivation has to find something, or this guard silently checks nothing at all: a run over an
         // empty name list would report no offenders and read exactly like a clean file (L98).
-        #expect(storeWide.contains("allProspects"),
-                Comment(rawValue: "the derivation found \(storeWide), which does not include the @Query this "
-                + "guard exists to follow, so it is checking nothing"))
+        #expect(storeWide.contains("rows.everyShow") && storeWide.contains("nonDismissedProspects"),
+                Comment(rawValue: "the derivation found \(storeWide), which does not include the engine's held "
+                + "shows this guard exists to follow, so it is checking nothing"))
 
         var offenders: [String] = []
         for (line, code) in SwiftSource.scannableLines(in: source, skipping: .all) {

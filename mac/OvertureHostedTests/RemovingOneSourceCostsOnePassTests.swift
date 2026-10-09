@@ -63,13 +63,27 @@ struct RemovingOneSourceCostsOnePassTests {
         // #4516: frozen, so the memo's two second window cannot be what a count here measures.
         var clock = HostedPassCounting.frozenClock()
         var mounted = true
-
         var body: some View {
             if mounted {
-                SourcesView(prospects: prospects, clock: clock)
+                WatchlistReader(prospects: prospects, clock: clock)
                     .modelContainer(container)
                     .environment(feedback)
             }
+        }
+    }
+
+    // #4358 slice E4d: the sheet takes the watchlist handed down rather than querying it; this hands it down from a
+    // query of its own, the bare stand-in for the engine's rows. A view of its OWN, below `.modelContainer`, so the
+    // query reads the container: held by the harness above, it ran with no context in its environment and handed
+    // the sheet an empty watchlist (the chunk review of E4d2, L472).
+    private struct WatchlistReader: View {
+        let prospects: [Prospect]
+        let clock: () -> Date
+        @Query(sort: \WatchedSource.orgName) private var sources: [WatchedSource]
+
+        var body: some View {
+            SourcesView(held: QueueEngineRows(everyShow: prospects, everyInquiry: [], everySource: sources),
+                        clock: clock)
         }
     }
 
@@ -193,7 +207,9 @@ struct RemovingOneSourceCostsOnePassTests {
             + "evaluation: \(why.joined(separator: " | ")) (#4112)"))
     }
 
-    // THE SHEET UNDER THE APP'S OWN INPUTS, which is the harness #4112's comment asked for.
+    // THE SHEET UNDER THE APP'S OWN INPUTS, which is the harness #4112's comment asked for. #4358 slice E4d: RootView's
+    // queries went with the cutover, so the parent now holds what RootView holds, the queue engine and its host, and
+    // hands the sheet the engine's rows as RootView does.
     //
     // The harness above hosts `SourcesView` alone, handed an empty constant for the store and with no
     // Downbeat roster, so the coverage and calendar work never runs and nothing above the sheet re-fetches
@@ -210,31 +226,24 @@ struct RemovingOneSourceCostsOnePassTests {
         let container: ModelContainer
         let feedback: ActionFeedback
         let roster: ClientRoster
+        let engine: QueueEngineHost.Engine
         // #4516: frozen, so the memo's two second window cannot be what a count here measures.
         var clock = HostedPassCounting.frozenClock()
         var mounted = true
         var body: some View {
             if mounted {
-                Parent(clock: clock)
+                Parent(engine: engine, clock: clock)
                     .modelContainer(container)
                     .environment(feedback)
                     .environment(roster)
             }
         }
         struct Parent: View {
+            let engine: QueueEngineHost.Engine
             let clock: () -> Date
-            init(clock: @escaping () -> Date) { self.clock = clock }
-            @Query(filter: PrepQueueBuilder.needsPrepPredicate) private var toPrepByStatus: [Prospect]
-            @Query private var allProspects: [Prospect]
-            @Query private var allInquiries: [Inquiry]
-            @Query private var watchedSources: [WatchedSource]
-            @Query private var excludedTownRows: [ExcludedTown]
-            @Query private var allowedSeedTownRows: [AllowedSeedTown]
+            @State private var host = QueueEngineHost()
             var body: some View {
-                // Read, so each query is live and re-fetches after a save as `RootView`'s do.
-                let _ = (toPrepByStatus.count, allInquiries.count, watchedSources.count,
-                         excludedTownRows.count, allowedSeedTownRows.count)
-                SourcesView(prospects: allProspects, clock: clock)
+                SourcesView(held: host.rows(of: engine), clock: clock)
             }
         }
     }
@@ -296,7 +305,8 @@ struct RemovingOneSourceCostsOnePassTests {
         roster.reload()
         let feedback = ActionFeedback()
         let before = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface)
-        let (window, hosting) = host(AppShapedHarness(container: c, feedback: feedback, roster: roster))
+        let engine = try await HostedQueueEngine.started(context: c.mainContext)
+        let (window, hosting) = host(AppShapedHarness(container: c, feedback: feedback, roster: roster, engine: engine))
         _ = await waitUntilQuiet(in: hosting)
         let appearing = QueueRenderCounter.derivationCount(for: QueueRenderCounter.sourcesSurface) - before
         return (AppShaped(container: c, sources: sources, feedback: feedback, roster: roster, file: file,
@@ -561,7 +571,9 @@ struct RemovingOneSourceCostsOnePassTests {
             let c = try container()
             let ctx = c.mainContext
             _ = seed(ctx)
-            let sheet = SourcesView(prospects: [], clock: HostedPassCounting.frozenClock())
+            let sheet = SourcesView(held: QueueEngineRows(everyShow: [], everyInquiry: [],
+                                                         everySource: try ctx.fetch(FetchDescriptor<WatchedSource>())),
+                                    clock: HostedPassCounting.frozenClock())
                 .modelContainer(c)
                 .environment(ActionFeedback())
             let appearedBefore = QueueRenderCounter.renderCount(for: QueueRenderCounter.sourcesSurface)

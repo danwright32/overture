@@ -101,7 +101,7 @@ struct FollowUpsListRendersTests {
         RowsFromStore { (rows: [Prospect]) in
             // #4522: `now` reaches the sheet. It was declared above and handed to nothing, so "a show that
             // has been and gone" was true only because the suite runs after 2026-06-10.
-            FollowUpsView(prospects: rows, inquiries: [], gmailConnectedOverride: true, replyRunAliveOverride: false,
+            FollowUpsView(prospects: rows, inquiries: [], watchedSources: [], gmailConnectedOverride: true, replyRunAliveOverride: false,
                           nowOverride: now)
         }
         .modelContainer(container)

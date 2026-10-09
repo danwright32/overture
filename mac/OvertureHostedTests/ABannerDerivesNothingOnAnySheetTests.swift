@@ -188,7 +188,7 @@ struct ABannerDerivesNothingOnAnySheetTests {
         let prospects = seedProspects(ModelContext(c))
         let feedback = ActionFeedback()
         let (window, hosting) = host(
-            FollowUpsView(prospects: prospects, inquiries: [], gmailConnectedOverride: true,
+            FollowUpsView(prospects: prospects, inquiries: [], watchedSources: [], gmailConnectedOverride: true,
                           replyRunAliveOverride: false)
                 .modelContainer(c)
                 .environment(feedback))

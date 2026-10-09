@@ -70,6 +70,8 @@ struct AMovedCardIsNeverAnimatedAcrossItsNeighboursTests {
     // to the window's content exactly as `RootView` attaches it.
     private struct Harness: View {
         let container: ModelContainer
+        // #4358 slice E4d: the queue engine RootView builds, over the same store.
+        let engine: QueueEngineHost.Engine
         let feedback: ActionFeedback
         let dayOffOffer: DayOffOfferRequest
         let undoStack: QueueUndoStack
@@ -78,11 +80,13 @@ struct AMovedCardIsNeverAnimatedAcrossItsNeighboursTests {
         @State private var deepLinkedKeys: LeadsDeepLink?
 
         var body: some View {
-            RowsFromStore { (rows: [Prospect]) in
-                QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
-                          allProspects: rows, onConnectGmail: { })
-                    .transaction { log.record($0) }
-            }
+            // RootView reads the engine's published pass in its own body (the toolbar's due count), so every publish
+            // re-evaluates it and reaches the queue through it, in the update's own transaction. Read here for the
+            // same reason, which is what lets the modifier below see the update that moves the card (#4358 E4d).
+            let _ = engine.output?.generation
+            QueueView(engine: engine, deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys,
+                      onConnectGmail: { })
+                .transaction { log.record($0) }
             .modelContainer(container)
             .actionFeedbackBanner(feedback)
             .environment(feedback)
@@ -98,13 +102,14 @@ struct AMovedCardIsNeverAnimatedAcrossItsNeighboursTests {
         let feedback: ActionFeedback
     }
 
-    private func host(_ c: ModelContainer, log: TransactionLog) -> Hosted {
+    private func host(_ c: ModelContainer, log: TransactionLog) async throws -> Hosted {
+        let engine = try await HostedQueueEngine.started(context: c.mainContext)
         let feedback = ActionFeedback()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 800),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         // AppKit's default releases the window while this scope still holds it (#3480).
         window.isReleasedWhenClosed = false
-        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, feedback: feedback,
+        let hosting = NSHostingView(rootView: AnyView(Harness(container: c, engine: engine, feedback: feedback,
                                                               dayOffOffer: DayOffOfferRequest(),
                                                               undoStack: QueueUndoStack(), log: log)))
         hosting.frame = window.contentLayoutRect
@@ -141,7 +146,7 @@ struct AMovedCardIsNeverAnimatedAcrossItsNeighboursTests {
     @Test func correctingAGenreThatMovesTheCardDoesNotAnimateTheMove() async throws {
         let c = try TestModelContainer.inMemory(AppSchema.models)
         let log = TransactionLog()
-        let h = host(c, log: log)
+        let h = try await host(c, log: log)
         defer { HostedPassCounting.unmountAndClose(h.hosting, replacingWith: AnyView(EmptyView()), in: h.window) }
         seed(h.context)
         let appeared = await settle(h.hosting)

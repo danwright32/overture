@@ -115,7 +115,11 @@ struct ACostInstrumentEnumeratesItsSubjectsTests {
         "GeoRefusals": "a struct init capturing two town lists, walking no prospect",
         "ScoutStatus": "a struct init over one Date plus a summary string, per masthead",
         "SendDelightTiming": "plan(reduceMotion:) reads one flag and returns four durations",
-        // THE IN-APP CARD CHECK's write side, reached from `body` through `recordCardCheck`. It is on the
+        // #4358 slice E4d: the queue's view handed to the engine once per body. A struct of the focused stage, its keys
+        // and the cards the last frame drew; any pass it asks for runs in the engine's own turn, never in the body.
+        "QueueEngineViewInputs": "a struct init handed to the engine per body; the pass it may ask for runs in the engine's turn",
+        // THE IN-APP CARD CHECK's stamp, reached from `body` through `stampTheCardCheck` (#4358 slice E4d moved the
+        // check itself into the engine's publish). It is on the
         // redraw path and it is deliberately not part of the pass: the pass is a pure derivation and this
         // is the side effect on the app's own instrument. What it costs per redraw is one UserDefaults
         // read, which is served from memory, and the append happens only when the pass reports a real
