@@ -164,6 +164,10 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         /// be on screen), and not healed (no refetch changes a term that disagrees with itself), so said apart from
         /// `cardDivergence`, which its reader says was corrected before it was drawn (L11).
         case cardMismatch
+        /// #4360 (plan v7 D7, one comparison per patched term): the facts agreed with the store and a term the engine
+        /// keeps patched did not equal its oracle over them. `fields` names the term and table (`showLink.group`), and
+        /// the heal is a cold build of the terms.
+        case patchMismatch
         /// A save through another context touched these tables, and their rows were faulted (decision 9(a)).
         case foreignSave
         /// A faulted row, or an output, came back into step.
@@ -188,7 +192,8 @@ struct CardDivergenceRecord: Codable, Equatable, Sendable {
         var cooldown: TimeInterval {
             switch self {
             case .cardDivergence: return 0
-            case .noOpDirty, .factMismatch, .outputMismatch, .cardMismatch, .foreignSave, .healed, .healDidNotConverge,
+            case .noOpDirty, .factMismatch, .outputMismatch, .cardMismatch, .patchMismatch, .foreignSave, .healed,
+                 .healDidNotConverge,
                  .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped, .unrecognised:
                 return 600
             }

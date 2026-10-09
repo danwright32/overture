@@ -117,7 +117,8 @@ enum EngineDivergenceGate {
     static func refuses(_ kind: CardDivergenceRecord.Kind) -> Bool {
         switch kind {
         // The engine and the store disagreed, a card disagreed with a fresh build, or another context saved.
-        case .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave:
+        // #4360: a patched term disagreeing with its oracle is the engine disagreeing with the store too.
+        case .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave, .patchMismatch:
             return true
         // A row was faulted: whether it came back or not, a fault happened in this run.
         case .healed, .healDidNotConverge:
@@ -146,6 +147,7 @@ enum EngineDivergenceGate {
             // build from the saved show.
             ("cardDivergences", counts.cardDivergences),
             ("cardMismatches", counts.cardMismatches),
+            ("patchMismatches", counts.patchMismatches),
             ("healed", counts.healed),
             ("healDidNotConverge", counts.healDidNotConverge),
             ("unverifiedTooLong", counts.unverifiedTooLong),
@@ -277,7 +279,8 @@ struct EngineDivergenceGateRuleTests {
 
     @Test func everyKindTheGateRefusesRefusesAndNoOtherDoes() {
         let named: Set<CardDivergenceRecord.Kind> = [
-            .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave, .healed, .healDidNotConverge,
+            .cardDivergence, .cardMismatch, .factMismatch, .outputMismatch, .foreignSave, .patchMismatch, .healed,
+            .healDidNotConverge,
             .unverifiedTooLong, .verifierTimedOut, .verifierWedged, .verifierRetriesCapped,
         ]
         for kind in CardDivergenceRecord.Kind.allCases where kind != .unrecognised {
@@ -300,6 +303,7 @@ struct EngineDivergenceGateRuleTests {
             ("outputMismatches x1", { $0.outputMismatches = 1 }),
             ("cardDivergences x1", { $0.cardDivergences = 1 }),
             ("cardMismatches x1", { $0.cardMismatches = 1 }),
+            ("patchMismatches x1", { $0.patchMismatches = 1 }),
             ("healed x1", { $0.healed = 1 }),
             ("healDidNotConverge x1", { $0.healDidNotConverge = 1 }),
             ("unverifiedTooLong x1", { $0.unverifiedTooLong = 1 }),

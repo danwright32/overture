@@ -412,6 +412,10 @@ enum QueueRenderPass {
         // does. Nil means "build them in the pass", which is what every test call site does, so the
         // cost tests keep measuring the whole derivation.
         var producerTables: QueueModel.ProducerTables? = nil
+        // #4360 (plan v7 Phase 4b(a)): T1's tables from the queue engine's patched value (`PatchableShowLink`),
+        // brought up to date from the shows that changed, or nil to build them in the pass, which every caller but
+        // the engine does. Over `allProspects` and the queue's own scope of it, which is what the pass draws.
+        var showLink: ShowLink.Tables? = nil
         // #4358 slice E4b (#4357 step 9): whether the pass checks one card against a fresh build of it. True over the
         // models, as it always was; the queue engine's pass over facts sets false and checks at publish, over the
         // main context's model, because a fresh build over the same facts can only agree with itself (L70).
@@ -453,7 +457,7 @@ enum QueueRenderPass {
                                      // #3742: the producer tables, when the caller has them in hand.
                                      // Nil everywhere but the app, which is the same rule every other
                                      // prebuilt value on `Inputs` follows.
-                                     producerTables: i.producerTables, today: context.today,
+                                     producerTables: i.producerTables, showLink: i.showLink, today: context.today,
                                      checksACard: i.checksACardInThePass)
         // #3653 Phase 3: one build, two halves. The cards are what the screen draws; the rows are what
         // every whole-scope sweep below reads, and they cost one contacts walk between them rather than
