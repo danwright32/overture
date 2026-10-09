@@ -27,6 +27,7 @@ import SwiftData
 // #4360 (plan v7 Phase 4b): and one comparison per term the engine keeps PATCHED between passes, each held to its
 // oracle over the same fresh facts once (i) agrees and before (iii), so a term that missed a change is named as the
 // term (`patchMismatch`, fields `showLink.group` and so on). T1 ShowLink was the first; T4 is (ii) above.
+// #4361: T2 and T3 too (`contradictions.contradicted`, `feedBreaks.events`).
 
 /// One fresh read of the SAVED store, made through a context of its own, and what a count said beside it.
 struct QueueEngineFreshRead: Sendable {

@@ -289,6 +289,10 @@ struct QueueEnginePatches: Sendable {
     /// #4362 (plan v7 Phase 4b(c)): T4 the producer tables, with witness sets, or nil until the first bring-up. Built
     /// and dropped together with every other term, so one pending set serves them all.
     private(set) var producerTables: ProducerTablesTerm?
+    /// #4361: T2 ContradictedCancellation and T3 feed breaks (Domain/CancellationPatches.swift), built and dropped with
+    /// every other term. T3 is judged at a day, which a bring-up moves.
+    private(set) var contradictions: PatchableContradictions?
+    private(set) var feedBreaks: PatchableFeedBreaks?
     /// Shows whose stored value changed since the last bring-up.
     private(set) var pending: Set<PersistentIdentifier> = []
 
@@ -305,6 +309,8 @@ struct QueueEnginePatches: Sendable {
     mutating func invalidate() {
         showLink = nil
         producerTables = nil
+        contradictions = nil
+        feedBreaks = nil
         pending = []
     }
 
@@ -322,21 +328,29 @@ struct QueueEnginePatches: Sendable {
             producerTables?.apply(touched.map { (key: $0, facts: shows[$0].map(ProducerTablesTerm.Facts.init(of:))) },
                                   overrides: overrides)
         }
+        applyCancellations(Array(touched), shows: shows) // patch-resolve-cancellations
     }
 
     /// Every term brought up to `facts`: built cold when it has never been built, else patched from the pending shows.
     /// T4 also reads the overrides (`FactStore.producerOverrides`) and compares them with the ones it holds on every
     /// bring-up, because a promotion or a demotion changes no show and so is never pending.
-    mutating func bringUp(to facts: FactStore) {
+    /// #4361: `asOf` is the Eastern day T3 is judged at, which the engine's pass hands in (its own day); nil keeps the
+    /// day T3 was last brought to, which is what the verifier's snapshot wants, since it holds the terms to the day the
+    /// output on screen was derived at.
+    mutating func bringUp(to facts: FactStore, asOf: String? = nil) {
         let shows = facts.shows
         let overrides = facts.producerOverrides
-        guard var link = showLink, var producers = producerTables else {
+        guard var link = showLink, var producers = producerTables, contradictions != nil, feedBreaks != nil else {
             showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
             producerTables = ProducerTablesTerm(
                 rows: shows.map { (key: $0.key, facts: ProducerTablesTerm.Facts(of: $0.value)) }, overrides: overrides)
+            contradictions = PatchableContradictions()
+            feedBreaks = PatchableFeedBreaks(asOf: asOf ?? "")
+            applyCancellations(Array(shows.keys), shows: shows)
             pending = []
             return
         }
+        defer { if let asOf { advanceFeedBreaks(to: asOf) } }
         guard !pending.isEmpty || producers.overrides != overrides else { return }
         let ids = pending
         pending = []
@@ -348,6 +362,28 @@ struct QueueEnginePatches: Sendable {
                         overrides: overrides)
         showLink = link
         producerTables = producers
+        applyCancellations(Array(ids), shows: shows) // patch-bringup-cancellations
+    }
+
+    /// #4361: the shows `ids` name, as `shows` holds them now (nil for one gone), taken into T2 and then into T3 with the
+    /// identities whose contradicted state T2 flipped (section 5: T3 reads T2). Nothing before the first build.
+    private mutating func applyCancellations(_ ids: [PersistentIdentifier], shows: [PersistentIdentifier: RowFacts]) {
+        guard var t2 = contradictions, var t3 = feedBreaks, !ids.isEmpty else { return }
+        // Taken out and put back, for the reason the other terms are.
+        contradictions = nil
+        feedBreaks = nil
+        let flips = t2.apply(ids.map { ($0, shows[$0].map(PatchableContradictions.Slice.init)) })
+        t3.apply(ids.map { ($0, shows[$0].flatMap(PatchableFeedBreaks.Slice.init)) }, flips: flips,
+                 covered: t2.contradictedKeys)
+        contradictions = t2
+        feedBreaks = t3
+    }
+
+    private mutating func advanceFeedBreaks(to day: String) {
+        guard var t3 = feedBreaks, t3.asOf != day else { return }
+        feedBreaks = nil
+        t3.advance(to: day, covered: contradictions?.contradictedKeys ?? [])
+        feedBreaks = t3
     }
 
     /// The verifier's comparison (plan v7 D7, one per term): each term held to its oracle over `fresh`, by the name of
@@ -369,6 +405,16 @@ struct QueueEnginePatches: Sendable {
                 out.append("producerTables.venuesByPresenter")
             }
             if held.venueBrands != oracle.venueBrands { out.append("producerTables.venueBrands") }
+        }
+        // #4361: T2 against `contradictedKeys` and T3 against `events` with `contradicted` nil (so it stays independent
+        // of T2), at the day T3 was brought to. Both answer the same whatever order the rows come in.
+        if let t2 = contradictions,
+           t2.contradictedKeys != ContradictedCancellation.contradictedKeys(among: shows) { // patch-verifier-t2
+            out.append("contradictions.contradicted")
+        }
+        if let t3 = feedBreaks,
+           t3.output != FeedBreakEvent.events(among: shows, asOf: t3.asOf, contradicted: nil) {
+            out.append("feedBreaks.events")
         }
         return out
     }

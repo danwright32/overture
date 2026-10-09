@@ -74,42 +74,72 @@ enum FeedBreakEvent {
     ///
     /// #4357 (plan v7 Phase 3, T3): generic over `ProspectFacts`, one body for live models and retained
     /// `RowFacts`, for the reason `ContradictedCancellation.liveTwin` records.
+    ///
+    /// #4361 (plan v7 Phase 4b(b)): built from the pieces below, which the queue engine's patched value
+    /// (`PatchableFeedBreaks`) builds its events through as well, so a bucket, a member, a label or the order cannot
+    /// mean one thing here and another there (L370).
     static func events<Row: ProspectFacts>(among rows: [Row], asOf: String,
                                            contradicted: Set<String>? = nil) -> [Event] {
         let covered = contradicted ?? ContradictedCancellation.contradictedKeys(among: rows)
-        let flagged = rows.filter {
-            $0.disappearedFromFeed
-                && max($0.performanceDate ?? "", $0.runEndDate ?? "") >= asOf
+        var buckets: [String: [Member]] = [:]
+        for row in rows where row.disappearedFromFeed && lastNight(of: row) >= asOf {
+            buckets[bucket(room: canonicalVenue(row.venue), missed: row.missedScoutCount), default: []]
+                .append(Member(row))
         }
-        var buckets: [String: [Row]] = [:]
-        for row in flagged {
-            buckets["\(canonicalVenue(row.venue))|\(row.missedScoutCount)", default: []].append(row)
+        return ordered(buckets.values.compactMap { event(of: $0, covered: covered) })
+    }
+
+    /// What a break reads of one member: its key, its room as it spells it, and the count it stopped at.
+    struct Member: Equatable, Sendable {
+        let naturalKey: String
+        let venue: String?
+        let missedScoutCount: Int
+
+        init(_ row: some ProspectFacts) {
+            naturalKey = row.naturalKey
+            venue = row.venue
+            missedScoutCount = row.missedScoutCount
         }
-        return buckets.values
-            .filter { $0.count >= minimumMembers }
-            .map { members in
-                Event(venue: label(of: members),
-                      missedScoutCount: members[0].missedScoutCount,
-                      memberKeys: members.map(\.naturalKey).sorted(),
-                      coveredByAnotherCard: members.filter { covered.contains($0.naturalKey) }.count)
+    }
+
+    /// The bucket a flagged row belongs to: its folded room and its count, so rows that stopped matching on the same
+    /// sweep at the same source share one.
+    static func bucket(room: String, missed: Int) -> String { "\(room)|\(missed)" }
+
+    /// The last night a row plays, which is what decides whether it is still in the future.
+    static func lastNight(of row: some ProspectFacts) -> String {
+        max(row.performanceDate ?? "", row.runEndDate ?? "")
+    }
+
+    /// The break one bucket's members make, or nil below `minimumMembers`. `covered` is the contradicted set by
+    /// natural key.
+    static func event(of members: [Member], covered: Set<String>) -> Event? {
+        guard members.count >= minimumMembers, let first = members.first else { return nil }
+        return Event(venue: label(of: members),
+                     missedScoutCount: first.missedScoutCount,
+                     memberKeys: members.map(\.naturalKey).sorted(),
+                     coveredByAnotherCard: members.filter { covered.contains($0.naturalKey) }.count)
+    }
+
+    /// Deterministic, and never `first` on an unordered fetch: the venue breaks the tie so two events of one size
+    /// cannot swap places between renders (L343, L419). #4348: and where the size and the room tie too, the first
+    /// member key, because the order a Dictionary hands its buckets back in is one no input order fixes (Step T0
+    /// found this).
+    static func ordered(_ events: [Event]) -> [Event] {
+        events.sorted { left, right in
+            if left.memberKeys.count != right.memberKeys.count {
+                return left.memberKeys.count > right.memberKeys.count
             }
-            // Deterministic, and never `first` on an unordered fetch: the venue breaks the tie so two
-            // events of one size cannot swap places between renders (L343, L419). #4348: and where the size
-            // and the room tie too, the first member key, because the order `buckets.values` hands back is
-            // a Dictionary's, which no input order fixes (Step T0 found this).
-            .sorted { left, right in
-                if left.memberKeys.count != right.memberKeys.count {
-                    return left.memberKeys.count > right.memberKeys.count
-                }
-                if left.venue != right.venue { return left.venue < right.venue }
-                return (left.memberKeys.first ?? "") < (right.memberKeys.first ?? "")
-            }
+            if left.venue != right.venue { return left.venue < right.venue }
+            return (left.memberKeys.first ?? "") < (right.memberKeys.first ?? "")
+        }
     }
 
     // #4348 (plan v7 decision 13(iv)): the room as most of its members spell it, rather than as whichever
     // member happened to be first in the input. A tie between spellings goes to the one carried by the
     // member with the smallest natural key, so the sentence names the same room on every render.
-    private static func label<Row: ProspectFacts>(of members: [Row]) -> String {
+    // #4361: over `Member`, so the engine's patched value labels through this one rule (L370).
+    private static func label(of members: [Member]) -> String {
         var counts: [String: Int] = [:]
         for member in members { counts[member.venue ?? "", default: 0] += 1 }
         let top = counts.values.max() ?? 0

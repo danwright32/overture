@@ -34,12 +34,21 @@ enum ContradictedCancellation {
             // nothing: two rows can both be genuinely gone.
             guard candidate.missedScoutCount == 0 else { return false }
             guard sameVenue(candidate.venue, flagged.venue) else { return false }
-            guard ScoutService.runsOverlap(storedStart: candidate.performanceDate,
-                                           storedEnd: candidate.runEndDate,
-                                           incomingStart: flagged.performanceDate,
-                                           incomingEnd: flagged.runEndDate) else { return false }
-            return GroupNameMatch.isSameShowTitle(candidate.groupName, flagged.groupName)
+            return isTwin(candidateStart: candidate.performanceDate, candidateEnd: candidate.runEndDate,
+                          candidateTitle: candidate.groupName, flaggedStart: flagged.performanceDate,
+                          flaggedEnd: flagged.runEndDate, flaggedTitle: flagged.groupName)
         }
+    }
+
+    // The two arms a live candidate in the flagged row's own room must pass to contradict it: overlapping nights and
+    // a title the app calls the same act. #4361: one predicate, asked by `liveTwin`, by `contradictedKeys` and by the
+    // queue engine's patched value (`PatchableContradictions`), so the rule cannot be copied into a second body that
+    // drifts (L370).
+    static func isTwin(candidateStart: String?, candidateEnd: String?, candidateTitle: String,
+                       flaggedStart: String?, flaggedEnd: String?, flaggedTitle: String) -> Bool {
+        ScoutService.runsOverlap(storedStart: candidateStart, storedEnd: candidateEnd,
+                                 incomingStart: flaggedStart, incomingEnd: flaggedEnd)
+            && GroupNameMatch.isSameShowTitle(candidateTitle, flaggedTitle)
     }
 
     // Every flagged row the store contradicts, by natural key, computed ONCE over the corpus.
@@ -69,11 +78,9 @@ enum ContradictedCancellation {
             let room = liveByVenue[canonicalVenue(flagged.venue)] ?? []
             let twin = room.first { candidate in
                 guard candidate.persistentModelID != flagged.persistentModelID else { return false }
-                guard ScoutService.runsOverlap(storedStart: candidate.performanceDate,
-                                               storedEnd: candidate.runEndDate,
-                                               incomingStart: flagged.performanceDate,
-                                               incomingEnd: flagged.runEndDate) else { return false }
-                return GroupNameMatch.isSameShowTitle(candidate.groupName, flagged.groupName)
+                return isTwin(candidateStart: candidate.performanceDate, candidateEnd: candidate.runEndDate,
+                              candidateTitle: candidate.groupName, flaggedStart: flagged.performanceDate,
+                              flaggedEnd: flagged.runEndDate, flaggedTitle: flagged.groupName)
             }
             if twin != nil { contradicted.insert(flagged.naturalKey) }
         }

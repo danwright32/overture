@@ -750,7 +750,8 @@ final class QueueEngine<Value: Sendable> {
     /// #4360: what the engine's own pass is handed: the facts, the view, the clock and the signals, and every patched
     /// term brought up to the facts first, from the shows that changed since the last pass (built cold the first time).
     private func passInput(now: Date, context: QueueEngineContextInputs) -> QueueEnginePassInput {
-        patches.bringUp(to: facts)
+        // #4361: T3's day is the pass's own Eastern day.
+        patches.bringUp(to: facts, asOf: EasternDate.today(now))
         return QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now, context: context, patches: patches)
     }
 
