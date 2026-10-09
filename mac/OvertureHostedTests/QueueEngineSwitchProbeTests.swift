@@ -4,6 +4,7 @@ import AppKit
 import SwiftUI
 import SwiftData
 @testable import Overture
+import ViewInspector
 
 // #4358 slice E4d (plan item 21, and item 20's screenshots): what the switch costs and what it puts on screen, over a
 // throwaway clone of the live store (`LiveStoreClone`, never the store itself, L2) and its fourfold copy.
@@ -210,5 +211,23 @@ final class QueueEngineSwitchProbeTests {
         }
         print("switch-4358 shots: \(engine.everyShow.count) shows held, wrote \(written.count) of 8")
         #expect(written.count == 8, "only \(written) were written")
+    }
+}
+
+// #4626: the one control on the screen shown when the queue engine cannot start wears the design system's primary
+// action, the queue's own: `.borderedProminent` tinted forest, as the Prep button on the queue heading is. It was a
+// default system button, against the nothing native rule (L607), and it is rare enough to be missed in review.
+@MainActor
+@Suite("The queue launch screen's Try again is the queue's primary action (#4626)")
+struct QueueLaunchRetryStyleTests {
+    @Test func tryAgainWearsTheQueuesPrimaryActionStyle() throws {
+        var failed = QueueEngineLaunchState()
+        failed.firstPaint = .failed(.readFailed, attempts: 1, at: Date())
+        let button = try QueueLaunchView(launch: failed, retry: {}).inspect().find(button: QueueLaunchCopy.retry)
+        let style = try button.buttonStyle()
+        #expect(style is BorderedProminentButtonStyle, Comment(rawValue:
+            "Try again is styled \(type(of: style)), not the queue's primary action (#4626, L607)"))
+        #expect(try button.tint() == OVColor.forestText,
+                "Try again is not tinted forest, so it does not match the queue's Prep button (#4626)")
     }
 }
