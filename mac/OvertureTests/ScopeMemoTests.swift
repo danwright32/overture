@@ -36,10 +36,10 @@ struct ScopeMemoTests {
     /// A fixed instant, so nothing here is measuring the clock (L130, L290).
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private static func fingerprint<Element: ScopeObserved>(_ items: [Element]) -> Int {
+    private static func fingerprint<Element: ScopeObserved>(_ items: [Element]) -> ScopeFingerprint {
         var f = ScopeFingerprint()
         f.add(items)
-        return f.finalized()
+        return f
     }
 
     @Test func aSecondEvaluationThatChangedNothingBuildsNothing() throws {
@@ -113,6 +113,55 @@ struct ScopeMemoTests {
         let after = evaluate(at: t0.addingTimeInterval(0.1))
         #expect(memo.builds == 2, "a count is blind to a row swapped for another, which is why the key is not a count")
         #expect(after != before)
+    }
+
+    // #4612: the fingerprint hashes each row's ADDRESS, and an address names an object only while it lives
+    // (L1019). A row freed after the build and a different row made at its address hash identically, so a
+    // memo that kept only the hash served the first row's answer for the second. The memo now holds the rows
+    // its key was taken over, so no other object can be made at their addresses while that key stands.
+    //
+    // The rows here are never inserted into a context, so nothing but the memo can keep the first one alive,
+    // and the build reads nothing, so the answer does not hold it either: both are what let the address be
+    // reused. Each miss is kept alive, so the allocator cannot hand the same miss back.
+    @Test func aRowMadeAtAFreedRowsAddressRebuilds() throws {
+        let c = try container()
+        let memo = ScopeMemo<String>(saves: StoreSaveCount(center: NotificationCenter()))
+        func detached(_ name: String) -> Prospect {
+            Prospect(naturalKey: name, groupName: name, discipline: "music", venue: "Weill Recital Hall",
+                     performanceDate: "2027-05-01", sourceListingURL: nil, priorRelationship: "none",
+                     production: "self", profile: "strong", coverage: "likely_uncovered", fitScore: 5,
+                     tier: "mid", fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
+                     possibleMatchName: nil, status: .new)
+        }
+        func evaluate(_ rows: [Prospect], answer: String) -> String {
+            var fingerprint = ScopeFingerprint()
+            fingerprint.add(rows)
+            return memo.value(fingerprint: fingerprint, cardKeys: [], now: t0, staleAfter: .never,
+                              savesIn: c, onRefetch: .rebuild) { answer }
+        }
+
+        var freedAddress: ObjectIdentifier?
+        do {
+            let first = detached("first")
+            freedAddress = ObjectIdentifier(first)
+            #expect(evaluate([first], answer: "first") == "first")
+        }
+        #expect(memo.builds == 1, "the first evaluation must build, or nothing below measures anything")
+
+        var misses: [Prospect] = []
+        var atTheFreedAddress: Prospect?
+        for n in 0..<2_000 {
+            let candidate = detached("second \(n)")
+            if ObjectIdentifier(candidate) == freedAddress { atTheFreedAddress = candidate; break }
+            misses.append(candidate)
+        }
+        let second = atTheFreedAddress ?? misses[misses.count - 1]
+        let answer = evaluate([second], answer: "second")
+        #expect(answer == "second", Comment(rawValue:
+            "a different row (made at the freed row's address: \(atTheFreedAddress != nil)) was served the "
+            + "first row's answer, \(answer), because the key hashed an address nothing kept alive (#4612)"))
+        #expect(memo.builds == 2)
+        withExtendedLifetime(misses) {}
     }
 
     @Test func aChangeOfCardKeysRebuilds() throws {
@@ -231,14 +280,14 @@ struct ScopeMemoTests {
         // Not a threshold on the machine: an absolute millisecond figure here would be measuring
         // whatever else is running (L224). The claim is a RATIO against work of the same shape in the
         // same run, which is what makes it a statement about this code.
-        _ = Self.fingerprint(rows)
+        _ = Self.fingerprint(rows).finalized()
         // The cheapest whole-store thing the real derivation does: read one field from every row.
         _ = rows.map(\.groupName)
         // #4617: the two arms of the ratio alternate which goes first, sample by sample, and each is the median
         // of five; timed one after the other, the second carried the order effect into the ratio. Seconds, as
         // the message reads them.
         let arms = Phase0.alternating([
-            ("scopememo-fingerprint", { _ = Self.fingerprint(rows) }),
+            ("scopememo-fingerprint", { _ = Self.fingerprint(rows).finalized() }),
             ("scopememo-oneFieldRead", { _ = rows.map(\.groupName) }),
         ])
         let (fingerprint, oneFieldRead) = (arms[0].median / 1000, arms[1].median / 1000)
