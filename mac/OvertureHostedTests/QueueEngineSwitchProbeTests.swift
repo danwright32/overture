@@ -183,9 +183,13 @@ final class QueueEngineSwitchProbeTests {
                                   styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+            // #4626: drawn as the KEY window's controls are. This window is never ordered front (it must not take
+            // Dan's focus), so AppKit draws every control in it as inactive, which greys a prominent button and
+            // shows a picture of a state Dan never sees on the screen he is using.
             let hosting = NSHostingView(rootView: AnyView(view.padding(24).frame(maxWidth: .infinity,
                                                                                     maxHeight: .infinity)
-                .background(OVColor.canvas)))
+                .background(OVColor.canvas)
+                .environment(\.controlActiveState, .key)))
             hosting.frame = window.contentLayoutRect
             window.contentView?.addSubview(hosting)
             return window
