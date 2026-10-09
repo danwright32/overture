@@ -504,6 +504,8 @@ final class QueueEngine<Value: Sendable> {
 
     /// Every queue input as a value.
     @ObservationIgnored private(set) var facts = FactStore()
+    /// #4360 (plan v7 Phase 4b): the terms kept patched between passes, brought up to `facts` before each pass.
+    @ObservationIgnored private(set) var patches = QueueEnginePatches()
     /// The main context's rows the trackers are armed on, so a fired row is read again without a fetch.
     @ObservationIgnored private var showMembers: [PersistentIdentifier: Prospect] = [:]
     @ObservationIgnored private var contactMembers: [PersistentIdentifier: Recipient] = [:]
@@ -745,6 +747,13 @@ final class QueueEngine<Value: Sendable> {
         derivation.onTheMainActor?(input) ?? derivation.derive(input)
     }
 
+    /// #4360: what the engine's own pass is handed: the facts, the view, the clock and the signals, and every patched
+    /// term brought up to the facts first, from the shows that changed since the last pass (built cold the first time).
+    private func passInput(now: Date, context: QueueEngineContextInputs) -> QueueEnginePassInput {
+        patches.bringUp(to: facts.shows)
+        return QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now, context: context, patches: patches)
+    }
+
     /// The next generation, for an output whose inputs are being fixed NOW. Every publisher takes its number here
     /// (see "WHO NUMBERS AN OUTPUT" above), so no publisher's output can collide with another's.
     func mintGeneration() -> Int {
@@ -909,8 +918,7 @@ final class QueueEngine<Value: Sendable> {
         heldReasons = []
         guard !reasons.isEmpty else { return }
         let context = contextInputs()
-        let value = mainPass(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now,
-                                                           context: context))
+        let value = mainPass(passInput(now: now, context: context))
         let previous = output
         guard publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: mintGeneration(), now: now,
                                         reasons: reasons, context: context)) else {
@@ -972,13 +980,14 @@ final class QueueEngine<Value: Sendable> {
         }
         counters.fullReads += 1
         facts = fresh.facts
+        // #4360: replaced whole, so every patched term is built cold by the pass below.
+        patches.invalidate()
         // This pass is the one every reason gathered while loading asked for: the clock's, a source's, the view's.
         clockDue = []
         sourcesFired = []
         viewInputsMoved = false
         let context = contextInputs()
-        let value = mainPass(QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now,
-                                                           context: context))
+        let value = mainPass(passInput(now: now, context: context))
         // Nothing is on screen yet, so the gate applies it whatever its number.
         publish(QueueEngineOutput(value: value, saveCount: saveCount, generation: generation, now: now,
                                   reasons: [.first], context: context))
@@ -1409,9 +1418,12 @@ final class QueueEngine<Value: Sendable> {
     }
 
     private func snapshot(of output: QueueEngineOutput<Value>) -> QueueEngineSnapshot<Value> {
-        QueueEngineSnapshot(saveCount: output.saveCount, generation: output.generation, facts: facts,
-                            viewInputs: publishedViewInputs ?? viewInputs, context: output.context, now: output.now,
-                            value: output.value, clean: !context.hasChanges)
+        // #4360: the patched terms brought up to the facts this snapshot carries, so the verifier holds each term to
+        // its oracle over the same store the facts are compared with (a landing can hold facts no pass has read yet).
+        patches.bringUp(to: facts.shows)
+        return QueueEngineSnapshot(saveCount: output.saveCount, generation: output.generation, facts: facts,
+                                   viewInputs: publishedViewInputs ?? viewInputs, context: output.context,
+                                   now: output.now, value: output.value, clean: !context.hasChanges, patches: patches)
     }
 
     /// The card check at publish (#4357 step 9): the output as it should go on screen, with the card the check
@@ -1506,6 +1518,15 @@ final class QueueEngine<Value: Sendable> {
             outputHealFields = fields
             armUnverifiedTimer()
             scheduleTurn()
+        case .patchMismatch(let fields, let judged):
+            // #4360: the facts agreed and a patched term did not equal its oracle over them, so the term missed a
+            // change. Its heal is a cold build from the facts, in the pass that publishes the heal.
+            verifierCounts.patchMismatches += 1
+            writeFinding(.patchMismatch, fields: fields, at: now, judged: judged)
+            patches.invalidate()
+            outputHealFields = fields
+            armUnverifiedTimer()
+            scheduleTurn()
         case .superseded:
             verifierCounts.superseded += 1
         case .cancelled:
@@ -1522,7 +1543,7 @@ final class QueueEngine<Value: Sendable> {
         // on screen: once more after the next quiet moment (L710).
         let verdict: Bool
         switch result {
-        case .match, .factMismatch, .outputMismatch, .cardMismatch: verdict = true
+        case .match, .factMismatch, .outputMismatch, .cardMismatch, .patchMismatch: verdict = true
         case .superseded, .cancelled, .unmeasured: verdict = false
         }
         if verdict { consecutiveRetries = 0 }
@@ -1647,6 +1668,8 @@ final class QueueEngine<Value: Sendable> {
         }
         let oldKey = facts.shows[id]?.naturalKey
         let changed = facts.record(show)
+        // #4360: the one place a show's value is recorded, so the one place a patched term learns it changed.
+        if changed { patches.noteChanged(id) }
         // A rename under the same identity renames the key everywhere a surface keyed the show by it.
         if let oldKey, let newKey = facts.shows[id]?.naturalKey, newKey != oldKey {
             resolution.rekeyedKeys[oldKey] = newKey
@@ -1762,6 +1785,8 @@ final class QueueEngine<Value: Sendable> {
         }
         let contactsBefore = contactMembers
         facts = fresh
+        // #4360: replaced whole, so every patched term is built cold at the next pass.
+        patches.invalidate()
         var contactsNow: Set<PersistentIdentifier> = []
         for show in shows {
             let id = show.persistentModelID
@@ -1884,6 +1909,13 @@ extension QueueEngine {
                                disposition: .resolved { $0.facts.excludedTowns.resolve($1) }),
             IdentityKeyedState(path: "facts.allowedSeedTowns",
                                disposition: .resolved { $0.facts.allowedSeedTowns.resolve($1) }),
+            // #4360: after `facts.shows` above, so a re-keyed show is read under its new identifier. A deleted or re-keyed
+            // show leaves the pending set and is applied to every patched term at once, rather than waiting for a pass.
+            // The terms' own indexes (`patches.showLink`) are keyed by identity too, inside a type this registry's walk
+            // does not enter; this entry is what brings them to every resolution.
+            IdentityKeyedState(path: "patches.pending", disposition: .resolved { engine, resolution in
+                engine.patches.resolve(resolution, shows: engine.facts.shows)
+            }),
             IdentityKeyedState(path: "showMembers", disposition: .resolved { $0.showMembers.resolve($1) }),
             IdentityKeyedState(path: "contactMembers", disposition: .resolved { $0.contactMembers.resolve($1) }),
             IdentityKeyedState(path: "inquiryMembers", disposition: .resolved { $0.inquiryMembers.resolve($1) }),

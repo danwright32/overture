@@ -23,6 +23,10 @@ import SwiftData
 // from extracted facts is here since #4358 slice E4b, through the derivation's `compareCards`, made only once (i)
 // and (iii) have agreed and only while no save has landed since the read (a later save would make the models
 // newer than the facts they are compared with).
+//
+// #4360 (plan v7 Phase 4b): and one comparison per term the engine keeps PATCHED between passes, each held to its
+// oracle over the same fresh facts once (i) agrees and before (iii), so a term that missed a change is named as the
+// term (`patchMismatch`, fields `showLink.group` and so on). T1 ShowLink is the first; (ii) is T4's, when it lands.
 
 /// One fresh read of the SAVED store, made through a context of its own, and what a count said beside it.
 struct QueueEngineFreshRead: Sendable {
@@ -60,6 +64,8 @@ struct QueueEngineSnapshot<Value: Sendable>: Sendable {
     /// main context's unsaved edits and a fresh read sees only what is saved, so only a clean snapshot can be
     /// compared with one (`unmeasured(busy)` otherwise).
     let clean: Bool
+    /// #4360: the engine's patched terms, brought up to `facts`, which the verifier holds to their oracles.
+    let patches: QueueEnginePatches
 }
 
 /// What one verification found. Every case is produced by a test (L151).
@@ -73,6 +79,9 @@ enum QueueEngineVerification: Equatable, Sendable {
     /// #4358 slice E4b, comparison (iv): the facts and the output agree, and a card the output built differs from
     /// the same card built from the saved show's model, by field name.
     case cardMismatch(fields: [String], generation: Int)
+    /// #4360 (plan v7 D7, one comparison per patched term): the facts agree and a term the engine keeps patched does
+    /// not equal its oracle over them, by `term.table` name.
+    case patchMismatch(fields: [String], generation: Int)
     /// Every read straddled a save, or none landed at a save count a snapshot describes.
     case superseded
     /// The engine stopped the run: more changes arrived than the ring holds, or a row was deleted under it.
@@ -175,7 +184,7 @@ enum QueueEngineVerifier {
         switch result {
         case .superseded, .cancelled: return true
         case .match(let generation), .factMismatch(_, let generation), .outputMismatch(_, let generation),
-             .cardMismatch(_, let generation):
+             .cardMismatch(_, let generation), .patchMismatch(_, let generation):
             return generation < (onScreen ?? generation)
         case .unmeasured: return false
         }
@@ -187,6 +196,10 @@ enum QueueEngineVerifier {
                                          derivation: QueueEngineDerivation<Value>) -> QueueEngineVerification {
         let rows = snapshot.facts.mismatches(against: fresh)
         guard rows.isEmpty else { return .factMismatch(rows: rows, generation: snapshot.generation) }
+        // #4360: each patched term against its oracle over the same fresh facts, before the output, so a term that
+        // missed a change is named as the term rather than as whichever output fields it moved.
+        let patched = snapshot.patches.mismatches(against: fresh)
+        guard patched.isEmpty else { return .patchMismatch(fields: patched, generation: snapshot.generation) }
         let rebuilt = derivation.derive(QueueEnginePassInput(facts: fresh, viewInputs: snapshot.viewInputs,
                                                              now: snapshot.now, context: snapshot.context))
         let fields = derivation.differingFields(snapshot.value, rebuilt).sorted()
@@ -482,6 +495,8 @@ struct QueueEngineVerifierCounts: Equatable, Sendable {
     /// comparison (iv) found built differently over facts than over the saved show.
     var cardDivergences = 0
     var cardMismatches = 0
+    /// #4360: patched terms the verifier found unequal to their oracles over facts that agreed.
+    var patchMismatches = 0
     var superseded = 0
     var cancelled = 0
     var unmeasured: [QueueEngineVerification.Unmeasured: Int] = [:]

@@ -166,6 +166,9 @@ enum QueueEngineQueue {
         inputs.requestedCardKeys = input.viewInputs.requestedCardKeys
         // The engine checks a card at publish, over the main context's model, rather than inside the pass.
         inputs.checksACardInThePass = false
+        // #4360 (plan v7 Phase 4b(a)): T1 from the engine's patched value when it handed one in; the verifier's rebuild
+        // hands none, so its pass derives T1 over the facts, which is the oracle the patch is held to.
+        inputs.showLink = input.patches?.showLink?.tables
         return inputs
     }
 

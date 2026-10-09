@@ -330,9 +330,11 @@ final class Phase0cWorld {
     /// 2026-09-28: the skip with its title condition removed SURVIVED).
     private var flaggedEdits: Int
 
-    init(size: Int, seed: UInt64) throws {
+    // #4360: `models` is every table for the queue engine's whole pass harness (`PatchableShowLinkTests`), whose
+    // engine reads the small tables beside the shows; the 0c probes keep the two they need.
+    init(size: Int, seed: UInt64, models: [any PersistentModel.Type] = [Prospect.self, Recipient.self]) throws {
         flaggedEdits = Int(seed % 3)
-        container = try TestModelContainer.inMemory([Prospect.self, Recipient.self])
+        container = try TestModelContainer.inMemory(models)
         context = container.mainContext
         rng = SeededGenerator(seed: seed &* 2_654_435_761 &+ 4106)
         for s in Phase0cFixture.snapshots(size: size, seed: seed) { context.insert(s.makeProspect()) }

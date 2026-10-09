@@ -238,7 +238,7 @@ extension QueueEngineVerifierCounts {
     /// outcome is added in one place: three hand-written copies of it each left out
     /// `cardMismatches` when #4358 slice E4b added it, so a verification ending in one read as still running.
     var ended: Int {
-        matches + factMismatches + outputMismatches + cardMismatches + superseded + cancelled
+        matches + factMismatches + outputMismatches + cardMismatches + patchMismatches + superseded + cancelled
             + unmeasured.values.reduce(0, +)
     }
 }

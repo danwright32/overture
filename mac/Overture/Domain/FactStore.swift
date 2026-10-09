@@ -263,6 +263,88 @@ struct QueueEnginePassInput: Sendable {
     let now: Date
     /// #4358 slice E4b: the inputs that arrive by a signal, as the engine read them for this pass.
     let context: QueueEngineContextInputs
+    /// #4360 (plan v7 Phase 4b): the terms the engine keeps patched, brought up to `facts`, or nil to derive every term
+    /// over the facts, which is what the verifier's rebuild does (it is the patches' oracle, L70).
+    var patches: QueueEnginePatches? = nil
+}
+
+/// #4360 (plan v7 Phase 4b, discussion #4267 section 4): the queue terms the engine keeps PATCHED between passes, each
+/// brought up to date from the shows that changed rather than recomputed over every show on every pass. One term per
+/// Phase 4b PR, riskiest first; T1 ShowLink (#4360) is the first.
+///
+/// HOW A CHANGE REACHES A TERM. The engine notes every show whose stored value changed (`noteChanged`, from the one
+/// place it records a show), applies each resolution at once (`resolve`, from `QueueEngine.identityKeyedState`, so a
+/// deleted or re-keyed identity outlives no resolution here), and drops everything when its facts are replaced whole
+/// (`invalidate`). A pass then brings the terms up (`bringUp(to:)`), which builds a term cold the first time.
+///
+/// HOW A WRONG TERM IS FOUND. A route that changed a show without noting it would leave a term stale with nothing on
+/// screen saying so. The verifier compares every term with its oracle over a fresh read (`mismatches(against:)`,
+/// recorded as `patchMismatch`), and the heal is a cold build.
+struct QueueEnginePatches: Sendable {
+    typealias ShowLinkTerm = PatchableShowLink<PersistentIdentifier>
+
+    /// T1 ShowLink, or nil until the first bring-up builds it cold.
+    private(set) var showLink: ShowLinkTerm?
+    /// Shows whose stored value changed since the last bring-up.
+    private(set) var pending: Set<PersistentIdentifier> = []
+
+    init() {}
+
+    /// A show's stored value changed. Nothing is noted before the first build, which reads every show anyway.
+    mutating func noteChanged(_ id: PersistentIdentifier) {
+        guard showLink != nil else { return }
+        pending.insert(id)
+    }
+
+    /// The held facts were replaced whole (the launch's first read, a read of everything, a heal), so every term is
+    /// built cold at the next bring-up.
+    mutating func invalidate() {
+        showLink = nil
+        pending = []
+    }
+
+    /// One resolution, applied at once: a deleted show leaves every term, and a show whose temporary identifier its
+    /// first save replaced moves to the new one. `shows` is the facts AFTER the resolution (the engine resolves its
+    /// facts first), so a re-keyed show is read under its new identifier.
+    mutating func resolve(_ resolution: QueueEngineResolution, shows: [PersistentIdentifier: RowFacts]) {
+        let moved = Set(resolution.rekeyedIDs.keys).union(resolution.rekeyedIDs.values)
+        let touched = resolution.deletedIDs.union(moved).filter { FactStore.Table.holding($0.entityName) == .shows }
+        guard !touched.isEmpty else { return }
+        pending.subtract(touched)
+        showLink?.apply(touched.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) })
+    }
+
+    /// Every term brought up to `shows`: built cold when it has never been built, else patched from the pending shows.
+    /// Returns what the patch changed, or nil for a cold build.
+    @discardableResult
+    mutating func bringUp(to shows: [PersistentIdentifier: RowFacts]) -> ShowLinkTerm.Changed? {
+        guard var term = showLink else {
+            showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
+            pending = []
+            return nil
+        }
+        guard !pending.isEmpty else { return ShowLinkTerm.Changed() }
+        let changes = pending.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }
+        pending = []
+        // Taken out and put back, so the patch mutates the one copy rather than a copy the optional still shares.
+        showLink = nil
+        let changed = term.apply(changes)
+        showLink = term
+        return changed
+    }
+
+    /// The verifier's comparison (plan v7 D7, one per term): each term held to its oracle over `fresh`, by the name of
+    /// what differs, `term.table` (C7: names only, never a value). Empty when every term agrees, or none is built.
+    func mismatches(against fresh: FactStore) -> [String] {
+        guard let held = showLink?.tables else { return [] }
+        let shows = Array(fresh.shows.values)
+        let oracle = ShowLink.tables(among: shows, drawn: Set(QueueModel.queueScope(shows).map(\.naturalKey)))
+        var out: [String] = []
+        if held.group != oracle.group { out.append("showLink.group") }
+        if held.fronts != oracle.fronts { out.append("showLink.fronts") }
+        if held.hidden != oracle.hidden { out.append("showLink.hidden") }
+        return out
+    }
 }
 
 /// #4358 slice E4b: every input of the queue's pass that is neither a store row, the clock nor the surface's view,

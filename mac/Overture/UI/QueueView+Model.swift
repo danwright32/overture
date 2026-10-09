@@ -1125,7 +1125,7 @@ enum QueueModel {
     static func queueScope<Row: ProspectFacts>(_ all: [Row]) -> [Row] {
         let order = queueScopeOrder(for: Row.self)
         return all
-            .filter { $0.statusRaw != "dismissed" }
+            .filter { queueScopeHolds($0) }
             .sorted { lhs, rhs in
                 for descriptor in order {
                     switch descriptor.compare(lhs, rhs) {
@@ -1140,6 +1140,11 @@ enum QueueModel {
                 return lhs.persistentModelID < rhs.persistentModelID
             }
     }
+
+    // #4360: whether the queue's own scope holds a row, as ONE predicate, read here and by T1's patched collapse
+    // (`PatchableShowLink`), whose drawn rows are exactly this scope (L16): a second copy of the filter would let the
+    // patch hide a sibling behind a front the queue does not draw.
+    static func queueScopeHolds(_ row: some ProspectFacts) -> Bool { row.statusRaw != "dismissed" }
 
     // MARK: - Copy and filtering the queue used to do in its own body (#885)
 
@@ -3406,6 +3411,11 @@ enum QueueModel {
                       // what every test call site and every caller with no memo does, so this is a no-op
                       // until a surface hands them in.
                       producerTables: ProducerTables? = nil,
+                      // #4360 (plan v7 Phase 4b(a)): T1's three tables, already brought up to date by the queue
+                      // engine's patched value, or nil to build them here, which is what every caller but the
+                      // engine does. Handed in only where `prospects` is the queue's own scope of `corpus`, which
+                      // is the drawn set the patched collapse keeps (`QueueModel.queueScopeHolds`).
+                      showLink: ShowLink.Tables? = nil,
                       today: String? = nil,
                       // #4356: where every cross-row read of this build is recorded, or nil for none, which is
                       // what the app passes. A test hands one in to see what the rows and cards read.
@@ -3461,7 +3471,11 @@ enum QueueModel {
         // and a duplicate the caller's scope happens to exclude is still a duplicate. Judging it against
         // the caller's rows would make a card stop admitting the fault as soon as Dan dealt with the
         // other half of it.
-        let sameShowGroups = ShowLink.group(among: corpus ?? prospects)
+        // #4360: the grouping and the collapse below come from one value, built here over the corpus and the drawn
+        // rows unless the engine handed in its patched copy of exactly that.
+        let showLinkTables = showLink
+            ?? ShowLink.tables(among: corpus ?? prospects, drawn: Set(prospects.map(\.naturalKey)))
+        let sameShowGroups = showLinkTables.group
         // #3330: the title of each stored row, so a card carrying an arrival tag can name the row it
         // looked like. Over the UNFILTERED corpus for the same reason the two tables above are: the row
         // this one resembles may be dismissed or outside the window, and a lookalike the caller's scope
@@ -3479,7 +3493,7 @@ enum QueueModel {
         // two different questions: a group's highest priority row is routinely dismissed or outside the
         // queue's window, and hiding its siblings in favour of a card that is not there would take the
         // show off the surface entirely.
-        let collapse = ShowLink.collapse(among: corpus ?? prospects, drawn: Set(prospects.map(\.naturalKey)))
+        let collapse = (fronts: showLinkTables.fronts, hidden: showLinkTables.hidden)
         // #4146: the same walk read backwards. NEWEST FIRST, by the row's own first sighting, because a
         // card that is the target of several pointers names one and counts the rest, and the newest is
         // the one Dan has not seen yet. A row with no `firstSeenAt` (every row written before #1886)
