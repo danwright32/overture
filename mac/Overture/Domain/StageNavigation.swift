@@ -110,18 +110,31 @@ enum StageNavigation {
         // #3738: counted here, at the one place a placement is built, so "once per pass" is a number a
         // test can assert rather than a claim in a comment (L63, L27).
         QueueRenderPass.WorkTally.recordStagePlacement()
-        return Placement(entries: rows.map { p in
-            // Read only when a focus asks, and then once: a row the geography hides, or one no send focus
-            // reaches, never has its contacts read, as before the port.
-            var held: [C]?
-            func theirs() -> [C] {
-                if let held { return held }
-                let read = contacts(p)
-                held = read
-                return read
-            }
-            return (p.naturalKey, countedFocuses.filter { matches($0, p, contacts: theirs, context: context) })
-        })
+        return Placement(entries: rows.map { p in (p.naturalKey, focuses(of: p, contacts: { contacts(p) }, context: context)) })
+    }
+
+    // #4363 (plan v7 Phase 4b(d), T7): ONE show's stages, the body `placements` asks once per row, so the queue
+    // engine's patched row entries (`PatchableRowEntries`) decide a row's stages by the same predicate rather than a
+    // second statement of it (L263).
+    static func focuses<Row: ProspectFacts, C: ContactFacts>(of p: Row, contacts: () -> [C],
+                                                              context: StageContext) -> [StageFocus] {
+        // Read only when a focus asks, and then once: a row the geography hides, or one no send focus
+        // reaches, never has its contacts read, as before the port.
+        var held: [C]?
+        func theirs() -> [C] {
+            if let held { return held }
+            let read = contacts()
+            held = read
+            return read
+        }
+        return countedFocuses.filter { matches($0, p, contacts: theirs, context: context) }
+    }
+
+    // #4363: a placement put together from stages already decided, in the order `keys` gives (the queue's own scope
+    // order, which `placements` keeps too), for the engine's pass reading its patched row entries. It decides
+    // nothing, which is what lets `QueueShowableSurfacesAreOnePredicateTests`' argument above still hold.
+    static func placement(assembling keys: [(key: String, focuses: [StageFocus])]) -> Placement {
+        Placement(entries: keys)
     }
 
     // `.followUps` and `.reachedOut` are absent from `countedFocuses` and `matches` returns false for

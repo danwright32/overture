@@ -133,44 +133,58 @@ enum ReachedOutQueue {
         followUpConfig: FollowUpConfig = .init()
     ) -> [(prospect: Row, recipient: Row.Contact, next: Date)] {
         QueueRenderPass.WorkTally.recordReachedOutSweep()
-        return prospects
-            .compactMap { p -> (prospect: Row, recipient: Row.Contact, next: Date)? in
-                let s = Show(p, contacts: contacts(p))
-                // #2126: built from the contacts that still have a reach-out date, so a resolved first
-                // contact cannot take a live colleague's whole row down with it.
-                let live = s.contacts.compactMap { r -> (recipient: Row.Contact, next: Date)? in
-                    nextReachOut(for: r, of: s, now: now, followUpConfig: followUpConfig)
-                        .map { (recipient: r, next: $0) }
-                }
-                guard !live.isEmpty else { return nil }
-                // #2396: ONE row per SHOW. Dan judges shows, not contacts: "I really don't care about
-                // contact level outcomes. All I care about is the event level." It used to be one row per
-                // EMAIL (#2033), which was already a fold, and this finishes it: several emails about one
-                // event are still one decision.
-                //
-                // The row still speaks for a PERSON, because answering has to go back to somebody. Whoever
-                // replied wins, since that is the person Dan is answering and the row names them; with
-                // nobody having replied there is no such person, so it speaks for the contact due soonest,
-                // which is the one the row's own action is about.
-                //
-                // #4345 (plan v7 Step T, decision 13(ii)): a TOTAL order in each branch, because the first
-                // replied contact or the first at the soonest date was whichever `p.recipients` handed back
-                // first, and SwiftData hands that relationship back in a different order after a save and a
-                // refetch (Step T0 measured it). Among repliers the earliest reply, then the address, then
-                // the store's own identifier; with nobody having replied the soonest date, then the address,
-                // then the identifier. So the person the row names, and whether its pill counts it as due,
-                // no longer change between launches on unchanged data.
-                let representative = live.filter { $0.recipient.replied }.min { Self.earlierReplier($0, $1) }
-                    ?? live.min { Self.dueSooner($0, $1) }
-                guard let representative else { return nil }
-                // The DATE is the soonest across the whole show, not the representative's own, so a show
-                // cannot sit lower in the list than its most urgent contact deserves.
-                guard let soonest = live.map(\.next).min() else { return nil }
-                return (prospect: p, recipient: representative.recipient, next: soonest)
-            }
-            // #4345: equal dates by the show's natural key, so two shows due at one moment keep one order
-            // rather than the order the rows arrived in.
-            .sorted { ($0.next, $0.prospect.naturalKey) < ($1.next, $1.prospect.naturalKey) }
+        return inListOrder(prospects.compactMap { p in
+            entry(for: p, contacts: contacts(p), now: now, followUpConfig: followUpConfig)
+                .map { (prospect: p, recipient: $0.recipient, next: $0.next) }
+        })
+    }
+
+    // #4363 (plan v7 Phase 4b(d), T7): the list's order, apart, so the queue engine's patched row entries order the
+    // rows they kept exactly as this list does (`PatchableRowEntries`).
+    static func inListOrder<Row: ProspectFacts>(_ rows: [(prospect: Row, recipient: Row.Contact, next: Date)])
+        -> [(prospect: Row, recipient: Row.Contact, next: Date)] {
+        // #4345: equal dates by the show's natural key, so two shows due at one moment keep one order
+        // rather than the order the rows arrived in.
+        rows.sorted { ($0.next, $0.prospect.naturalKey) < ($1.next, $1.prospect.naturalKey) }
+    }
+
+    // #4363: ONE show's row on the list, or nil when nothing about it is in play, the body `activeWithDates` asks once
+    // per show, so the engine's patched entry for a show is this answer rather than a second statement of it (L263).
+    static func entry<Row: ProspectFacts>(for p: Row, contacts: [Row.Contact], now: Date,
+                                          followUpConfig: FollowUpConfig = .init())
+        -> (recipient: Row.Contact, next: Date)? {
+        let s = Show(p, contacts: contacts)
+        // #2126: built from the contacts that still have a reach-out date, so a resolved first
+        // contact cannot take a live colleague's whole row down with it.
+        let live = s.contacts.compactMap { r -> (recipient: Row.Contact, next: Date)? in
+            nextReachOut(for: r, of: s, now: now, followUpConfig: followUpConfig)
+                .map { (recipient: r, next: $0) }
+        }
+        guard !live.isEmpty else { return nil }
+        // #2396: ONE row per SHOW. Dan judges shows, not contacts: "I really don't care about
+        // contact level outcomes. All I care about is the event level." It used to be one row per
+        // EMAIL (#2033), which was already a fold, and this finishes it: several emails about one
+        // event are still one decision.
+        //
+        // The row still speaks for a PERSON, because answering has to go back to somebody. Whoever
+        // replied wins, since that is the person Dan is answering and the row names them; with
+        // nobody having replied there is no such person, so it speaks for the contact due soonest,
+        // which is the one the row's own action is about.
+        //
+        // #4345 (plan v7 Step T, decision 13(ii)): a TOTAL order in each branch, because the first
+        // replied contact or the first at the soonest date was whichever `p.recipients` handed back
+        // first, and SwiftData hands that relationship back in a different order after a save and a
+        // refetch (Step T0 measured it). Among repliers the earliest reply, then the address, then
+        // the store's own identifier; with nobody having replied the soonest date, then the address,
+        // then the identifier. So the person the row names, and whether its pill counts it as due,
+        // no longer change between launches on unchanged data.
+        let representative = live.filter { $0.recipient.replied }.min { Self.earlierReplier($0, $1) }
+            ?? live.min { Self.dueSooner($0, $1) }
+        guard let representative else { return nil }
+        // The DATE is the soonest across the whole show, not the representative's own, so a show
+        // cannot sit lower in the list than its most urgent contact deserves.
+        guard let soonest = live.map(\.next).min() else { return nil }
+        return (recipient: representative.recipient, next: soonest)
     }
 
     // #4345: the representative's two orders, named so each branch reads as the rule it is. An address a

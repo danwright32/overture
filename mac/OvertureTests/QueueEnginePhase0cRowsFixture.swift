@@ -74,11 +74,14 @@ final class Phase0cRowsFixture {
 
     // MARK: building
 
-    init(size: Int, seed: UInt64) throws {
+    // #4363: `models` is every table for the queue engine's whole pass harness (`PatchableRowEntriesTests`), whose
+    // engine reads the small tables beside the shows; the 0c.5 probe keeps the three it needs.
+    init(size: Int, seed: UInt64,
+         models: [any PersistentModel.Type] = [Prospect.self, Recipient.self, Inquiry.self]) throws {
         self.size = size
         self.seed = seed
         rng = SeededGenerator(seed: seed)
-        container = try TestModelContainer.inMemory([Prospect.self, Recipient.self, Inquiry.self])
+        container = try TestModelContainer.inMemory(models)
         context = container.mainContext
         for i in 0..<size { rows.append(makeRow(key: String(format: "row-%04d", i))) }
         // Productions the collapse joins: every tenth row and its successor share title, room and night.

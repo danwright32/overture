@@ -224,6 +224,55 @@ extension AgentInputs {
     }
 }
 
+// #4363 (plan v7 Phase 4b(d), T7): the pills as RUNNING TOTALS of per-show contributions, which the queue engine's
+// patched row entries (`PatchableRowEntries`) keep, plus the inquiries and the scalars, recomputed whole because they
+// are a handful of rows and two flags. `from(prospects:...)` above stays the ORACLE: this is a second statement of how
+// the pills combine, said rather than hidden (L263), and held to `from` after every operation by
+// `PatchableRowEntriesTests`, the whole pass harness and the verifier's `rowEntries.agentInputs` comparison, so a
+// field added to one and not the other is a mismatch rather than a quiet zero.
+extension AgentInputs {
+    /// Every per-show part of the pills, as sums: each show contributes its own stages, its due work (every show,
+    /// dismissed ones included, as `allProspects` is), and, while the queue's own scope holds it, its dead end, its
+    /// stalled reply drafts and its Reached out row.
+    struct RowTotals: Equatable, Sendable {
+        var focusCounts: [StageFocus: Int] = [:]
+        var due = DueWork.Counts(followUps: 0, afterTheShow: 0)
+        var reviewDeadEnds = 0
+        var stalledReplyDrafts = 0
+        var reachedOutShows = 0
+        var reachedOutDue = 0
+    }
+
+    static func from<Row: QueuePassRow>(totals: RowTotals, contacts: (Row) -> [Row.Contact],
+                                        inquiries: [Row.PassInquiry], now: Date, gmailConnected: Bool,
+                                        runInFlight: RunKind?, replyRunAlive: Bool) -> AgentInputs {
+        func count(_ focus: StageFocus) -> Int { totals.focusCounts[focus] ?? 0 }
+        func inquiryCount(_ focus: StageFocus) -> Int {
+            inquiries.filter { StageNavigation.stage(for: $0) == focus }.count
+        }
+        // The inquiries' own due work, over no show at all: every rule in `DueWork.rows` is per show or per inquiry.
+        let inquiryDue = DueWork.counts(from: [Row](), contacts: contacts, inquiries: inquiries, now: now,
+                                        replyRunAlive: replyRunAlive)
+        let due = DueWork.Counts(followUps: totals.due.followUps + inquiryDue.followUps,
+                                 afterTheShow: totals.due.afterTheShow + inquiryDue.afterTheShow,
+                                 conversationsToConfirm: totals.due.conversationsToConfirm
+                                     + inquiryDue.conversationsToConfirm,
+                                 stalledReplyDrafts: totals.due.stalledReplyDrafts + inquiryDue.stalledReplyDrafts,
+                                 repliesToAnswer: totals.due.repliesToAnswer + inquiryDue.repliesToAnswer)
+        return AgentInputs(
+            toTriage: count(.scout), keptToPrep: count(.prep), runInFlight: runInFlight,
+            toReview: count(.review) + inquiryCount(.review), readyToSend: count(.sendApproved),
+            gmailConnected: gmailConnected, sendErrors: count(.sendErrors), followUpsDue: due.total,
+            conversationsToConfirm: due.conversationsToConfirm, repliesToAnswer: due.repliesToAnswer,
+            reviewDeadEnds: totals.reviewDeadEnds, stalledReplyDrafts: totals.stalledReplyDrafts,
+            stuckSends: count(.sendStuck), degradedReplyTracking: count(.sendDegraded),
+            degradedThreading: count(.sendThreadingDegraded), blockedContacts: count(.sendBlocked),
+            reachedOut: totals.reachedOutShows + inquiryCount(.reachedOut),
+            reachedOutDue: totals.reachedOutDue
+                + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.hasUnhandledReply }.count)
+    }
+}
+
 // #357/#863: what tapping a chip actually DOES, pulled out of QueueView's Button closure so this
 // dispatch has a seam a test can reach. Most pills navigate the queue to their focus; a handful
 // route somewhere else entirely (a Gmail-connect flow, the Follow-ups sheet).

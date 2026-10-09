@@ -749,8 +749,9 @@ final class QueueEngine<Value: Sendable> {
 
     /// #4360: what the engine's own pass is handed: the facts, the view, the clock and the signals, and every patched
     /// term brought up to the facts first, from the shows that changed since the last pass (built cold the first time).
+    /// #4363: and T7 to this pass's instant and signals, from the deadlines that passed and the fields that moved.
     private func passInput(now: Date, context: QueueEngineContextInputs) -> QueueEnginePassInput {
-        patches.bringUp(to: facts.shows)
+        patches.bringUp(to: facts, now: now, context: context)
         return QueueEnginePassInput(facts: facts, viewInputs: viewInputs, now: now, context: context, patches: patches)
     }
 

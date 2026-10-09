@@ -416,6 +416,10 @@ enum QueueRenderPass {
         // brought up to date from the shows that changed, or nil to build them in the pass, which every caller but
         // the engine does. Over `allProspects` and the queue's own scope of it, which is what the pass draws.
         var showLink: ShowLink.Tables? = nil
+        // #4363 (plan v7 Phase 4b(d)): T7 from the queue engine's patched row entries (`PatchableRowEntries`): each show's
+        // row and stages, the Reached out list, the pill totals and the organisation row counts, brought up to this
+        // pass's instant and context, or nil to derive them in the pass, which every caller but the engine does.
+        var rowEntries: RowEntryTables<Row>? = nil
         // #4358 slice E4b (#4357 step 9): whether the pass checks one card against a fresh build of it. True over the
         // models, as it always was; the queue engine's pass over facts sets false and checks at publish, over the
         // main context's model, because a fresh build over the same facts can only agree with itself (L70).
@@ -457,14 +461,17 @@ enum QueueRenderPass {
                                      // #3742: the producer tables, when the caller has them in hand.
                                      // Nil everywhere but the app, which is the same rule every other
                                      // prebuilt value on `Inputs` follows.
-                                     producerTables: i.producerTables, showLink: i.showLink, today: context.today,
-                                     checksACard: i.checksACardInThePass)
+                                     producerTables: i.producerTables, showLink: i.showLink,
+                                     // #4363: T7's rows and organisation counts, when the engine handed them in.
+                                     rowEntries: i.rowEntries?.entries, rowCounts: i.rowEntries?.rowCounts,
+                                     today: context.today, checksACard: i.checksACardInThePass)
         // #3653 Phase 3: one build, two halves. The cards are what the screen draws; the rows are what
         // every whole-scope sweep below reads, and they cost one contacts walk between them rather than
         // one each.
         let rows = scope.rows
-        let reachedOut = ReachedOutQueue.activeWithDates(from: inQueue.all, contacts: { $0.passContacts },
-                                                         now: context.now)
+        // #4363: from T7's entries when the engine handed them in, already in the list's own order.
+        let reachedOut = i.rowEntries?.reachedOut
+            ?? ReachedOutQueue.activeWithDates(from: inQueue.all, contacts: { $0.passContacts }, now: context.now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
         // #3738: every show's stages, decided ONCE for this pass and read by all four answers below.
         //
@@ -472,7 +479,14 @@ enum QueueRenderPass {
         // the focused stage's rows. `matches` faults a prospect's recipients and was being evaluated
         // about 23,000 times per render on the live store, which #3736 measured at 152.1 ms of the pass's
         // floor. One table, four readers.
-        let placement = StageNavigation.placements(of: inQueue.all, contacts: { $0.passContacts }, context: context)
+        // #4363: with T7's entries, each show's stages as its entry decided them, put together in this scope's order (a
+        // show with no entry, which would be a patch fault the verifier names, is decided here instead).
+        let placement = i.rowEntries.map { t7 in
+            StageNavigation.placement(assembling: inQueue.all.map { p in
+                (key: p.naturalKey, focuses: t7.entries[p.persistentModelID]?.inScope?.focuses
+                    ?? StageNavigation.focuses(of: p, contacts: { p.passContacts }, context: context))
+            })
+        } ?? StageNavigation.placements(of: inQueue.all, contacts: { $0.passContacts }, context: context)
         // #1567: counted through StageNavigation, the same predicate as the pills beneath it, so the
         // masthead can no longer state a smaller backlog than the pills it sits above.
         let inAStage = StageNavigation.queueKeys(in: placement, reachedOutKeys: reachedOutKeys)
@@ -546,7 +560,12 @@ enum QueueRenderPass {
             // #3323: built once for the pass, from the WHOLE item set rather than the focused stage, so a
             // clash with a show in another stage still counts (#1246).
             selfBooking: QueueModel.selfBookingIndex(rows),
-            agentInputs: AgentInputs.from(prospects: inQueue.all,
+            // #4363: with T7's entries, its running totals plus the inquiries and the scalars (`from(totals:...)`, held to
+            // the whole derivation below by the verifier).
+            agentInputs: i.rowEntries?.agentInputs(inquiries: i.inquiries, now: context.now,
+                                                   gmailConnected: i.gmailConnected, runInFlight: i.runInFlight,
+                                                   replyRunAlive: i.replyRunAlive)
+                ?? AgentInputs.from(prospects: inQueue.all,
                                           // #2968: the Follow-ups number alone is taken over
                                           // everything, because the sheet and the toolbar badge
                                           // behind that pill query everything, and this list

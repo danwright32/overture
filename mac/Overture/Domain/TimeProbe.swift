@@ -17,7 +17,15 @@ import Foundation
 // The answers are exactly what the same comparisons against `now` would give: a probe changes WHEN an
 // entry is rebuilt, never what a term computes (`TimeProbeTests` holds both halves).
 //
-// NOTHING READS THIS YET. Phase 4b(d) (#4363) threads it through the per-row entries.
+// #4363 (plan v7 Phase 4b(d)): the queue engine's patched row entries (`PatchableRowEntries`) build each entry through
+// one of these, and the entry keeps `validUntil` until it passes. HOW FAR IN IT IS THREADED, said rather than implied:
+// the entry asks the day through `today` and nothing else, so a show the queue's scope does not hold and with no
+// contact at all records no clock read and is never rebuilt by the clock. The instant comparisons inside the stage,
+// due work and Reached out rules still take `now` as a plain `Date` (those functions are shared with every other
+// caller), so the entry names each of their deadlines here through `answerChanges(at:)`, from those rules' OWN
+// next-moment functions (`DueWork.nextChange`, `ReachedOutQueue.nextActionableMoment`, the send and reply draft
+// timeouts) rather than from a list of dated rules restated beside them (L107). That list can still miss a deadline a
+// rule gains later, which is what the clock arm of `PatchableRowEntriesTests` and the verifier exist to catch.
 final class TimeProbe {
     let now: Date
     /// The earliest instant at which an answer this probe has given would differ, or nil when nothing it
@@ -56,6 +64,14 @@ final class TimeProbe {
         return now
     }
 
+    /// #4363: an answer the caller worked out from a rule that compares against `now` itself (it takes a plain
+    /// `Date`) may change at `moment`, which that rule's own next-moment function named. Recorded only when it is
+    /// still ahead: one already passed stays passed, as in `hasPassed`.
+    func answerChanges(at moment: Date?) {
+        guard let moment, moment > now else { return }
+        record(moment)
+    }
+
     /// Whether some answer moves with every second, so the entry must be rebuilt on every pass.
     var readsContinuously: Bool { validUntil == now }
 
@@ -86,7 +102,8 @@ final class TimeProbe {
 // The clock is not a context field here: `now` and the day are read through `TimeProbe`, whose answers
 // change at known instants rather than by comparison with a new value.
 //
-// NOTHING READS THIS YET. Phase 4b(d) (#4363) threads it through the per-row entries.
+// #4363 (plan v7 Phase 4b(d)): the queue engine's patched row entries build each entry through one of these over
+// `RowEntryContext`, keep the fields it `consulted`, and rebuild exactly those entries when one of their fields moves.
 final class ContextReader<Context> {
     private let context: Context
     private var recorded: [PartialKeyPath<Context>: (Context) -> Bool] = [:]

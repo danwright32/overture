@@ -66,6 +66,11 @@ enum QueueInputSource: Equatable, Sendable {
             The engine's patched copy of the ShowLink grouping and collapse the pass otherwise derives from its own \
             store inputs (plan v7 T1, #4360); it is never an input in its own right.
             """),
+        "rowEntries": .notAnInput(reason: """
+            The engine's patched copy of each show's row, stages, pill contributions and Reached out row, which the \
+            pass otherwise derives from its own store inputs, the clock and the signals above (plan v7 T7, #4363); \
+            it is never an input in its own right.
+            """),
     ]
 }
 

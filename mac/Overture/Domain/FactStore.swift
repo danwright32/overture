@@ -139,6 +139,14 @@ struct FactStore: Equatable, Sendable {
         }
     }
 
+    /// #4363: Dan's two town tables as the geography gate the queue applies. ONE construction, read by the pass's inputs
+    /// (`QueueEngineQueue.passInputs`) and by T7's context (`RowEntryContext`), so the patched stages and the pass's own
+    /// cannot be judged by two gates.
+    var geoRefusals: GeoRefusals {
+        GeoRefusals(userExcludedTowns: Set(excludedTowns.values.map(\.town)),
+                    allowedSeedTowns: Set(allowedSeedTowns.values.map(\.town)))
+    }
+
     /// Whether any table holds a row under `id`.
     func holds(_ id: PersistentIdentifier) -> Bool {
         guard let table = Table.holding(id.entityName) else { return false }
@@ -268,14 +276,26 @@ struct QueueEnginePassInput: Sendable {
     var patches: QueueEnginePatches? = nil
 }
 
+extension QueueEnginePassInput {
+    /// #4363: T7's patched value when it was brought up to exactly this pass's instant and context, which is the only
+    /// pass it may serve; nil otherwise, and always for the verifier's rebuild, which hands no patches.
+    var rowEntriesForThisPass: PatchableRowEntries? {
+        guard let entries = patches?.rowEntries, entries.now == now,
+              entries.context == RowEntryContext(facts: facts, signals: context) else { return nil }
+        return entries
+    }
+}
+
 /// #4360 (plan v7 Phase 4b, discussion #4267 section 4): the queue terms the engine keeps PATCHED between passes, each
 /// brought up to date from the shows that changed rather than recomputed over every show on every pass. One term per
-/// Phase 4b PR, riskiest first; T1 ShowLink (#4360) is the first.
+/// Phase 4b PR, riskiest first; T1 ShowLink (#4360) is the first, T7's per show entries (#4363) the second here.
 ///
 /// HOW A CHANGE REACHES A TERM. The engine notes every show whose stored value changed (`noteChanged`, from the one
 /// place it records a show), applies each resolution at once (`resolve`, from `QueueEngine.identityKeyedState`, so a
 /// deleted or re-keyed identity outlives no resolution here), and drops everything when its facts are replaced whole
-/// (`invalidate`). A pass then brings the terms up (`bringUp(to:)`), which builds a term cold the first time.
+/// (`invalidate`). A pass then brings the terms up (`bringUp(to:now:context:)`), which builds a term cold the first time.
+/// T7 also reads the clock and the context, so a pass brings it to the pass's instant and signals as well; a snapshot
+/// for the verifier brings the terms to the facts only (`bringUp(to:)`), leaving T7 at the instant its last pass gave it.
 ///
 /// HOW A WRONG TERM IS FOUND. A route that changed a show without noting it would leave a term stale with nothing on
 /// screen saying so. The verifier compares every term with its oracle over a fresh read (`mismatches(against:)`,
@@ -285,6 +305,8 @@ struct QueueEnginePatches: Sendable {
 
     /// T1 ShowLink, or nil until the first bring-up builds it cold.
     private(set) var showLink: ShowLinkTerm?
+    /// #4363: T7 the per show entries, or nil until the first pass's bring-up builds it cold at that pass's instant.
+    private(set) var rowEntries: PatchableRowEntries?
     /// Shows whose stored value changed since the last bring-up.
     private(set) var pending: Set<PersistentIdentifier> = []
 
@@ -292,7 +314,7 @@ struct QueueEnginePatches: Sendable {
 
     /// A show's stored value changed. Nothing is noted before the first build, which reads every show anyway.
     mutating func noteChanged(_ id: PersistentIdentifier) {
-        guard showLink != nil else { return }
+        guard showLink != nil || rowEntries != nil else { return }
         pending.insert(id)
     }
 
@@ -300,6 +322,7 @@ struct QueueEnginePatches: Sendable {
     /// built cold at the next bring-up.
     mutating func invalidate() {
         showLink = nil
+        rowEntries = nil
         pending = []
     }
 
@@ -312,37 +335,67 @@ struct QueueEnginePatches: Sendable {
         guard !touched.isEmpty else { return }
         pending.subtract(touched)
         showLink?.apply(touched.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) })
+        if var entries = rowEntries {
+            rowEntries = nil
+            entries.bringUp(changed: touched, shows: shows, now: entries.now, context: entries.context)
+            rowEntries = entries
+        }
     }
 
-    /// Every term brought up to `shows`: built cold when it has never been built, else patched from the pending shows.
-    /// Returns what the patch changed, or nil for a cold build.
+    /// Every term brought up to `shows` alone: built cold when it has never been built, else patched from the pending
+    /// shows. T7 is patched at the instant and context it already holds, and never built here, because building it
+    /// needs a pass's instant. Returns what T1's patch changed, or nil for a cold build of T1.
     @discardableResult
     mutating func bringUp(to shows: [PersistentIdentifier: RowFacts]) -> ShowLinkTerm.Changed? {
+        let changed = pending
+        pending = []
+        if var entries = rowEntries, !changed.isEmpty {
+            // Taken out and put back, so the patch mutates the one copy rather than a copy the optional still shares.
+            rowEntries = nil
+            entries.bringUp(changed: changed, shows: shows, now: entries.now, context: entries.context)
+            rowEntries = entries
+        }
         guard var term = showLink else {
             showLink = ShowLinkTerm(rows: shows.map { (key: $0.key, facts: ShowLinkTerm.Facts(of: $0.value)) })
-            pending = []
             return nil
         }
-        guard !pending.isEmpty else { return ShowLinkTerm.Changed() }
-        let changes = pending.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }
-        pending = []
-        // Taken out and put back, so the patch mutates the one copy rather than a copy the optional still shares.
+        guard !changed.isEmpty else { return ShowLinkTerm.Changed() }
+        let changes = changed.map { (key: $0, facts: shows[$0].map(ShowLinkTerm.Facts.init(of:))) }
         showLink = nil
-        let changed = term.apply(changes)
+        let result = term.apply(changes)
         showLink = term
-        return changed
+        return result
+    }
+
+    /// #4363: every term brought up for a pass at `now` with the signals `context`: the facts first, then T7 to the
+    /// pass's instant and context (built cold the first time).
+    mutating func bringUp(to facts: FactStore, now: Date, context: QueueEngineContextInputs) {
+        bringUp(to: facts.shows)
+        let rowContext = RowEntryContext(facts: facts, signals: context)
+        guard var entries = rowEntries else {
+            rowEntries = PatchableRowEntries(shows: facts.shows, context: rowContext, now: now)
+            return
+        }
+        rowEntries = nil
+        entries.bringUp(changed: [], shows: facts.shows, now: now, context: rowContext)
+        rowEntries = entries
     }
 
     /// The verifier's comparison (plan v7 D7, one per term): each term held to its oracle over `fresh`, by the name of
     /// what differs, `term.table` (C7: names only, never a value). Empty when every term agrees, or none is built.
     func mismatches(against fresh: FactStore) -> [String] {
-        guard let held = showLink?.tables else { return [] }
-        let shows = Array(fresh.shows.values)
-        let oracle = ShowLink.tables(among: shows, drawn: Set(QueueModel.queueScope(shows).map(\.naturalKey)))
         var out: [String] = []
-        if held.group != oracle.group { out.append("showLink.group") }
-        if held.fronts != oracle.fronts { out.append("showLink.fronts") }
-        if held.hidden != oracle.hidden { out.append("showLink.hidden") }
+        if let held = showLink?.tables {
+            let shows = Array(fresh.shows.values)
+            let oracle = ShowLink.tables(among: shows, drawn: Set(QueueModel.queueScope(shows).map(\.naturalKey)))
+            if held.group != oracle.group { out.append("showLink.group") }
+            if held.fronts != oracle.fronts { out.append("showLink.fronts") }
+            if held.hidden != oracle.hidden { out.append("showLink.hidden") }
+        }
+        // #4363: T7 at its own instant and context, which the pass it last served was derived at.
+        if let entries = rowEntries {
+            out += entries.mismatches(against: fresh.shows, inquiries: Array(fresh.inquiries.values))
+        }
         return out
     }
 }

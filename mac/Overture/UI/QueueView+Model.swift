@@ -3416,6 +3416,11 @@ enum QueueModel {
                       // engine does. Handed in only where `prospects` is the queue's own scope of `corpus`, which
                       // is the drawn set the patched collapse keeps (`QueueModel.queueScopeHolds`).
                       showLink: ShowLink.Tables? = nil,
+                      // #4363 (plan v7 Phase 4b(d)): T7's entries by identity, whose rows the loop below takes in place
+                      // of building them, and its organisation row counts, both brought up to date by the queue engine's
+                      // patched value; nil to build both here, which is what every caller but the engine does.
+                      rowEntries: [PersistentIdentifier: RowEntry]? = nil,
+                      rowCounts patchedRowCounts: [String: Int]? = nil,
                       today: String? = nil,
                       // #4356: where every cross-row read of this build is recorded, or nil for none, which is
                       // what the app passes. A test hands one in to see what the rows and cards read.
@@ -3454,7 +3459,7 @@ enum QueueModel {
         // #1732: how many rows each organisation carries, over the SAME unfiltered corpus venueBrands
         // judges against, so a dismissal cannot quietly take an organisation under the bar and remove the
         // control from the rows still showing. Built once here for the same reason as venueBrands above.
-        let rowCounts = organisationRowCounts(among: corpus ?? prospects)
+        let rowCounts = patchedRowCounts ?? organisationRowCounts(among: corpus ?? prospects)
         // #1825: built ONCE, for the same reason as venueBrands above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
         // #2816: the table lives on QueueModel now, because the reached-out and follow-up rows resolve
@@ -3550,8 +3555,17 @@ enum QueueModel {
             let contacts = p.factContacts
             let key = p.naturalKey
             contactsByKey[key] = contacts
-            rows.append(QueueScopeRow(p, facts: RecipientFacts.of(p, contacts: contacts),
-                                      inheritedReachability: pre.tables.inherited(key)))
+            if var row = rowEntries?[p.persistentModelID]?.inScope?.row {
+                // #4363: T7's row for this show, joined here to the inherited answer from the same table the card reads,
+                // which is why an entry never holds one (`RowEntry`). Counted as a row this pass derived, which is
+                // what every wait keyed on `queueRows` is waiting for: a pass that produced the scope's rows.
+                QueueRenderPass.WorkTally.recordQueueRow()
+                row.inheritedReachability = pre.tables.inherited(key)
+                rows.append(row)
+            } else {
+                rows.append(QueueScopeRow(p, facts: RecipientFacts.of(p, contacts: contacts),
+                                          inheritedReachability: pre.tables.inherited(key)))
+            }
             // #3654: a card ONLY for a show something is going to draw. `nil` means every one of them,
             // which is what `items(from:)` and Archive still ask for.
             if cardKeys?.contains(key) ?? true {

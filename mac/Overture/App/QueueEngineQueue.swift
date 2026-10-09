@@ -146,8 +146,7 @@ enum QueueEngineQueue {
         let refusals = facts.refusedAddresses.values
             .map { ContactRefusal.Ledger.Row(scopeRaw: $0.scopeRaw, scopeId: $0.scopeId, handleKey: $0.handleKey) }
             .sorted { ($0.scopeRaw, $0.scopeId, $0.handleKey) < ($1.scopeRaw, $1.scopeId, $1.handleKey) }
-        let geo = GeoRefusals(userExcludedTowns: Set(facts.excludedTowns.values.map(\.town)),
-                              allowedSeedTowns: Set(facts.allowedSeedTowns.values.map(\.town)))
+        let geo = facts.geoRefusals
         var inputs = QueueRenderPass.PassInputs<RowFacts>(
             allProspects: QueueRenderPass.RowCorpus(shows), inquiries: inquiries, orgAnswers: answers,
             sources: sources, refusals: ContactRefusal.Ledger(rows: refusals),
@@ -169,6 +168,10 @@ enum QueueEngineQueue {
         // #4360 (plan v7 Phase 4b(a)): T1 from the engine's patched value when it handed one in; the verifier's rebuild
         // hands none, so its pass derives T1 over the facts, which is the oracle the patch is held to.
         inputs.showLink = input.patches?.showLink?.tables
+        // #4363 (plan v7 Phase 4b(d)): T7's entries, totals and Reached out list from the engine's patched value, when it
+        // was brought up to exactly this pass's instant and context. Anything else (the verifier's rebuild hands none)
+        // derives them over the facts, which is the oracle the patch is held to.
+        inputs.rowEntries = input.rowEntriesForThisPass?.tables()
         return inputs
     }
 
@@ -178,8 +181,15 @@ enum QueueEngineQueue {
         let data = QueueRenderPass.make(passInputs(input, shows: shows))
         let built = data.cards.contents
         let now = input.now
-        var soonest = DueWork.nextChange(from: shows, contacts: { $0.factContacts }, now: now,
+        // #4363: T7's patched next due moment when the pass read T7's entries, which is `DueWork.nextChange` over every
+        // show kept as a running index (`PatchableRowEntries.nextDueChange`, held to it by the verifier).
+        var soonest: Date?
+        if let entries = input.rowEntriesForThisPass {
+            soonest = entries.nextDueChange
+        } else {
+            soonest = DueWork.nextChange(from: shows, contacts: { $0.factContacts }, now: now,
                                          replyRunAlive: input.context.replyRunAlive)
+        }
         // A Reached out row's moment to reach out again changes how it draws when it arrives.
         if let reached = data.reachedOut.map(\.next).filter({ $0 > now }).min() {
             soonest = min(soonest ?? reached, reached)
