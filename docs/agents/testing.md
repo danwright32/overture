@@ -1053,3 +1053,41 @@ the measurement it came from lives here. Read the entry before the rule decides 
   hook, so `scripts/lib/real-arm-guard.test.sh` drives the hook file from its own tree against a throwaway
   clone rather than trusting whatever the hooks path points at.
 
+
+## Scoring a settled screen against its design
+
+- **Scoring a settled screen against its design: `scripts/design-score.sh <screen>` (#4691).** A build
+  is done when it matches its settled design at 100% on BOTH halves, every decision's check met and every
+  frame's pixels within 8 levels a channel, and claude-config's close gate refuses a design milestone's
+  "Match the settled design" issue below that (the design rounds skill's "Done is 100%" is the full
+  reference). The runner draws the design's side with claude-config's web adapter, then runs the screen's
+  snapshot test through `mac/scripts/run-tests-locked.sh`, then scores the capture, stopping at the first
+  step that fails and exiting with the score's own code: 0 matched, 1 not matched yet, 2 no score.
+  Anything that stops it before the score is 2, never 1, because unmeasured is never "not matched yet"
+  (L11). `--pr <number>` posts the score on that pull request and on its milestone's Match issue, which
+  every pull request in a design milestone does; `--perturb` draws the build about 15 levels off on
+  purpose, the negative control, and is refused alongside `--pr`.
+  What a settled screen needs, all named after the screen: the design at `docs/design/<screen>.html`,
+  written by the design rounds skill's `make-settled.py` and never by hand; its data at
+  `fixtures/design/<screen>.json`, the one file both sides draw (`DesignFixture.load`); and a test in
+  `mac/OvertureHostedTests/DesignScore/DesignScoreTests.swift` named the screen in lowerCamelCase
+  (`invoice-list` is `invoiceList()`), which builds the view's model from that fixture, draws each frame
+  through `DesignScreen.scored` in the frame's own theme, and carries the design's decision checks in
+  Swift. The runner finds the test by that name, so a misnamed one is NOTHING RAN rather than a pass.
+  `DesignScoreCapture.swift` beside it is claude-config's SwiftUI adapter copied VERBATIM; the runner
+  refuses to run once the two differ and prints the `cp` that refreshes it, so anything Overture needs
+  goes in `DesignScreen.swift` instead.
+  Needs, once per Mac, the shared Playwright (`bash ~/.claude/skills/design-rounds/score/install-playwright.sh`,
+  installed on the personal MacBook 2026-10-20, 231 MB) and claude-config's score tools, which
+  `claude-sync pull` brings. With no Playwright the design side exits 2 naming that command.
+  No Overture screen is settled yet. The route was proved both ways on 2026-10-20 with a pipeline proof,
+  `scripts/design-score.sh proof --design fixtures/design/proof.design.html`: two bands drawn from the
+  app's real `OVColor.forest` and `OVColor.gold` in light and dark, against a hand written design that
+  lives under `fixtures/` precisely so it can never be read as a settled one. As built it scored 100% of
+  12,800 pixels in both frames (exit 0); perturbed, 0.0% (exit 1). The dark frame matching is what shows
+  the theme is really applied, since every dark token sits more than 8 levels from its light one.
+  `DesignScoreWiringTests` pins the parts a verdict rests on in every ordinary run, without Playwright.
+  One thing the first real screen will meet that the proof did not: the design rounds skill captures a
+  native app's chrome as a screenshot of its window, and the snapshot test draws the SwiftUI view at scale
+  1 with no window frame, so a Retina screenshot (2x) with a title bar cannot match it pixel for pixel.
+  Capture the chrome at the size and scale the test draws, without the title bar.
