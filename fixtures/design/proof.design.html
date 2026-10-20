@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  The design match score's PIPELINE PROOF for Overture (#4691). NOT a settled design: nobody settled
+  it, and it lives here rather than in docs/design/ so it can never be read as one.
+
+  It is the smallest design that still asks the questions a real screen does: two frames, light and
+  dark, each Overture's forest band above its gold band, drawn by Chrome from the colours written
+  below. The build side is `DesignScoreTests.proof()`, which draws the same two bands from the app's
+  real OVColor tokens, so a score of 100% says the whole route (design side, snapshot test, score)
+  works AND that the tokens are what this file says they are, in both themes.
+
+  `scripts/design-score.sh proof --design fixtures/design/proof.design.html` scores it, and
+  `--perturb` is the negative control. A real settled design is written by make-settled.py from a
+  design round, embeds its fixture itself, and lives at docs/design/<screen>.html.
+
+  The colours are OVColor's sRGB components rounded to 8 bits (mac/Overture/UI/DesignTokens.swift).
+-->
+<html><head><meta charset="utf-8"><title>Design score proof</title>
+<style>
+  html, body { margin: 0; }
+  .band { width: 160px; height: 40px; }
+  .light .forest { background: #2e5239; }
+  .light .gold { background: #b4821e; }
+  .dark .forest { background: #386346; }
+  .dark .gold { background: #d4a448; }
+</style></head>
+<body>
+<script type="application/json" id="decision-map">{"decisions": [
+  {"id": "D1", "decision": "Two bands, forest above gold, in the fixture's order", "noCode": "The pipeline proof's own fixture, not a screen of the app"},
+  {"id": "D2", "decision": "The bands are Overture's forest and gold tokens in each theme", "noCode": "The tokens already exist; the proof only measures them", "verify": "picture"}]}</script>
+<script type="application/json" id="design-frames">{"frames": [
+  {"id": "light", "title": "The two bands, light", "width": 160, "height": 80},
+  {"id": "dark", "title": "The two bands, dark", "width": 160, "height": 80}]}</script>
+<script>
+  // The settled file's contract: designFrameDocument(id) gives one frame's whole document.
+  var STYLE = document.querySelector("style").outerHTML;
+  function designFrameDocument(id) {
+    return '<!doctype html><html><head><meta charset="utf-8">' + STYLE + '</head><body class="' + id + '">' +
+      '<div class="band forest"></div><div class="band gold"></div></body></html>';
+  }
+</script>
+</body></html>

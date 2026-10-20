@@ -287,6 +287,9 @@ the subject named below.
 - **A probe's before and after comparison**: `scripts/compare-before-after.sh`, never two hand runs, because
   the side run second under the shared lock reads slower. It runs ABBA rounds, judges only order cancelled
   pairs, and says UNMEASURED rather than judging one round.
+- **Scoring a settled screen against its design**: `scripts/design-score.sh <screen>`, which draws the design,
+  runs the screen's snapshot test and scores both halves, exiting 0 matched, 1 not matched yet, 2 no score.
+  `--pr <number>` posts it on every pull request in a design milestone; `--perturb` is the negative control.
 
 ### `docs/agents/diagnostics.md`
 

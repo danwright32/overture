@@ -1,0 +1,5 @@
+{
+  "about": "The data the design score's pipeline proof draws (#4691): the bands, top to bottom, by OVColor token name, and how tall each is. fixtures/design/proof.design.html draws the same bands.",
+  "bandHeight": 40,
+  "bands": ["forest", "gold"]
+}
