@@ -7,7 +7,8 @@ import SwiftUI
 // needs is added to it: it goes here instead.
 //
 // THE RUN is `scripts/design-score.sh <screen>`, never this test on its own. The script draws the design's
-// side first, then runs exactly one test here with three variables, and xcodebuild hands each to the test
+// side first, then runs exactly one test here with four variables (the capture folder, the commit, whether
+// the checkout is dirty, and the negative control), and xcodebuild hands each to the test
 // with its `TEST_RUNNER_` prefix STRIPPED (the trap StoredMoreThanOnceLooksRightTests describes): exported
 // as TEST_RUNNER_DESIGN_SCORE_CAPTURE, read here as DESIGN_SCORE_CAPTURE.
 enum DesignScoreRun {
